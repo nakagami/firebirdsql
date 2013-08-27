@@ -104,7 +104,7 @@ const (
     isc_info_creation_date = 111
     isc_info_db_file_size = 112
     
-    # isc_info_sql_records items
+    // isc_info_sql_records items
     isc_info_req_select_count = 13
     isc_info_req_insert_count = 14
     isc_info_req_update_count = 15
@@ -179,15 +179,15 @@ const (
     isc_tpb_lock_timeout = 21
     
     
-    # Service Parameter Block parameter
+    // Service Parameter Block parameter
     isc_spb_version1 = 1
     isc_spb_current_version = 2
     isc_spb_version = isc_spb_current_version
-    isc_spb_user_name = 28              # isc_dpb_user_name
-    isc_spb_sys_user_name = 19          # isc_dpb_sys_user_name
-    isc_spb_sys_user_name_enc = 31      # isc_dpb_sys_user_name_enc
-    isc_spb_password = 29               # isc_dpb_password
-    isc_spb_password_enc = 30           # isc_dpb_password_enc
+    isc_spb_user_name = 28              // isc_dpb_user_name
+    isc_spb_sys_user_name = 19          // isc_dpb_sys_user_name
+    isc_spb_sys_user_name_enc = 31      // isc_dpb_sys_user_name_enc
+    isc_spb_password = 29               // isc_dpb_password
+    isc_spb_password_enc = 30           // isc_dpb_password_enc
     isc_spb_command_line = 105
     isc_spb_dbname = 106
     isc_spb_verbose = 107
@@ -197,11 +197,11 @@ const (
     isc_spb_trusted_auth = 111
     isc_spb_process_name = 112
     isc_spb_trusted_role = 113
-    isc_spb_connect_timeout = 57        # isc_dpb_connect_timeout
-    isc_spb_dummy_packet_interval = 58  # isc_dpb_dummy_packet_interval
-    isc_spb_sql_role_name = 60          # isc_dpb_sql_role_name
+    isc_spb_connect_timeout = 57        // isc_dpb_connect_timeout
+    isc_spb_dummy_packet_interval = 58  // isc_dpb_dummy_packet_interval
+    isc_spb_sql_role_name = 60          // isc_dpb_sql_role_name
     
-    # backup
+    // backup
     isc_spb_bkp_file = 5
     isc_spb_bkp_factor = 6
     isc_spb_bkp_length = 7
@@ -214,7 +214,7 @@ const (
     isc_spb_bkp_convert = 0x40
     isc_spb_bkp_expand = 0x8
     
-    # restore
+    // restore
     isc_spb_res_buffers = 9
     isc_spb_res_page_size = 10
     isc_spb_res_length = 11
@@ -227,16 +227,16 @@ const (
     isc_spb_res_create = 0x2000
     isc_spb_res_use_all_space = 0x4000
     
-    # trace
+    // trace
     isc_spb_trc_id = 1
     isc_spb_trc_name = 2
     isc_spb_trc_cfg = 3
     
-    # isc_info_svc_svr_db_info params
+    // isc_info_svc_svr_db_info params
     isc_spb_num_att = 5
     isc_spb_num_db = 6
     
-    # isc_info_svc_db_stats params
+    // isc_info_svc_db_stats params
     isc_spb_sts_data_pages = 0x01
     isc_spb_sts_db_log =0x02
     isc_spb_sts_hdr_pages = 0x04
@@ -246,7 +246,7 @@ const (
     isc_spb_sts_table = 0x40
     isc_spb_sts_nocreation = 0x80
     
-    # isc_action_svc_repair params
+    // isc_action_svc_repair params
     isc_spb_rpr_validate_db = 0x01
     isc_spb_rpr_sweep_db = 0x02
     isc_spb_rpr_mend_db = 0x04
@@ -256,7 +256,7 @@ const (
     isc_spb_rpr_kill_shadows = 0x40
     isc_spb_rpr_full = 0x80
     
-    # Service Action Items
+    // Service Action Items
     isc_action_svc_backup = 1
     isc_action_svc_restore = 2
     isc_action_svc_repair = 3
@@ -282,7 +282,7 @@ const (
     isc_action_svc_display_user_adm = 29
     isc_action_svc_last = 30
     
-    # Transaction informatino items
+    // Transaction informatino items
     isc_info_tra_id = 4
     isc_info_tra_oldest_interesting = 5
     isc_info_tra_oldest_snapshot = 6
@@ -291,7 +291,7 @@ const (
     isc_info_tra_access = 9
     isc_info_tra_lock_timeout = 10
     
-    # SQL information items
+    // SQL information items
     isc_info_sql_select = 4
     isc_info_sql_bind = 5
     isc_info_sql_num_variables = 6
