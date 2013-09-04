@@ -25,11 +25,13 @@ package firebirdsql
 
 import (
     "fmt"
+    "net"
     "bytes"
     "encoding/binary"
+    "regexp"
 )
 
-func xdr_bytes(bs []byte) []byte {
+func xdrBytes(bs []byte) []byte {
     // XDR encoding bytes
     n := len(bs)
     padding := 0
@@ -47,7 +49,7 @@ func xdr_bytes(bs []byte) []byte {
     return buf
 }
 
-func xdr_string(s string) []byte {
+func xdrString(s string) []byte {
     // XDR encoding string
     bs := bytes.NewBufferString(s).Bytes()
     return xdr_bytes(bs)
@@ -57,12 +59,41 @@ type wirepPotocol struct {
     var buf[1024]byte
     var bufCount int
 
-    var dbName string
+    var conn net.Conn
+    var dbhandle int32
+    var addr string
+    var dbname string
     var user string
     var password string
 }
 
-func (p *wireProtocol) pack_int(i int32) {
+func NewWireProtocol (dsn string) *wireProtocol {
+    p := new(wireProtocol)
+
+    dsnPattern := regexp.MustCompile(
+        `^(?:(?P<user>.*?)(?::(?P<passwd>.*))?@)?` + // [user[:password]@]
+            `(?:\((?P<addr>[^\)]*)\)?` + // [(addr)]
+            `\/(?P<dbname>.*?)` + // /dbname
+
+    p.addr = "127.0.0.1:3050"
+    for i, match := range matches {
+        switch names[i] {
+        case "user":
+            p.user = match
+        case "passwd":
+            p.passwd = match
+        case "addr":
+            p.addr = match
+        case "dbname":
+            p.dbname = match
+        }
+    }
+    p.conn, err := net.Dial("tcp", p.addr)
+
+    return p, err
+}
+
+func (p *wireProtocol) packInt(i int32) {
     // pack big endian int32
     p.buf[p.bufCount+0] = byte(i >> 24 & 0xFF)
     p.buf[p.bufCount+1] = byte(i >> 16 & 0xFF)
@@ -71,23 +102,23 @@ func (p *wireProtocol) pack_int(i int32) {
     p.bufCount += 4
 }
 
-func (p *wireProtocol) pack_bytes(b []byte) {
-    for _, b := range xdr_bytes(b) {
-        p.buf[p.bufCount]=b
+func (p *wireProtocol) packBytes(b []byte) {
+    for _, b := range xdrBytes(b) {
+        p.buf[p.bufCount] = b
         p.bufCount++
     }
 }
 
-func (p *wireProtocol) pack_string(s string) {
-    for _, b := range xdr_string(s) {
-        p.buf[p.bufCount]=b
+func (p *wireProtocol) packString(s string) {
+    for _, b := range xdrString(s) {
+        p.buf[p.bufCount] = b
         p.bufCount++
     }
 }
 
 func (p *wireProtocol) appendBytes(bs [] byte) {
     for _, b := range bs {
-        p.buf[p.bufCount]=b
+        p.buf[p.bufCount] = b
         p.bufCount++
     }
 }
@@ -97,26 +128,23 @@ func (p *wireProtocol) uid() string {
     return "Firebird Go Driver"
 }
 
-func (p *wireProtocol) sendPackets() {
-    // TODO:
+func (p *wireProtocol) sendPackets() (n int, err error) {
+    n, err = p.conn.Write(p.buf)
+    return
 }
 
-func (p *wireProtocol) recvPackets(n int) *bytes.Buffer {
-    // TODO: recive n bytes 
-    return nil
+func (p *wireProtocol) recvPackets(n int) (*bytes.Buffer, error) {
+    buf, err := make([]byte, n)
+    i, err p.conn.Read(buf)
+    return bytes.NewBuffer(buf), err
 }
 
-func (p *wireProtocol) _op_connect() {
+func (p *wireProtocol) opConnect() {
     p.pack_int(op_connect)
     p.pack_int(op_attach)
     p.pack_int(2)   // CONNECT_VERSION2
     p.pack_int(1)   // Arch type (Generic = 1)
-    if p.dbName is nil {
-        p.pack_string("")
-    }
-    else {
-        p.pack_string(bytes.NewBufferString(p.dbName))
-    }
+    p.packString(bytes.NewBufferString(p.dbname))
     p.pack_int(1)   // Protocol version understood count.
     p.pack_bytes(p.uid())
     p.pack_int(10)  // PROTOCOL_VERSION10
@@ -128,7 +156,7 @@ func (p *wireProtocol) _op_connect() {
 }
 
 
-func (p *wireProtocol)  _op_create() {
+func (p *wireProtocol) opCreate() {
     page_size := 4096
     dpb = bytes([1])
     s = self.str_to_bytes("UTF8")       // always utf8
@@ -150,7 +178,7 @@ func (p *wireProtocol)  _op_create() {
     p.sendPackets()
 }
 
-func (p *wireProtocol) _op_accept() {
+func (p *wireProtocol) opAccept() {
     b = recv_channel(self.sock, 4)
     while bytes_to_bint(b) == self.op_dummy:
         b = recv_channel(self.sock, 4)
@@ -163,7 +191,7 @@ func (p *wireProtocol) _op_accept() {
     up.done()
 }
 
-func (p *wireProtocol) _op_attach() {
+func (p *wireProtocol) opAttach() {
     dpb = bytes([1])
     s = self.str_to_bytes(self.charset)
     dpb += bytes([48, len(s)]) + s
@@ -179,14 +207,13 @@ func (p *wireProtocol) _op_attach() {
     p.sendPackets()
 }
 
-func (p *wireProtocol) _op_drop_database() {
-    p = xdrlib.Packer()
-    p.pack_int(self.op_drop_database)
-    p.pack_int(self.db_handle)
+func (p *wireProtocol) opDropDatabase() {
+    p.pack_int(op_drop_database)
+    p.pack_int(p.dbhandle)
     p.sendPackets()
 }
 
-func (p *wireProtocol) _op_service_attach() {
+func (p *wireProtocol) opServiceAttach() {
     dpb = bytes([2,2])
     s = self.str_to_bytes(self.user)
     dpb += bytes([isc_spb_user_name, len(s)]) + s
@@ -201,11 +228,10 @@ func (p *wireProtocol) _op_service_attach() {
     p.sendPackets()
 }
 
-func (p *wireProtocol) _op_service_info(param, item) {
+func (p *wireProtocol) opServiceInfo(param []byte, item []byte) {
     buffer_length := 512
-    p = xdrlib.Packer()
-    p.pack_int(self.op_service_info)
-    p.pack_int(self.db_handle)
+    p.pack_int(op_service_info)
+    p.pack_int(p.dbhandle)
     p.pack_int(0)
     p.pack_bytes(param)
     p.pack_bytes(item)
@@ -213,26 +239,23 @@ func (p *wireProtocol) _op_service_info(param, item) {
     p.sendPackets()
 }
 
-func (p *wireProtocol) _op_service_start(param [] byte) {
-    p = xdrlib.Packer()
-    p.pack_int(self.op_service_start)
-    p.pack_int(self.db_handle)
+func (p *wireProtocol) opServiceStart(param [] byte) {
+    p.pack_int(op_service_start)
+    p.pack_int(p.db_handle)
     p.pack_int(0)
     p.pack_bytes(param)
     p.sendPackets()
 }
 
-func (p *wireProtocol) _op_service_detach() {
-    p = xdrlib.Packer()
+func (p *wireProtocol) opServiceDetach() {
     p.pack_int(self.op_service_detach)
     p.pack_int(self.db_handle)
     p.sendPackets()
 }
 
-func (p *wireProtocol) _op_info_database(b []byte) {
-    p = xdrlib.Packer()
-    p.pack_int(self.op_info_database)
-    p.pack_int(self.db_handle)
+func (p *wireProtocol) opInfoDatabase(b []byte) {
+    p.pack_int(op_info_database)
+    p.pack_int(p.db_handle)
     p.pack_int(0)
     p.pack_bytes(b)
     p.pack_int(self.buffer_length)
