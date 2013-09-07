@@ -63,7 +63,6 @@ var xsqlvarDisplayLength = map[int]int32 {
     SQL_TYPE_BOOLEAN: 5,
 }
 
-
 type xSQLVAR struct {
     var sqltype int32
     var sqlscale int32
@@ -81,14 +80,11 @@ func NewXSQLVAR () *xSQLVAR {
     return x
 }
 
-
 func (x *xSQLVAR) ioLength() int32 {
-        sqltype = self.sqltype
-        if sqltype == SQL_TYPE_TEXT:
-            return self.sqllen
-        else:
-            return xsqlvarTypeLength[sqltype]
-
+    if x.sqltype == SQL_TYPE_TEXT:
+        return x.sqllen
+    else:
+        return xsqlvarTypeLength[x.sqltype]
 }
 
 func (x *xSQLVAR) displayLenght() int 32 {
@@ -132,39 +128,42 @@ func (x *xSQLVAR) _parseTime(raw_value []byte) time {
 }
 
 func (x *xSQLVAR) value(raw_value) interface{} {
-    if self.sqltype == SQL_TYPE_TEXT:
+    switch x.sqltype {
+    case SQL_TYPE_TEXT:
+        if x.sqlsubtype == 1:      # OCTETS
+            return raw_value
+        else:
+            return self.bytes_to_str(raw_value)
+    case SQL_TYPE_VARYING:
         if self.sqlsubtype == 1:      # OCTETS
             return raw_value
         else:
             return self.bytes_to_str(raw_value)
-    elif self.sqltype == SQL_TYPE_VARYING:
-        if self.sqlsubtype == 1:      # OCTETS
-            return raw_value
-        else:
-            return self.bytes_to_str(raw_value)
-    elif self.sqltype in (SQL_TYPE_SHORT, SQL_TYPE_LONG, SQL_TYPE_INT64):
+    case SQL_TYPE_SHORT:
+        // TODO:
+    case SQL_TYPE_LONG:
+        // TODO:
+    case SQL_TYPE_INT64:
         n = bytes_to_bint(raw_value)
         if self.sqlscale:
             return decimal.Decimal(str(n) + 'e' + str(self.sqlscale))
         else:
             return n
-    elif self.sqltype == SQL_TYPE_DATE:
-        yyyy, mm, dd = self._parse_date(raw_value)
-        return datetime.date(yyyy, mm, dd)
-    elif self.sqltype == SQL_TYPE_TIME:
-        h, m, s, ms = self._parse_time(raw_value)
-        return datetime.time(h, m, s, ms)
-    elif self.sqltype == SQL_TYPE_TIMESTAMP:
+    case SQL_TYPE_DATE:
+        return x._parseDate(raw_value)
+    case SQL_TYPE_TIME:
+        return x._parseTime(raw_value)
+    case SQL_TYPE_TIMESTAMP:
         yyyy, mm, dd = self._parse_date(raw_value[:4])
         h, m, s, ms = self._parse_time(raw_value[4:])
         return datetime.datetime(yyyy, mm, dd, h, m, s, ms)
-    elif self.sqltype == SQL_TYPE_FLOAT:
+    case SQL_TYPE_FLOAT:
         return struct.unpack('!f', raw_value)[0]
-    elif self.sqltype == SQL_TYPE_DOUBLE:
+    case SQL_TYPE_DOUBLE:
         return struct.unpack('!d', raw_value)[0]
-    elif self.sqltype == SQL_TYPE_BOOLEAN:
+    case SQL_TYPE_BOOLEAN:
         return True if raw_value[0] else False
-    else:
-        return raw_value
+    }
+    return raw_value
 }
 
