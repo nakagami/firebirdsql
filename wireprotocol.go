@@ -75,7 +75,7 @@ func NewWireProtocol (dsn string) *wireProtocol {
             `(?:\((?P<addr>[^\)]*)\)?` + // [(addr)]
             `\/(?P<dbname>.*?)` + // /dbname
 
-    p.addr = "127.0.0.1:3050"
+    p.addr = "127.0.0.1"
     for i, match := range matches {
         switch names[i] {
         case "user":
@@ -87,6 +87,9 @@ func NewWireProtocol (dsn string) *wireProtocol {
         case "dbname":
             p.dbname = match
         }
+    }
+    if strings.ContainsRune(p.addr, ':') {
+        p.addr += ":3050"
     }
     p.conn, err := net.Dial("tcp", p.addr)
 
