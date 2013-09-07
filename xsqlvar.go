@@ -97,17 +97,17 @@ func (x *xSQLVAR) displayLenght() int 32 {
 
 func (x *xSQLVAR) _parseDate(raw_value []byte) date {
     nday = bytes_to_bint(raw_value) + 678882
-    century = (4 * nday -1) // 146097
+    century = (4 * nday -1) / 146097
     nday = 4 * nday - 1 - 146097 * century
-    day = nday // 4
+    day = nday / 4
 
-    nday = (4 * day + 3) // 1461
+    nday = (4 * day + 3) / 1461
     day = 4 * day + 3 - 1461 * nday
-    day = (day + 4) // 4
+    day = (day + 4) / 4
 
-    month = (5 * day -3) // 153
+    month = (5 * day -3) / 153
     day = 5 * day - 3 - 153 * month
-    day = (day + 5) // 5
+    day = (day + 5) / 5
     year = 100 * century + nday
     if month < 10:
         month += 3
@@ -130,15 +130,17 @@ func (x *xSQLVAR) _parseTime(raw_value []byte) time {
 func (x *xSQLVAR) value(raw_value) interface{} {
     switch x.sqltype {
     case SQL_TYPE_TEXT:
-        if x.sqlsubtype == 1:      # OCTETS
+        if x.sqlsubtype == 1 {     # OCTETS
             return raw_value
-        else:
+        } else {
             return self.bytes_to_str(raw_value)
+        }
     case SQL_TYPE_VARYING:
-        if self.sqlsubtype == 1:      # OCTETS
+        if self.sqlsubtype == 1 {     # OCTETS
             return raw_value
-        else:
+        } else {
             return self.bytes_to_str(raw_value)
+        }
     case SQL_TYPE_SHORT:
         // TODO:
     case SQL_TYPE_LONG:
@@ -157,12 +159,12 @@ func (x *xSQLVAR) value(raw_value) interface{} {
         yyyy, mm, dd = self._parse_date(raw_value[:4])
         h, m, s, ms = self._parse_time(raw_value[4:])
         return datetime.datetime(yyyy, mm, dd, h, m, s, ms)
-    case SQL_TYPE_FLOAT:
-        return struct.unpack('!f', raw_value)[0]
-    case SQL_TYPE_DOUBLE:
-        return struct.unpack('!d', raw_value)[0]
+//    case SQL_TYPE_FLOAT:
+//        return struct.unpack('!f', raw_value)[0]
+//    case SQL_TYPE_DOUBLE:
+//        return struct.unpack('!d', raw_value)[0]
     case SQL_TYPE_BOOLEAN:
-        return True if raw_value[0] else False
+        return raw_value[0] != 0
     }
     return raw_value
 }
