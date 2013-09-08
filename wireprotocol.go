@@ -31,6 +31,25 @@ import (
     "regexp"
 )
 
+func int32_to_bytes(i32 int32) []byte {
+    bs := []byte {
+        byte(i32 & 0xFF),
+        byte(i32 >> 8 & 0xFF),
+        byte(i32 >> 16 & 0xFF),
+        byte(i32 >> 24 & 0xFF),
+    }
+    return bs
+}
+
+func bint32_to_bytes(i32 int32) []byte {
+    bs := []byte {
+        byte(i32 >> 24 & 0xFF),
+        byte(i32 >> 16 & 0xFF),
+        byte(i32 >> 8 & 0xFF),
+        byte(i32 & 0xFF),
+    }
+    return bs
+}
 
 type wirepPotocol struct {
     buf[1024]byte
@@ -115,10 +134,9 @@ func (p *wireProtocol) sendPackets() (n int, err error) {
     return
 }
 
-func (p *wireProtocol) recvPackets(n int) (*bytes.Buffer, error) {
+func (p *wireProtocol) recvPackets(n int) ([]byte, error) {
     buf, err := make([]byte, n)
-    i, err := p.conn.Read(buf)
-    return bytes.NewBuffer(buf), err
+    return p.conn.Read(buf)
 }
 
 func (p *wireProtocol) opConnect() {
@@ -142,25 +160,25 @@ func (p *wireProtocol) opCreate() {
     page_size := 4096
 
     encode := bytes.NewBufferString("UTF8").Bytes()
-
-    dpb = bytes([1])
-    s = self.str_to_bytes("UTF8")       // always utf8
-    dpb += bytes([68, len(s)]) + s
-    dpb += bytes([48, len(s)]) + s
-    s = self.str_to_bytes(self.user)
-    dpb += bytes([28, len(s)]) + s
-    s = self.str_to_bytes(self.password)
-    dpb += bytes([29, len(s)]) + s
-    dpb += bytes([63, 4]) + int_to_bytes(3, 4) # isc_dpb_sql_dialect = 3
-    dpb += bytes([24, 4]) + bint_to_bytes(1, 4) # isc_dpb_force_write = 1
-    dpb += bytes([54, 4]) + bint_to_bytes(1, 4) # isc_dpb_overwirte = 1
-    dpb += bytes([4, 4]) + int_to_bytes(page_size, 4)
+    user := bytes.NewBufferString(p.user).Bytes()
+    password := bytes.NewBufferString(p.password).Bytes()
+    dpb := bytes.Join([][]byte{
+        []byte{1},
+        []byte{68, len(encode)}, encode,
+        []byte{48, len(encode)}, encode,
+        []byte{28, len(user)}, user,
+        []byte{29, len(password)}, password,
+        []byte{63, 4}, int32_to_byte(3),
+        []byte{24, 4}, bint32_to_byte(1),
+        []byte{54, 4}, bint32_to_byte(1),
+        []byte{4, 4}, int32_to_byte(page_size),
+    }, nil)
 
     p = xdrlib.Packer()
-    p.pack_int(op_create)
-    p.pack_int(0)                       # Database Object ID
-    p.pack_string(p.dbName)
-    p.pack_bytes(dpb)
+    p.packInt(op_create)
+    p.packInt(0)                       // Database Object ID
+    p.packString(p.dbName)
+    p.packBytes(dpb)
     p.sendPackets()
 }
 
@@ -187,7 +205,7 @@ func (p *wireProtocol) opAttach() {
     dpb += bytes([29, len(s)]) + s
     p = xdrlib.Packer()
     p.pack_int(self.op_attach)
-    p.pack_int(0)                       # Database Object ID
+    p.pack_int(0)                       // Database Object ID
     p.pack_string(self.str_to_bytes(self.filename))
     p.pack_bytes(dpb)
     p.sendPackets()
