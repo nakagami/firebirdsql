@@ -51,3 +51,44 @@ func xdrString(s string) []byte {
     return xdrBytes(bs)
 }
 
+
+def calc_blr(xsqlda []xSQLVAR):
+    // Calculate  BLR from XSQLVAR array.
+    var sqltype2blr = map[int][]byte {
+        SQL_TYPE_DOUBLE: {27},
+        SQL_TYPE_FLOAT: {10},
+        SQL_TYPE_D_FLOAT: {11},
+        SQL_TYPE_DATE: {12},
+        SQL_TYPE_TIME: {13},
+        SQL_TYPE_TIMESTAMP: {35},
+        SQL_TYPE_BLOB: {9, 0},
+        SQL_TYPE_ARRAY: {9, 0},
+        SQL_TYPE_BOOLEAN: {23},
+        }
+
+
+    ln := len(xsqlda) *2
+    blr := {5, 2, 4, 0, byte(ln & 255), byte(ln >> 8)}
+    for _, x range xsqlda {
+        sqltype = x.sqltype
+        if sqltype == SQL_TYPE_VARYING:
+            blr += [37, x.sqllen & 255, x.sqllen >> 8]
+        elif sqltype == SQL_TYPE_TEXT:
+            blr += [14, x.sqllen & 255, x.sqllen >> 8]
+        elif sqltype == SQL_TYPE_LONG:
+            blr += [8, x.sqlscale]
+        elif sqltype == SQL_TYPE_SHORT:
+            blr += [7, x.sqlscale]
+        elif sqltype == SQL_TYPE_INT64:
+            blr += [16, x.sqlscale]
+        elif sqltype == SQL_TYPE_QUAD:
+            blr += [9, x.sqlscale]
+        else:
+            blr += sqltype2blr[sqltype]
+        blr += [7, 0]   # [blr_short, 0]
+    }
+    blr += [255, 76]    # [blr_end, blr_eoc]
+
+    # x.sqlscale value shoud be negative, so b convert to range(0, 256)
+    return bytes(256 + b if b < 0 else b for b in blr)
+
