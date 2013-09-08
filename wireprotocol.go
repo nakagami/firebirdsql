@@ -33,15 +33,15 @@ import (
 
 
 type wirepPotocol struct {
-    var buf[1024]byte
-    var bufCount int
+    buf[1024]byte
+    bufCount int
 
-    var conn net.Conn
-    var dbhandle int32
-    var addr string
-    var dbname string
-    var user string
-    var password string
+    conn net.Conn
+    dbhandle int32
+    addr string
+    dbname string
+    user string
+    password string
 }
 
 func NewWireProtocol (dsn string) *wireProtocol {
@@ -49,8 +49,8 @@ func NewWireProtocol (dsn string) *wireProtocol {
 
     dsnPattern := regexp.MustCompile(
         `^(?:(?P<user>.*?)(?::(?P<passwd>.*))?@)?` + // [user[:password]@]
-            `(?:\((?P<addr>[^\)]*)\)?` + // [(addr)]
-            `\/(?P<dbname>.*?)` + // /dbname
+            `(?:\((?P<addr>[^\)]*)\)?` +            // [(addr)]
+            `\/(?P<dbname>.*?)`)                    // /dbname
 
     p.addr = "127.0.0.1"
     for i, match := range matches {
@@ -68,7 +68,9 @@ func NewWireProtocol (dsn string) *wireProtocol {
     if strings.ContainsRune(p.addr, ':') {
         p.addr += ":3050"
     }
-    p.conn, err := net.Dial("tcp", p.addr)
+
+    var err error
+    p.conn, err = net.Dial("tcp", p.addr)
 
     return p, err
 }
@@ -115,7 +117,7 @@ func (p *wireProtocol) sendPackets() (n int, err error) {
 
 func (p *wireProtocol) recvPackets(n int) (*bytes.Buffer, error) {
     buf, err := make([]byte, n)
-    i, err p.conn.Read(buf)
+    i, err := p.conn.Read(buf)
     return bytes.NewBuffer(buf), err
 }
 
@@ -138,6 +140,9 @@ func (p *wireProtocol) opConnect() {
 
 func (p *wireProtocol) opCreate() {
     page_size := 4096
+
+    encode := bytes.NewBufferString("UTF8").Bytes()
+
     dpb = bytes([1])
     s = self.str_to_bytes("UTF8")       // always utf8
     dpb += bytes([68, len(s)]) + s
@@ -150,6 +155,7 @@ func (p *wireProtocol) opCreate() {
     dpb += bytes([24, 4]) + bint_to_bytes(1, 4) # isc_dpb_force_write = 1
     dpb += bytes([54, 4]) + bint_to_bytes(1, 4) # isc_dpb_overwirte = 1
     dpb += bytes([4, 4]) + int_to_bytes(page_size, 4)
+
     p = xdrlib.Packer()
     p.pack_int(op_create)
     p.pack_int(0)                       # Database Object ID
