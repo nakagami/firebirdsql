@@ -31,29 +31,6 @@ import (
     "regexp"
 )
 
-func xdrBytes(bs []byte) []byte {
-    // XDR encoding bytes
-    n := len(bs)
-    padding := 0
-    if n % 4 != 0 {
-        padding = 4 - n % 4
-    }
-    buf := make([]byte, 4 + n + padding)
-    buf[0] = byte(n >> 24 & 0xFF)
-    buf[1] = byte(n >> 16 & 0xFF)
-    buf[2] = byte(n >> 8 & 0xFF)
-    buf[3] = byte(n & 0xFF)
-    for i, b := range bs {
-        buf[4+i]=b
-    }
-    return buf
-}
-
-func xdrString(s string) []byte {
-    // XDR encoding string
-    bs := bytes.NewBufferString(s).Bytes()
-    return xdr_bytes(bs)
-}
 
 type wirepPotocol struct {
     var buf[1024]byte
