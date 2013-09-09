@@ -51,8 +51,23 @@ func bint32_to_bytes(i32 int32) []byte {
     return bs
 }
 
+func bytes_to_bint(b []byte) int32 {
+    var i32 int32
+    buffer = bytes.NewBuffer(b)
+    binary.Read(buffer, binary.BigEndian, &i32)
+    return i32
+}
+
+func bytes_to_int(b []byte) int32 {
+    var i32 int32
+    buffer = bytes.NewBuffer(b)
+    binary.Read(buffer, binary.LittleEndian, &i32)
+    return i32
+}
+
 type wirepPotocol struct {
-    buf[1024]byte
+    buf []byte
+    buffer_len int
     bufCount int
 
     conn net.Conn
@@ -65,6 +80,8 @@ type wirepPotocol struct {
 
 func NewWireProtocol (dsn string) *wireProtocol {
     p := new(wireProtocol)
+    p.buffer_len = 1024
+    p.buf, err = make([]byte, p.buffer_len)
 
     dsnPattern := regexp.MustCompile(
         `^(?:(?P<user>.*?)(?::(?P<passwd>.*))?@)?` + // [user[:password]@]
@@ -183,94 +200,57 @@ func (p *wireProtocol) opCreate() {
 }
 
 func (p *wireProtocol) opAccept() {
-    b = recv_channel(self.sock, 4)
-    while bytes_to_bint(b) == self.op_dummy:
-        b = recv_channel(self.sock, 4)
-    assert bytes_to_bint(b) == self.op_accept
-    b = recv_channel(self.sock, 12)
-    up = xdrlib.Unpacker(b)
-    assert up.unpack_int() == 10
-    assert  up.unpack_int() == 1
-    assert up.unpack_int() == 3
-    up.done()
+    b, err = p.recvPackets(4)
+    for {
+        if bytes_to_bint(b) == op_dummy {
+            b, err = p.recvPackets(4)
+        }
+    }
+
+    // assert bytes_to_bint(b) == op_accept
+    b = p.recvPackets(12)
+    // assert up.unpack_int() == 10
+    // assert  up.unpack_int() == 1
+    // assert up.unpack_int() == 3
 }
 
 func (p *wireProtocol) opAttach() {
-    dpb = bytes([1])
-    s = self.str_to_bytes(self.charset)
-    dpb += bytes([48, len(s)]) + s
-    s = self.str_to_bytes(self.user)
-    dpb += bytes([28, len(s)]) + s
-    s = self.str_to_bytes(self.password)
-    dpb += bytes([29, len(s)]) + s
-    p = xdrlib.Packer()
-    p.pack_int(self.op_attach)
-    p.pack_int(0)                       // Database Object ID
-    p.pack_string(self.str_to_bytes(self.filename))
+    encode := bytes.NewBufferString("UTF8").Bytes()
+    user := bytes.NewBufferString(p.user).Bytes()
+    password := bytes.NewBufferString(p.password).Bytes()
+
+    dbp := bytes.Join([][]byte{
+        []byte{1},
+        []byte{48, len(encode)}, encode,
+        []byte{28, len(user)}, user,
+        []byte{29, len(password)}, password,
+    })
+    p.packInt(op_attach)
+    p.packInt(0)                       // Database Object ID
+    p.packString(p.dbName)
     p.pack_bytes(dpb)
     p.sendPackets()
 }
 
 func (p *wireProtocol) opDropDatabase() {
-    p.pack_int(op_drop_database)
-    p.pack_int(p.dbhandle)
+    p.packInt(op_drop_database)
+    p.packInt(p.dbhandle)
     p.sendPackets()
 }
 
-func (p *wireProtocol) opServiceAttach() {
-    dpb = bytes([2,2])
-    s = self.str_to_bytes(self.user)
-    dpb += bytes([isc_spb_user_name, len(s)]) + s
-    s = self.str_to_bytes(self.password)
-    dpb += bytes([isc_spb_password, len(s)]) + s
-    dpb += bytes([isc_spb_dummy_packet_interval,0x04,0x78,0x0a,0x00,0x00])
-    p = xdrlib.Packer()
-    p.pack_int(self.op_service_attach)
-    p.pack_int(0)
-    p.pack_string(self.str_to_bytes('service_mgr'))
-    p.pack_bytes(dpb)
-    p.sendPackets()
-}
-
-func (p *wireProtocol) opServiceInfo(param []byte, item []byte) {
-    buffer_length := 512
-    p.pack_int(op_service_info)
-    p.pack_int(p.dbhandle)
-    p.pack_int(0)
-    p.pack_bytes(param)
-    p.pack_bytes(item)
-    p.pack_int(buffer_length)
-    p.sendPackets()
-}
-
-func (p *wireProtocol) opServiceStart(param [] byte) {
-    p.pack_int(op_service_start)
-    p.pack_int(p.db_handle)
-    p.pack_int(0)
-    p.pack_bytes(param)
-    p.sendPackets()
-}
-
-func (p *wireProtocol) opServiceDetach() {
-    p.pack_int(self.op_service_detach)
-    p.pack_int(self.db_handle)
-    p.sendPackets()
-}
-
-func (p *wireProtocol) opInfoDatabase(b []byte) {
+func (p *wireProtocol) opInfoDatabase(bs []byte) {
     p.pack_int(op_info_database)
     p.pack_int(p.db_handle)
     p.pack_int(0)
-    p.pack_bytes(b)
-    p.pack_int(self.buffer_length)
+    p.pack_bytes(bs)
+    p.packInt(self.buffer_length)
     p.sendPackets()
 }
 
-func (p *wireProtocol) _op_transaction(tpb) {
-    p = xdrlib.Packer()
-    p.pack_int(self.op_transaction)
-    p.pack_int(self.db_handle)
-    p.pack_bytes(tpb)
+func (p *wireProtocol) opTransaction(tpb []byte) {
+    p.packInt(op_transaction)
+    p.packInt(p.dbhandle)
+    p.packBytes(tpb)
     p.sendPackets()
 }
 
@@ -292,7 +272,7 @@ func (p *wireProtocol) _op_rollback(trans_handle int32) {
     p.sendPackets()
 }
 
-func (p *wireProtocol) _op_rollback_retaining(trans_handle int32):
+func (p *wireProtocol) opRollbackRetaining(trans_handle int32):
     p.pack_int(op_rollback_retaining)
     p.pack_int(trans_handle)
     p.sendPackets()
@@ -505,29 +485,6 @@ func (p *wireProtocol)  _op_close_blob(blob_handle) {
     p.sendPackets()
 }
 
-func (p *wireProtocol)  _op_que_events(event_names, ast, args, event_id) {
-    params = bytes([1])
-    for name, n in event_names.items():
-        params += bytes([len(name)])
-        params += self.str_to_bytes(name)
-        params += int_to_bytes(n, 4)
-    p = xdrlib.Packer()
-    p.pack_int(self.op_que_events)
-    p.pack_int(self.db_handle)
-    p.pack_bytes(params)
-    p.pack_int(ast)
-    p.pack_int(args)
-    p.pack_int(event_id)
-    p.sendPackets()
-}
-
-func (p *wireProtocol) _op_cancel_events(event_id int32) {
-    p.pack_int(self.op_cancel_events)
-    p.pack_int(self.db_handle)
-    p.pack_int(event_id)
-    send_channel(self.sock, p.get_buffer())
-}
-
 func (p *wireProtocol) _op_connect_request() {
     p = xdrlib.Packer()
     p.pack_int(self.op_connect_request)
@@ -567,19 +524,6 @@ func (p *wireProtocol) _op_response() {
     if bytes_to_bint(b) != self.op_response:
         raise InternalError
     return self._parse_op_response()
-}
-
-func (p *wireProtocol) _op_event(self) {
-    b = recv_channel(self.sock, 4)
-    while bytes_to_bint(b) == self.op_dummy:
-        b = recv_channel(self.sock, 4)
-    if bytes_to_bint(b) == self.op_response:
-        return self._parse_op_response()
-    if bytes_to_bint(b) == self.op_exit or bytes_to_bint(b) == self.op_exit:
-        raise DisconnectByPeer
-    if bytes_to_bint(b) != self.op_event:
-        raise InternalError
-    return self._parse_op_event()
 }
 
 func (p *wireProtocol) _op_sql_response(xsqlda) {
