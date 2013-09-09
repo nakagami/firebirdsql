@@ -323,13 +323,13 @@ func (p *wireProtocol) opPrepareStatement(stmtHandle int 32, transHandle int32, 
         INFO_SQL_SELECT_DESCRIBE_VARS,
     }, nil)
 
-    p.pack_int(self.op_prepare_statement)
-    p.pack_int(transHandle)
-    p.pack_int(stmtHandle)
-    p.pack_int(3)   # dialect = 3
-    p.pack_string(self.str_to_bytes(query))
-    p.pack_bytes(desc_items)
-    p.pack_int(self.buffer_length)
+    p.packInt(op_prepare_statement)
+    p.packInt(transHandle)
+    p.packInt(stmtHandle)
+    p.packInt(3)   # dialect = 3
+    p.packString(query)
+    p.packBytes(descItems)
+    p.packInt(p.buffer_length)
     p.sendPackets()
 }
 
@@ -342,22 +342,24 @@ func (p *wireProtocol) _op_info_sql(stmtHandle int32, vars) {
     p.sendPackets()
 }
 
-func (p *wireProtocol) _op_execute(stmtHandle, transHandle, params) {
+func (p *wireProtocol) opExecute(stmtHandle, transHandle, params) {
     p.pack_int(op_execute)
     p.pack_int(stmtHandle)
     p.pack_int(transHandle)
 
-    if len(params) == 0:
-        p.pack_bytes(bytes([]))
-        p.pack_int(0)
-        p.pack_int(0)
-        send_channel(self.sock, p.get_buffer())
+    if len(params) == 0 {
+        p.packBytes(bytes[]{})
+        p.packInt(0)
+        p.packInt(0)
+        p.sendPackets()
+    }
     else:
         (blr, values) = params_to_blr(params)
-        p.pack_bytes(blr)
-        p.pack_int(0)
-        p.pack_int(1)
-        send_channel(self.sock, p.get_buffer() + values)
+        p.packBytes(blr)
+        p.packInt(0)
+        p.packInt(1)
+        p.appendBytes(values)
+        p.sendPackets()
 }
 
 func (p *wireProtocol) _op_execute2(stmtHandle, transHandle, params, output_blr) {
