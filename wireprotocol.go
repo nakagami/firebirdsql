@@ -31,6 +31,22 @@ import (
     "regexp"
 )
 
+INFO_SQL_SELECT_DESCRIBE_VARS := []byte{
+    isc_info_sql_select,
+    isc_info_sql_describe_vars,
+    isc_info_sql_sqlda_seq,
+    isc_info_sql_type,
+    isc_info_sql_sub_type,
+    isc_info_sql_scale,
+    isc_info_sql_length,
+    isc_info_sql_null_ind,
+    isc_info_sql_field,
+    isc_info_sql_relation,
+    isc_info_sql_owner,
+    isc_info_sql_alias,
+    isc_info_sql_describe_end
+}
+
 func int32_to_bytes(i32 int32) []byte {
     bs := []byte {
         byte(i32 & 0xFF),
@@ -71,7 +87,7 @@ type wirepPotocol struct {
     bufCount int
 
     conn net.Conn
-    dbhandle int32
+    dbHandle int32
     addr string
     dbname string
     user string
@@ -157,18 +173,18 @@ func (p *wireProtocol) recvPackets(n int) ([]byte, error) {
 }
 
 func (p *wireProtocol) opConnect() {
-    p.pack_int(op_connect)
-    p.pack_int(op_attach)
-    p.pack_int(2)   // CONNECT_VERSION2
-    p.pack_int(1)   // Arch type (Generic = 1)
+    p.packInt(op_connect)
+    p.packInt(op_attach)
+    p.packInt(2)   // CONNECT_VERSION2
+    p.packInt(1)   // Arch type (Generic = 1)
     p.packString(bytes.NewBufferString(p.dbname))
-    p.pack_int(1)   // Protocol version understood count.
+    p.packInt(1)   // Protocol version understood count.
     p.pack_bytes(p.uid())
-    p.pack_int(10)  // PROTOCOL_VERSION10
-    p.pack_int(1)   // Arch type (Generic = 1)
-    p.pack_int(2)   // Min type
-    p.pack_int(3)   // Max type
-    p.pack_int(2)   // Preference weight
+    p.packInt(10)  // PROTOCOL_VERSION10
+    p.packInt(1)   // Arch type (Generic = 1)
+    p.packInt(2)   // Min type
+    p.packInt(3)   // Max type
+    p.packInt(2)   // Preference weight
     p.sendPackets()
 }
 
@@ -234,87 +250,82 @@ func (p *wireProtocol) opAttach() {
 
 func (p *wireProtocol) opDropDatabase() {
     p.packInt(op_drop_database)
-    p.packInt(p.dbhandle)
+    p.packInt(p.dbHandle)
     p.sendPackets()
 }
 
-func (p *wireProtocol) opInfoDatabase(bs []byte) {
-    p.pack_int(op_info_database)
-    p.pack_int(p.db_handle)
-    p.pack_int(0)
-    p.pack_bytes(bs)
-    p.packInt(self.buffer_length)
-    p.sendPackets()
-}
 
 func (p *wireProtocol) opTransaction(tpb []byte) {
     p.packInt(op_transaction)
-    p.packInt(p.dbhandle)
+    p.packInt(p.dbHandle)
     p.packBytes(tpb)
     p.sendPackets()
 }
 
-func (p *wireProtcol) _op_commit(trans_handle int32) {
-    p.pack_int(self.op_commit)
-    p.pack_int(trans_handle)
+func (p *wireProtcol) opCommit(transHandle int32) {
+    p.pack_int(op_commit)
+    p.pack_int(transHandle)
     p.sendPackets()
 }
 
-func (p *wireProtcol) _op_commit_retaining(trans_handle int32) {
+func (p *wireProtcol) opCommitRetaining(transHandle int32) {
     p.pack_int(op_commit_retaining)
-    p.pack_int(trans_handle)
+    p.pack_int(transHandle)
     p.sendPackets()
 }
 
-func (p *wireProtocol) _op_rollback(trans_handle int32) {
-    p.pack_int(self.op_rollback)
-    p.pack_int(trans_handle)
+func (p *wireProtocol) opRollback(transHandle int32) {
+    p.pack_int(op_rollback)
+    p.pack_int(transHandle)
     p.sendPackets()
 }
 
-func (p *wireProtocol) opRollbackRetaining(trans_handle int32):
-    p.pack_int(op_rollback_retaining)
-    p.pack_int(trans_handle)
-    p.sendPackets()
-
-func (p *wireProtocol) _op_allocate_statement() {
-    p.pack_int(self.op_allocate_statement)
-    p.pack_int(self.db_handle)
+func (p *wireProtocol) opRollbackRetaining(transHandle int32) {
+    p.packInt(op_rollback_retaining)
+    p.packInt(transHandle)
     p.sendPackets()
 }
 
-func (p *wireProtocol) _op_info_transaction(trans_handle int32 , b []byte) {
-    p = xdrlib.Packer()
-    p.pack_int(self.op_info_transaction)
-    p.pack_int(trans_handle)
-    p.pack_int(0)
-    p.pack_bytes(b)
-    p.pack_int(self.buffer_length)
+func (p *wireProtocol) opAallocateStatement() {
+    p.packInt(op_allocate_statement)
+    p.packInt(p.dbHandle)
     p.sendPackets()
 }
 
-func (p *wireProtocol) _op_info_database(b [] byte) {
-    p.pack_int(op_info_database)
-    p.pack_int(self.db_handle)
-    p.pack_int(0)
-    p.pack_bytes(b)
-    p.pack_int(self.buffer_length)
+func (p *wireProtocol) opInfoTransaction(transHandle int32 , b []byte) {
+    p.packInt(op_info_transaction)
+    p.packInt(transHandle)
+    p.packInt(0)
+    p.packBytes(b)
+    p.packInt(p.buffer_length)
     p.sendPackets()
 }
 
-func (p *wireProtocol) _op_free_statement(stmt_handle int32, mode int32) {
-    p.pack_int(self.op_free_statement)
-    p.pack_int(stmt_handle)
-    p.pack_int(mode)
+func (p *wireProtocol) opInfoDatabase(bs []byte) {
+    p.packInt(op_info_database)
+    p.packInt(p.dbHandle)
+    p.packInt(0)
+    p.packBytes(bs)
+    p.packInt(p.buffer_length)
     p.sendPackets()
 }
 
-func (p *wireProtocol) _op_prepare_statement(stmt_handle int 32, trans_handle int32, query string) {
-    desc_items = bytes([isc_info_sql_stmt_type])+INFO_SQL_SELECT_DESCRIBE_VARS
-    p = xdrlib.Packer()
+func (p *wireProtocol) opFreeStatement(stmtHandle int32, mode int32) {
+    p.packInt(op_free_statement)
+    p.packInt(stmtHandle)
+    p.packInt(mode)
+    p.sendPackets()
+}
+
+func (p *wireProtocol) opPrepareStatement(stmtHandle int 32, transHandle int32, query string) {
+    descItems := bytes.Join([][]byte{
+        []byte{ isc_info_sql_stmt_type },
+        INFO_SQL_SELECT_DESCRIBE_VARS,
+    }, nil)
+
     p.pack_int(self.op_prepare_statement)
-    p.pack_int(trans_handle)
-    p.pack_int(stmt_handle)
+    p.pack_int(transHandle)
+    p.pack_int(stmtHandle)
     p.pack_int(3)   # dialect = 3
     p.pack_string(self.str_to_bytes(query))
     p.pack_bytes(desc_items)
@@ -322,19 +333,19 @@ func (p *wireProtocol) _op_prepare_statement(stmt_handle int 32, trans_handle in
     p.sendPackets()
 }
 
-func (p *wireProtocol) _op_info_sql(stmt_handle int32, vars) {
+func (p *wireProtocol) _op_info_sql(stmtHandle int32, vars) {
     p.pack_int(self.op_info_sql)
-    p.pack_int(stmt_handle)
+    p.pack_int(stmtHandle)
     p.pack_int(0)
     p.pack_bytes(vars)
     p.pack_int(self.buffer_length)
     p.sendPackets()
 }
 
-func (p *wireProtocol) _op_execute(stmt_handle, trans_handle, params) {
+func (p *wireProtocol) _op_execute(stmtHandle, transHandle, params) {
     p.pack_int(op_execute)
-    p.pack_int(stmt_handle)
-    p.pack_int(trans_handle)
+    p.pack_int(stmtHandle)
+    p.pack_int(transHandle)
 
     if len(params) == 0:
         p.pack_bytes(bytes([]))
@@ -349,10 +360,10 @@ func (p *wireProtocol) _op_execute(stmt_handle, trans_handle, params) {
         send_channel(self.sock, p.get_buffer() + values)
 }
 
-func (p *wireProtocol) _op_execute2(stmt_handle, trans_handle, params, output_blr) {
+func (p *wireProtocol) _op_execute2(stmtHandle, transHandle, params, output_blr) {
     p.pack_int(self.op_execute2)
-    p.pack_int(stmt_handle)
-    p.pack_int(trans_handle)
+    p.pack_int(stmtHandle)
+    p.pack_int(transHandle)
 
     if len(params) == 0:
         p.pack_bytes(bytes([]))
@@ -371,12 +382,12 @@ func (p *wireProtocol) _op_execute2(stmt_handle, trans_handle, params, output_bl
     p.sendPackets()
 }
 
-func (p *wireProtocol) _op_execute_immediate(self, trans_handle, db_handle, sql, params, in_msg=, out_msg=, possible_requests) {
+func (p *wireProtocol) _op_execute_immediate(self, transHandle, dbHandle, sql, params, in_msg=, out_msg=, possible_requests) {
     sql = self.str_to_bytes(sql)
     in_msg = self.str_to_bytes(in_msg)
     out_msg = self.str_to_bytes(out_msg)
     r = bint_to_bytes(self.op_execute_immediate, 4)
-    r += bint_to_bytes(trans_handle, 4) + bint_to_bytes(db_handle, 4)
+    r += bint_to_bytes(transHandle, 4) + bint_to_bytes(db_handle, 4)
     r += bint_to_bytes(len(sql), 2) + sql
     r += bint_to_bytes(3, 2)    # dialect
     if len(params) == 0:
@@ -393,16 +404,16 @@ func (p *wireProtocol) _op_execute_immediate(self, trans_handle, db_handle, sql,
     send_channel(self.sock, r + values)
 }
 
-func (p *wireProtocol)  _op_fetch(stmt_handle int32, blr [] byte) {
+func (p *wireProtocol)  _op_fetch(stmtHandle int32, blr [] byte) {
     p.pack_int(self.op_fetch)
-    p.pack_int(stmt_handle)
+    p.pack_int(stmtHandle)
     p.pack_bytes(blr)
     p.pack_int(0)
     p.pack_int(400)
     p.sendPackets()
 }
 
-func (p *wireProtocol) _op_fetch_response(self, stmt_handle, xsqlda) {
+func (p *wireProtocol) _op_fetch_response(self, stmtHandle, xsqlda) {
     b = recv_channel(self.sock, 4)
     while bytes_to_bint(b) == self.op_dummy:
         b = recv_channel(self.sock, 4)
@@ -440,19 +451,19 @@ func (p *wireProtocol) _op_detach() {
     p.sendPackets()
 }
 
-func (p *wireProtocol)  _op_open_blob(blob_id, trans_handle) {
+func (p *wireProtocol)  _op_open_blob(blob_id, transHandle) {
     p = xdrlib.Packer()
     p.pack_int(self.op_open_blob)
-    p.pack_int(trans_handle)
+    p.pack_int(transHandle)
     p.appendPacket(blog_id)
     p.sendPackets()
 }
 
-func (p *wireProtocol)  _op_create_blob2(trans_handle int32) {
+func (p *wireProtocol)  _op_create_blob2(transHandle int32) {
     p = xdrlib.Packer()
     p.pack_int(self.op_create_blob2)
     p.pack_int(0)
-    p.pack_int(trans_handle)
+    p.pack_int(transHandle)
     p.pack_int(0)
     p.pack_int(0)
     p.sendPackets()
@@ -484,6 +495,8 @@ func (p *wireProtocol)  _op_close_blob(blob_handle) {
     p.pack_int(blob_handle)
     p.sendPackets()
 }
+
+//------------------------------------------------------------------------
 
 func (p *wireProtocol) _op_connect_request() {
     p = xdrlib.Packer()
