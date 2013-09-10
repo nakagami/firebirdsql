@@ -31,22 +31,6 @@ import (
     "regexp"
 )
 
-INFO_SQL_SELECT_DESCRIBE_VARS := []byte{
-    isc_info_sql_select,
-    isc_info_sql_describe_vars,
-    isc_info_sql_sqlda_seq,
-    isc_info_sql_type,
-    isc_info_sql_sub_type,
-    isc_info_sql_scale,
-    isc_info_sql_length,
-    isc_info_sql_null_ind,
-    isc_info_sql_field,
-    isc_info_sql_relation,
-    isc_info_sql_owner,
-    isc_info_sql_alias,
-    isc_info_sql_describe_end
-}
-
 func int32_to_bytes(i32 int32) []byte {
     bs := []byte {
         byte(i32 & 0xFF),
@@ -317,97 +301,88 @@ func (p *wireProtocol) opFreeStatement(stmtHandle int32, mode int32) {
     p.sendPackets()
 }
 
-func (p *wireProtocol) opPrepareStatement(stmtHandle int 32, transHandle int32, query string) {
-    descItems := bytes.Join([][]byte{
-        []byte{ isc_info_sql_stmt_type },
-        INFO_SQL_SELECT_DESCRIBE_VARS,
-    }, nil)
+func (p *wireProtocol) opPrepareStatement(stmtHandle int32, transHandle int32, query string) {
+
+    descItems := []byte{
+        isc_info_sql_stmt_type,
+        isc_info_sql_select,
+        isc_info_sql_describe_vars,
+        isc_info_sql_sqlda_seq,
+        isc_info_sql_type,
+        isc_info_sql_sub_type,
+        isc_info_sql_scale,
+        isc_info_sql_length,
+        isc_info_sql_null_ind,
+        isc_info_sql_field,
+        isc_info_sql_relation,
+        isc_info_sql_owner,
+        isc_info_sql_alias,
+        isc_info_sql_describe_end,
+    }
 
     p.packInt(op_prepare_statement)
     p.packInt(transHandle)
     p.packInt(stmtHandle)
-    p.packInt(3)   # dialect = 3
+    p.packInt(3)                        // dialect = 3
     p.packString(query)
     p.packBytes(descItems)
     p.packInt(p.buffer_length)
     p.sendPackets()
 }
 
-func (p *wireProtocol) _op_info_sql(stmtHandle int32, vars) {
+func (p *wireProtocol) opInfoSql(stmtHandle int32, vars []byte) {
     p.pack_int(self.op_info_sql)
     p.pack_int(stmtHandle)
     p.pack_int(0)
     p.pack_bytes(vars)
-    p.pack_int(self.buffer_length)
+    p.pack_int(p.buffer_length)
     p.sendPackets()
 }
 
-func (p *wireProtocol) opExecute(stmtHandle, transHandle, params) {
+func (p *wireProtocol) opExecute(stmtHandle int32, transHandle int32, params []interface{}) {
     p.pack_int(op_execute)
     p.pack_int(stmtHandle)
     p.pack_int(transHandle)
 
     if len(params) == 0 {
-        p.packBytes(bytes[]{})
+        p.packInt(0)        // packBytes([])
         p.packInt(0)
         p.packInt(0)
         p.sendPackets()
-    }
-    else:
-        (blr, values) = params_to_blr(params)
+    } else {
+        (blr, values) := params_to_blr(params)
         p.packBytes(blr)
         p.packInt(0)
         p.packInt(1)
         p.appendBytes(values)
         p.sendPackets()
+    }
 }
 
-func (p *wireProtocol) _op_execute2(stmtHandle, transHandle, params, output_blr) {
-    p.pack_int(self.op_execute2)
+func (p *wireProtocol) opExecute2(stmtHandle int32, transHandle int32, params []intaface{}, outputBlr []byte) {
+    p.pack_int(op_execute2)
     p.pack_int(stmtHandle)
     p.pack_int(transHandle)
 
-    if len(params) == 0:
-        p.pack_bytes(bytes([]))
-        p.pack_int(0)
-        p.pack_int(0)
-        send_channel(self.sock, p.get_buffer())
-    else:
-        (blr, values) = params_to_blr(params)
+    if len(params) == 0 {
+        p.packInt(0)        // packBytes([])
+        p.packInt(0)
+        p.packInt(0)
+    } else {
+        (blr, values) := params_to_blr(params)
         p.pack_bytes(blr)
-        p.pack_int(0)
-        p.pack_int(1)
-        send_channel(self.sock, p.get_buffer() + values)
+        p.packInt(0)
+        p.packInt(1)
+        p.appendBytes(values)
+    }
 
-    p.pack_bytes(output_blr)
-    p.pack_int(0)
+    p.packBytes(outputBlr)
+    p.packInt(0)
     p.sendPackets()
 }
 
-func (p *wireProtocol) _op_execute_immediate(self, transHandle, dbHandle, sql, params, in_msg=, out_msg=, possible_requests) {
-    sql = self.str_to_bytes(sql)
-    in_msg = self.str_to_bytes(in_msg)
-    out_msg = self.str_to_bytes(out_msg)
-    r = bint_to_bytes(self.op_execute_immediate, 4)
-    r += bint_to_bytes(transHandle, 4) + bint_to_bytes(db_handle, 4)
-    r += bint_to_bytes(len(sql), 2) + sql
-    r += bint_to_bytes(3, 2)    # dialect
-    if len(params) == 0:
-        r += bint_to_bytes(0, 2)    # in_blr len
-        values = bytes([])
-    else:
-        (blr, values) = params_to_blr(params)
-        r += bint_to_bytes(len(blr), 2) + blr
-    r += bint_to_bytes(len(in_msg), 2) + in_msg
-    r += bint_to_bytes(0, 2)    # unknown short int 0
-    r += bint_to_bytes(len(out_msg), 2) + out_msg
-    r += bint_to_bytes(possible_requests, 4)
-    r += bytes([0]) * ((4-len(r+values)) & 3)    # padding
-    send_channel(self.sock, r + values)
-}
-
-func (p *wireProtocol)  _op_fetch(stmtHandle int32, blr [] byte) {
-    p.pack_int(self.op_fetch)
+func (p *wireProtocol)  opFetch(stmtHandle int32, blr [] byte) {
+    p.pack_int(op_fetch)
     p.pack_int(stmtHandle)
     p.pack_bytes(blr)
     p.pack_int(0)
@@ -415,7 +390,7 @@ func (p *wireProtocol)  _op_fetch(stmtHandle int32, blr [] byte) {
     p.sendPackets()
 }
 
-func (p *wireProtocol) _op_fetch_response(self, stmtHandle, xsqlda) {
+func (p *wireProtocol) opFetchRresponse(stmtHandle int32, xsqlda) {
     b = recv_channel(self.sock, 4)
     while bytes_to_bint(b) == self.op_dummy:
         b = recv_channel(self.sock, 4)
