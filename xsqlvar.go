@@ -25,6 +25,8 @@ package firebirdsql
 
 import (
     "time"
+    "bytes"
+    "encoding/binary"
 )
 
 const (
@@ -46,7 +48,7 @@ const (
     SQL_TYPE_NULL = 32766
 )
 
-var xsqlvarTypeLength = map[int]int32 {
+var xsqlvarTypeLength = map[int]int {
     SQL_TYPE_VARYING: -1,
     SQL_TYPE_SHORT: 4,
     SQL_TYPE_LONG: 4,
@@ -62,7 +64,7 @@ var xsqlvarTypeLength = map[int]int32 {
     SQL_TYPE_BOOLEAN: 1,
 }
 
-var xsqlvarDisplayLength = map[int]int32 {
+var xsqlvarTypeDisplayLength = map[int]int {
     SQL_TYPE_VARYING: -1,
     SQL_TYPE_SHORT: 6,
     SQL_TYPE_LONG: 11,
@@ -78,11 +80,42 @@ var xsqlvarDisplayLength = map[int]int32 {
     SQL_TYPE_BOOLEAN: 5,
 }
 
+func bytes_to_str(b []byte) string {
+    return bytes.NewBuffer(b).String()
+}
+
+func bytes_to_bint32(b []byte) int32 {
+    var i32 int32
+    buffer := bytes.NewBuffer(b)
+    binary.Read(buffer, binary.BigEndian, &i32)
+    return i32
+}
+
+func bytes_to_int(b []byte) int32 {
+    var i32 int32
+    buffer := bytes.NewBuffer(b)
+    binary.Read(buffer, binary.LittleEndian, &i32)
+    return i32
+}
+
+func bytes_to_bint16(b []byte) int16 {
+    var i int16
+    buffer := bytes.NewBuffer(b)
+    binary.Read(buffer, binary.BigEndian, &i)
+    return i
+}
+
+func bytes_to_bint64(b []byte) int64 {
+    var i int64
+    buffer := bytes.NewBuffer(b)
+    binary.Read(buffer, binary.BigEndian, &i)
+    return i
+}
 type xSQLVAR struct {
-    sqltype int32
-    sqlscale int32
-    sqlsubtype int32
-    sqllen int32
+    sqltype int
+    sqlscale int
+    sqlsubtype int
+    sqllen int
     null_ok bool
     fieldname string
     relname string
@@ -95,7 +128,7 @@ func NewXSQLVAR () *xSQLVAR {
     return x
 }
 
-func (x *xSQLVAR) ioLength() int32 {
+func (x *xSQLVAR) ioLength() int {
     if x.sqltype == SQL_TYPE_TEXT {
         return x.sqllen
     } else {
@@ -103,76 +136,75 @@ func (x *xSQLVAR) ioLength() int32 {
     }
 }
 
-func (x *xSQLVAR) displayLenght() int32 {
-    sqltype = self.sqltype
-    if sqltype == SQL_TYPE_TEXT {
-        return self.sqllen
+func (x *xSQLVAR) displayLenght() int {
+    if x.sqltype == SQL_TYPE_TEXT {
+        return x.sqllen
     } else {
-        return self.type_display_length[sqltype]
+        return xsqlvarTypeDisplayLength[x.sqltype]
     }
 }
 
-func (x *xSQLVAR) _parseDate(raw_value []byte) time.Date {
-    nday = bytes_to_bint(raw_value) + 678882
-    century = (4 * nday -1) / 146097
+func (x *xSQLVAR) _parseDate(raw_value []byte) time.Time {
+    nday := int(bytes_to_bint32(raw_value)) + 678882
+    century := (4 * nday -1) / 146097
     nday = 4 * nday - 1 - 146097 * century
-    day = nday / 4
+    day := nday / 4
 
     nday = (4 * day + 3) / 1461
     day = 4 * day + 3 - 1461 * nday
     day = (day + 4) / 4
 
-    month = (5 * day -3) / 153
+    month := (5 * day -3) / 153
     day = 5 * day - 3 - 153 * month
     day = (day + 5) / 5
-    year = 100 * century + nday
+    year := 100 * century + nday
     if month < 10 {
         month += 3
     } else {
         month -= 9
         year += 1
     }
-    return time.Date(year, month, day)
+    return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 }
 
-func (x *xSQLVAR) _parseTime(raw_value []byte) time {
-        n = bytes_to_bint(raw_value)
-        s = n // 10000
-        m = s // 60
-        h = m // 60
+func (x *xSQLVAR) _parseTime(raw_value []byte) time.Time {
+        n := int(bytes_to_bint32(raw_value))
+        s := n / 10000
+        m := s / 60
+        h := m / 60
         m = m % 60
         s = s % 60
         return time.Time(h, m, s, (n % 10000) * 100)
 }
 
-func (x *xSQLVAR) value(raw_value) interface{} {
+func (x *xSQLVAR) value(raw_value []byte) interface{} {
     switch x.sqltype {
     case SQL_TYPE_TEXT:
         if x.sqlsubtype == 1 {          // OCTETS
             return raw_value
         } else {
-            return self.bytes_to_str(raw_value)
+            return bytes_to_str(raw_value)
         }
     case SQL_TYPE_VARYING:
-        if self.sqlsubtype == 1 {       // OCTETS
+        if x.sqlsubtype == 1 {       // OCTETS
             return raw_value
         } else {
-            return self.bytes_to_str(raw_value)
+            return bytes_to_str(raw_value)
         }
     case SQL_TYPE_SHORT:
-        return bytes_to_bint16(raw_value) * p.sqlscale
+        return bytes_to_bint16(raw_value)
     case SQL_TYPE_LONG:
-        return bytes_to_bint(raw_value) * p.sqlscale
+        return bytes_to_bint32(raw_value) * int32(x.sqlscale)
     case SQL_TYPE_INT64:
-        return bytes_to_bint64(raw_value) * p.sqlscale
+        return bytes_to_bint64(raw_value) * int64(x.sqlscale)
     case SQL_TYPE_DATE:
         return x._parseDate(raw_value)
     case SQL_TYPE_TIME:
         return x._parseTime(raw_value)
-    case SQL_TYPE_TIMESTAMP:
-        yyyy, mm, dd = self._parse_date(raw_value[:4])
-        h, m, s, ms = self._parse_time(raw_value[4:])
-        return datetime.datetime(yyyy, mm, dd, h, m, s, ms)
+//    case SQL_TYPE_TIMESTAMP:
+//        yyyy, mm, dd = self._parse_date(raw_value[:4])
+//        h, m, s, ms = self._parse_time(raw_value[4:])
+//        return datetime.datetime(yyyy, mm, dd, h, m, s, ms)
 //    case SQL_TYPE_FLOAT:
 //        return struct.unpack('!f', raw_value)[0]
 //    case SQL_TYPE_DOUBLE:
@@ -184,50 +216,49 @@ func (x *xSQLVAR) value(raw_value) interface{} {
 }
 
 
-func calcBlr(xsqlda []xSQLVAR) {
+func calcBlr(xsqlda []xSQLVAR) []byte {
     // Calculate  BLR from XSQLVAR array.
     ln := len(xsqlda) *2
-    blr, err := make([]byte, ln + 6)
+    blr := make([]byte, ln + 6)
     blr[0] = 5
     blr[1] = 2
     blr[2] = 4
     blr[3] = 0
     blr[4] = byte(ln & 255)
     blr[5] = byte(ln >> 8)
-    n = 6
+    n := 6
 
     for _, x := range xsqlda {
-        sqltype = x.sqltype
-        sqlscale = x.sqlscale
+        sqlscale := x.sqlscale
         if sqlscale < 0 {
-            sql += 256
+            sqlscale += 256
         }
-        switch sqltype {
+        switch x.sqltype {
         case SQL_TYPE_VARYING:
             blr[n] = 37
-            blr[n+1] = x.sqllen & 255
-            blr[n+2] = x.sqllen >> 8
+            blr[n+1] = byte(x.sqllen & 255)
+            blr[n+2] = byte(x.sqllen >> 8)
             n += 3
         case SQL_TYPE_TEXT:
             blr[n] = 14
-            blr[n+1] = x.sqllen & 255
-            blr[n+2] = x.sqllen >> 8
+            blr[n+1] = byte(x.sqllen & 255)
+            blr[n+2] = byte(x.sqllen >> 8)
             n += 3
         case SQL_TYPE_LONG:
             blr[n] = 8
-            blr[n+1] = x.sqlscale
+            blr[n+1] = byte(sqlscale)
             n += 2
         case SQL_TYPE_SHORT:
             blr[n] = 7
-            blr[n+1] = x.sqlscale
+            blr[n+1] = byte(sqlscale)
             n += 2
         case SQL_TYPE_INT64:
             blr[n] = 16
-            blr[n+1] = x.sqlscale
+            blr[n+1] = byte(sqlscale)
             n += 2
         case SQL_TYPE_QUAD:
             blr[n] = 9
-            blr[n+1] = x.sqlscale
+            blr[n+1] = byte(sqlscale)
             n += 2
         case SQL_TYPE_BLOB:
             blr[n] = 9
