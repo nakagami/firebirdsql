@@ -24,11 +24,27 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
-    "bytes"
-    "encoding/binary"
     "time"
 )
 
+const (
+    SQL_TYPE_TEXT = 452
+    SQL_TYPE_VARYING = 448
+    SQL_TYPE_SHORT = 500
+    SQL_TYPE_LONG = 496
+    SQL_TYPE_FLOAT = 482
+    SQL_TYPE_DOUBLE = 480
+    SQL_TYPE_D_FLOAT = 530
+    SQL_TYPE_TIMESTAMP = 510
+    SQL_TYPE_BLOB = 520
+    SQL_TYPE_ARRAY = 540
+    SQL_TYPE_QUAD = 550
+    SQL_TYPE_TIME = 560
+    SQL_TYPE_DATE = 570
+    SQL_TYPE_INT64 = 580
+    SQL_TYPE_BOOLEAN = 32764
+    SQL_TYPE_NULL = 32766
+)
 
 var xsqlvarTypeLength = map[int]int32 {
     SQL_TYPE_VARYING: -1,
@@ -144,15 +160,11 @@ func (x *xSQLVAR) value(raw_value) interface{} {
             return self.bytes_to_str(raw_value)
         }
     case SQL_TYPE_SHORT:
-        // TODO:
+        return bytes_to_bint16(raw_value) * p.sqlscale
     case SQL_TYPE_LONG:
-        // TODO:
+        return bytes_to_bint(raw_value) * p.sqlscale
     case SQL_TYPE_INT64:
-        n = bytes_to_bint(raw_value)
-        if self.sqlscale:
-            return decimal.Decimal(str(n) + 'e' + str(self.sqlscale))
-        else:
-            return n
+        return bytes_to_bint64(raw_value) * p.sqlscale
     case SQL_TYPE_DATE:
         return x._parseDate(raw_value)
     case SQL_TYPE_TIME:
