@@ -25,14 +25,17 @@ package firebirdsql
 
 import (
     "database/sql"
-    "database/driver"
-    "fmt"
-    "net"
+    "database/sql/driver"
+//    "fmt"
+//    "net"
 )
 
 type firebirdsqlDriver struct{}
 
-func (d *firebirdsql) Open(dsn string) (driver.Conn, error) {
+func (d *firebirdsqlDriver) Open(dsn string) (driver.Conn, error) {
+    var err error
+
+    return nil, err
 }
 
 func init() {
