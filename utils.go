@@ -25,7 +25,56 @@ package firebirdsql
 
 import (
     "bytes"
+    "encoding/binary"
 )
+
+func int32_to_bytes(i32 int32) []byte {
+    bs := []byte {
+        byte(i32 & 0xFF),
+        byte(i32 >> 8 & 0xFF),
+        byte(i32 >> 16 & 0xFF),
+        byte(i32 >> 24 & 0xFF),
+    }
+    return bs
+}
+
+func bint32_to_bytes(i32 int32) []byte {
+    bs := []byte {
+        byte(i32 >> 24 & 0xFF),
+        byte(i32 >> 16 & 0xFF),
+        byte(i32 >> 8 & 0xFF),
+        byte(i32 & 0xFF),
+    }
+    return bs
+}
+
+func bytes_to_bint(b []byte) int32 {
+    var i32 int32
+    buffer := bytes.NewBuffer(b)
+    binary.Read(buffer, binary.BigEndian, &i32)
+    return i32
+}
+
+func bytes_to_int(b []byte) int32 {
+    var i32 int32
+    buffer := bytes.NewBuffer(b)
+    binary.Read(buffer, binary.LittleEndian, &i32)
+    return i32
+}
+
+func bytes_to_bint16(b []byte) int16 {
+    var i int16
+    buffer := bytes.NewBuffer(b)
+    binary.Read(buffer, binary.BigEndian, &i)
+    return i
+}
+
+func bytes_to_bint64(b []byte) int64 {
+    var i int64
+    buffer := bytes.NewBuffer(b)
+    binary.Read(buffer, binary.BigEndian, &i)
+    return i
+}
 
 func xdrBytes(bs []byte) []byte {
     // XDR encoding bytes

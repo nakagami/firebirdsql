@@ -26,7 +26,6 @@ package firebirdsql
 import (
     "bytes"
     "encoding/binary"
-    "date"
     "time"
 )
 
@@ -64,15 +63,15 @@ var xsqlvarDisplayLength = map[int]int32 {
 }
 
 type xSQLVAR struct {
-    var sqltype int32
-    var sqlscale int32
-    var sqlsubtype int32
-    var sqllen int32
-    var null_ok bool
-    var fieldname string
-    var relname string
-    var ownname string
-    var aliasname string
+    sqltype int32
+    sqlscale int32
+    sqlsubtype int32
+    sqllen int32
+    null_ok bool
+    fieldname string
+    relname string
+    ownname string
+    aliasname string
 }
 
 func NewXSQLVAR () *xSQLVAR {
@@ -81,21 +80,23 @@ func NewXSQLVAR () *xSQLVAR {
 }
 
 func (x *xSQLVAR) ioLength() int32 {
-    if x.sqltype == SQL_TYPE_TEXT:
+    if x.sqltype == SQL_TYPE_TEXT {
         return x.sqllen
-    else:
+    } else {
         return xsqlvarTypeLength[x.sqltype]
+    }
 }
 
-func (x *xSQLVAR) displayLenght() int 32 {
+func (x *xSQLVAR) displayLenght() int32 {
     sqltype = self.sqltype
-    if sqltype == SQL_TYPE_TEXT:
+    if sqltype == SQL_TYPE_TEXT {
         return self.sqllen
-    else:
+    } else {
         return self.type_display_length[sqltype]
+    }
 }
 
-func (x *xSQLVAR) _parseDate(raw_value []byte) date {
+func (x *xSQLVAR) _parseDate(raw_value []byte) time.Date {
     nday = bytes_to_bint(raw_value) + 678882
     century = (4 * nday -1) / 146097
     nday = 4 * nday - 1 - 146097 * century
@@ -109,12 +110,13 @@ func (x *xSQLVAR) _parseDate(raw_value []byte) date {
     day = 5 * day - 3 - 153 * month
     day = (day + 5) / 5
     year = 100 * century + nday
-    if month < 10:
+    if month < 10 {
         month += 3
-    else:
+    } else {
         month -= 9
         year += 1
-    return year, month, day
+    }
+    return time.Date(year, month, day)
 }
 
 func (x *xSQLVAR) _parseTime(raw_value []byte) time {
@@ -124,19 +126,19 @@ func (x *xSQLVAR) _parseTime(raw_value []byte) time {
         h = m // 60
         m = m % 60
         s = s % 60
-        return (h, m, s, (n % 10000) * 100)
+        return time.Time(h, m, s, (n % 10000) * 100)
 }
 
 func (x *xSQLVAR) value(raw_value) interface{} {
     switch x.sqltype {
     case SQL_TYPE_TEXT:
-        if x.sqlsubtype == 1 {     # OCTETS
+        if x.sqlsubtype == 1 {          // OCTETS
             return raw_value
         } else {
             return self.bytes_to_str(raw_value)
         }
     case SQL_TYPE_VARYING:
-        if self.sqlsubtype == 1 {     # OCTETS
+        if self.sqlsubtype == 1 {       // OCTETS
             return raw_value
         } else {
             return self.bytes_to_str(raw_value)
