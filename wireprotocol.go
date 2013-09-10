@@ -458,7 +458,7 @@ func (p *wireProtocol) opGetSegment(blobHandle int32) {
     p.sendPackets()
 }
 
-func (p *wireProtocol) _op_batch_segments(blobHandle, seg_data) {
+func (p *wireProtocol) opBatchSegments(blobHandle, seg_data) {
     ln = len(seg_data)
     p.packInt(self.op_batch_segments)
     p.packInt(blobHandle)
@@ -469,25 +469,24 @@ func (p *wireProtocol) _op_batch_segments(blobHandle, seg_data) {
             + int_to_bytes(ln, 2) + seg_data + bytes([0])*pad_length)
 }
 
-func (p *wireProtocol)  _op_close_blob(blobHandle) {
+func (p *wireProtocol)  opCloseBlob(blobHandle) {
     p.packInt(op_close_blob)
     p.packInt(blobHandle)
     p.sendPackets()
 }
 
-//------------------------------------------------------------------------
+func (p *wireProtocol) opConnectRequest() {
+    p.packInt(op_connect_request)
+    p.packInt(1)    // async
+    p.packInt(p.dbHandle)
+    p.packInt(0)
+    p.sendPackets()
 
-func (p *wireProtocol) _op_connect_request() {
-    p = xdrlib.Packer()
-    p.pack_int(self.op_connect_request)
-    p.pack_int(1)    # async
-    p.pack_int(self.db_handle)
-    p.pack_int(0)
-    send_channel(self.sock, p.get_buffer())
+    b, err = p.recvPackets(4)
+    for bytes_to_bint(b) == op_dummy {
+        b, err = p.recvPackets(4)
+    }
 
-    b = recv_channel(self.sock, 4)
-    while bytes_to_bint(b) == self.op_dummy:
-        b = recv_channel(self.sock, 4)
     if bytes_to_bint(b) != self.op_response:
         raise InternalError
 
