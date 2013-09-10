@@ -350,7 +350,7 @@ func (p *wireProtocol) opExecute(stmtHandle int32, transHandle int32, params []i
         p.packInt(0)
         p.sendPackets()
     } else {
-        (blr, values) := params_to_blr(params)
+        blr, values := params_to_blr(params)
         p.packBytes(blr)
         p.packInt(0)
         p.packInt(1)
@@ -359,7 +359,7 @@ func (p *wireProtocol) opExecute(stmtHandle int32, transHandle int32, params []i
     }
 }
 
-func (p *wireProtocol) opExecute2(stmtHandle int32, transHandle int32, params []intaface{}, outputBlr []byte) {
+func (p *wireProtocol) opExecute2(stmtHandle int32, transHandle int32, params []interface{}, outputBlr []byte) {
     p.pack_int(op_execute2)
     p.pack_int(stmtHandle)
     p.pack_int(transHandle)
@@ -369,8 +369,8 @@ func (p *wireProtocol) opExecute2(stmtHandle int32, transHandle int32, params []
         p.packInt(0)
         p.packInt(0)
     } else {
-        (blr, values) := params_to_blr(params)
-        p.pack_bytes(blr)
+        blr, values := params_to_blr(params)
+        p.packBytes(blr)
         p.packInt(0)
         p.packInt(1)
         p.appendBytes(values)
@@ -381,19 +381,25 @@ func (p *wireProtocol) opExecute2(stmtHandle int32, transHandle int32, params []
     p.sendPackets()
 }
 
-func (p *wireProtocol)  opFetch(stmtHandle int32, blr [] byte) {
-    p.pack_int(op_fetch)
-    p.pack_int(stmtHandle)
-    p.pack_bytes(blr)
-    p.pack_int(0)
-    p.pack_int(400)
+func (p *wireProtocol)  opFetch(stmtHandle int32, blr []byte) {
+    p.packInt(op_fetch)
+    p.packInt(stmtHandle)
+    p.packBytes(blr)
+    p.packInt(0)
+    p.packInt(400)
     p.sendPackets()
 }
 
-func (p *wireProtocol) opFetchRresponse(stmtHandle int32, xsqlda) {
-    b = recv_channel(self.sock, 4)
-    while bytes_to_bint(b) == self.op_dummy:
-        b = recv_channel(self.sock, 4)
+func (p *wireProtocol) opFetchRresponse(stmtHandle int32, []xsqlda xSQLVAR) {
+    b, err = p.recvPackets(4)
+    for {
+        if bytes_to_bint(b) == op_dummy {
+            b, err = p.recvPackets(4)
+        }
+    }
+
+
+    // TODO:
     if bytes_to_bint(b) == self.op_response:
         return self._parse_op_response()    # error occured
     if bytes_to_bint(b) != self.op_fetch_response:
@@ -422,54 +428,50 @@ func (p *wireProtocol) opFetchRresponse(stmtHandle int32, xsqlda) {
     return rows, status != 100
 }
 
-func (p *wireProtocol) _op_detach() {
-    p.pack_int(self.op_detach)
-    p.pack_int(self.db_handle)
+func (p *wireProtocol) opDetach() {
+    p.packInt(self.op_detach)
+    p.packInt(self.db_handle)
     p.sendPackets()
 }
 
-func (p *wireProtocol)  _op_open_blob(blob_id, transHandle) {
-    p = xdrlib.Packer()
-    p.pack_int(self.op_open_blob)
-    p.pack_int(transHandle)
+func (p *wireProtocol)  opOpenBlob(blob_id int32, transHandle int32) {
+    p.packInt(self.op_open_blob)
+    p.packInt(transHandle)
     p.appendPacket(blog_id)
     p.sendPackets()
 }
 
-func (p *wireProtocol)  _op_create_blob2(transHandle int32) {
-    p = xdrlib.Packer()
-    p.pack_int(self.op_create_blob2)
-    p.pack_int(0)
-    p.pack_int(transHandle)
-    p.pack_int(0)
-    p.pack_int(0)
+func (p *wireProtocol)  opCreateBlob2(transHandle int32) {
+    p.packInt(op_create_blob2)
+    p.packInt(0)
+    p.packInt(transHandle)
+    p.packInt(0)
+    p.packInt(0)
     p.sendPackets()
 }
 
-func (p *wireProtocol) _op_get_segment(self, blob_handle) {
+func (p *wireProtocol) opGetSegment(blobHandle int32) {
     p.pack_int(self.op_get_segment)
-    p.pack_int(blob_handle)
+    p.pack_int(blobHandle)
     p.pack_int(self.buffer_length)
     p.pack_int(0)
     p.sendPackets()
 }
 
-func (p *wireProtocol) _op_batch_segments(blob_handle, seg_data) {
+func (p *wireProtocol) _op_batch_segments(blobHandle, seg_data) {
     ln = len(seg_data)
-    p = xdrlib.Packer()
-    p.pack_int(self.op_batch_segments)
-    p.pack_int(blob_handle)
-    p.pack_int(ln + 2)
-    p.pack_int(ln + 2)
+    p.packInt(self.op_batch_segments)
+    p.packInt(blobHandle)
+    p.packInt(ln + 2)
+    p.packInt(ln + 2)
     pad_length = ((4-(ln+2)) & 3)
     send_channel(self.sock, p.get_buffer() 
             + int_to_bytes(ln, 2) + seg_data + bytes([0])*pad_length)
 }
 
-func (p *wireProtocol)  _op_close_blob(blob_handle) {
-    p = xdrlib.Packer()
-    p.pack_int(self.op_close_blob)
-    p.pack_int(blob_handle)
+func (p *wireProtocol)  _op_close_blob(blobHandle) {
+    p.packInt(op_close_blob)
+    p.packInt(blobHandle)
     p.sendPackets()
 }
 
