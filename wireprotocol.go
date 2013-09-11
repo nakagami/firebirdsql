@@ -1287,7 +1287,7 @@ func (p *wireProtocol) opInfoTransaction(transHandle int32 , b []byte) {
     p.packInt(transHandle)
     p.packInt(0)
     p.packBytes(b)
-    p.packInt(p.buffer_length)
+    p.packInt(int32(p.buffer_len))
     p.sendPackets()
 }
 
@@ -1296,7 +1296,7 @@ func (p *wireProtocol) opInfoDatabase(bs []byte) {
     p.packInt(p.dbHandle)
     p.packInt(0)
     p.packBytes(bs)
-    p.packInt(p.buffer_length)
+    p.packInt(int32(p.buffer_len))
     p.sendPackets()
 }
 
@@ -1332,16 +1332,16 @@ func (p *wireProtocol) opPrepareStatement(stmtHandle int32, transHandle int32, q
     p.packInt(3)                        // dialect = 3
     p.packString(query)
     p.packBytes(descItems)
-    p.packInt(p.buffer_length)
+    p.packInt(int32(p.buffer_len))
     p.sendPackets()
 }
 
 func (p *wireProtocol) opInfoSql(stmtHandle int32, vars []byte) {
-    p.packInt(self.op_info_sql)
+    p.packInt(op_info_sql)
     p.packInt(stmtHandle)
     p.packInt(0)
     p.packBytes(vars)
-    p.packInt(p.buffer_length)
+    p.packInt(int32(p.buffer_len))
     p.sendPackets()
 }
 
@@ -1397,47 +1397,52 @@ func (p *wireProtocol)  opFetch(stmtHandle int32, blr []byte) {
 }
 
 func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*list.List, error) {
-    b, err = p.recvPackets(4)
+    b, err := p.recvPackets(4)
     for {
-        if bytes_to_bint(b) == op_dummy {
+        if bytes_to_bint32(b) == op_dummy {
             b, err = p.recvPackets(4)
         }
     }
 
-    if bytes_to_bint32(b) == self.op_response {
+    if bytes_to_bint32(b) == op_response {
         h, oid, buf, err := p._parse_op_response()      // error occured
         return nil, errors.New("opFetchResponse:Internal Error")
     }
-    if bytes_to_bint32(b) != self.op_fetch_response {
+    if bytes_to_bint32(b) != op_fetch_response {
         return nil, errors.New("opFetchResponse:Internal Error")
     }
-    b = p.recvPackets(8)
+    b, err = p.recvPackets(8)
     status := bytes_to_bint32(b[:4])
-    count := bytes_to_bint32(b[4:8])
+    count := int(bytes_to_bint32(b[4:8]))
     rows := list.New()
     for ; count > 0; {
-        r = list.New()
+        r := list.New()
         for i, x := range xsqlda {
-            if x.io_length() < 0 {
+            var ln int
+            if x.ioLength() < 0 {
                 b, err = p.recvPackets(4)
                 ln = int(bytes_to_bint32(b))
             } else {
-                ln = x.io_length()
+                ln = x.ioLength()
             }
-            raw_value, err = p.recvPacketsAlignment(ln)
+            raw_value, err := p.recvPacketsAlignment(ln)
             b, err = p.recvPackets(4)
             if bytes_to_bint32(b) == 0 { // Not NULL
-                r.pushBack(x.value(raw_value))
+                r.PushBack(x.value(raw_value))
             }
         }
-        rows.pushBack(r)
+        rows.PushBack(r)
 
         b, err = p.recvPackets(12)
-        op = int(bytes_to_bint32(b[:4]))
+        op := int(bytes_to_bint32(b[:4]))
         status = bytes_to_bint32(b[4:8])
         count = int(bytes_to_bint32(b[8:]))
     }
-    return rows, status != 100
+    if status == 100 {
+        err = errors.New("Error: op_fetch_response")
+    }
+        
+    return rows, err
 }
 
 func (p *wireProtocol) opDetach() {
@@ -1446,10 +1451,10 @@ func (p *wireProtocol) opDetach() {
     p.sendPackets()
 }
 
-func (p *wireProtocol)  opOpenBlob(blob_id int32, transHandle int32) {
-    p.packInt(self.op_open_blob)
+func (p *wireProtocol)  opOpenBlob(blobId int32, transHandle int32) {
+    p.packInt(op_open_blob)
     p.packInt(transHandle)
-    p.appendPacket(blog_id)
+    p.packInt(blobId)
     p.sendPackets()
 }
 
@@ -1463,9 +1468,9 @@ func (p *wireProtocol)  opCreateBlob2(transHandle int32) {
 }
 
 func (p *wireProtocol) opGetSegment(blobHandle int32) {
-    p.packInt(self.op_get_segment)
+    p.packInt(op_get_segment)
     p.packInt(blobHandle)
-    p.packInt(self.buffer_length)
+    p.packInt(int32(p.buffer_len))
     p.packInt(0)
     p.sendPackets()
 }
@@ -1473,46 +1478,46 @@ func (p *wireProtocol) opGetSegment(blobHandle int32) {
 func (p *wireProtocol) opBatchSegments(blobHandle int32, seg_data []byte) {
     ln := len(seg_data)
     p.packInt(op_batch_segments)
-    p.packInt(int(blobHandle))
-    p.packInt(ln + 2)
-    p.packInt(ln + 2)
-    pad_length = ((4-(ln+2)) & 3)
-    padding = make([]byte, pad_length)
-    p.packBytes([]byte {ln & 255, ln >> 8})    // little endian int16
-    p.packBytes(seq_data)
+    p.packInt(blobHandle)
+    p.packInt(int32(ln + 2))
+    p.packInt(int32(ln + 2))
+    pad_length := ((4-(ln+2)) & 3)
+    padding := make([]byte, pad_length)
+    p.packBytes([]byte {byte(ln & 255), byte(ln >> 8)}) // little endian int16
+    p.packBytes(seg_data)
     p.packBytes(padding)
     p.sendPackets()
 }
 
 func (p *wireProtocol)  opCloseBlob(blobHandle int32) {
     p.packInt(op_close_blob)
-    p.packInt(int(blobHandle))
+    p.packInt(blobHandle)
     p.sendPackets()
 }
 
 func (p *wireProtocol) opResponse() (int32, int32, []byte, error) {
-    b, err = p.recvPackets(4)
+    b, err := p.recvPackets(4)
     for {
-        if bytes_to_bint(b) == op_dummy {
+        if bytes_to_bint32(b) == op_dummy {
             b, err = p.recvPackets(4)
         }
     }
 
-    if bytes_to_bint(b) != self.op_response {
+    if bytes_to_bint32(b) != op_response {
         return 0, 0, nil, errors.New("Error op_response")
     }
     return p._parse_op_response()
 }
 
 func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) (*list.List, error){
-    b, err = p.recvPackets(4)
+    b, err := p.recvPackets(4)
     for {
-        if bytes_to_bint(b) == op_dummy {
+        if bytes_to_bint32(b) == op_dummy {
             b, err = p.recvPackets(4)
         }
     }
 
-    if bytes_to_bint(b) != self.op_sql_response {
+    if bytes_to_bint(b) != op_sql_response {
         return 0, 0, nil, errors.New("Error op_sql_response")
     }
 
@@ -1530,9 +1535,9 @@ func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) (*list.List, error){
         raw_value, err = p.recvPacketsAlignment(ln)
         b, err = p.recvPackets(4)
         if bytes_to_bint32(b) == 0 {    // Not NULL
-            r.pushBack(x.value(raw_value))
+            r.PushBack(x.value(raw_value))
         } else {
-            r.pushBack(nil)
+            r.PushBack(nil)
         }
     }
 
