@@ -1091,7 +1091,7 @@ func (p *wireProtocol) sendPackets() (n int, err error) {
 
 func (p *wireProtocol) recvPackets(n int) ([]byte, error) {
     buf := make([]byte, n)
-    ln, err := p.conn.Read(buf)
+    _, err := p.conn.Read(buf)
     return buf, err
 }
 
@@ -1104,7 +1104,7 @@ func (p *wireProtocol) recvPacketsAlignment(n int) ([]byte, error) {
     return buf[0:n], err
 }
 
-func (p *wireProtocol) _parse_status_vector() (*list.List, int, string) {
+func (p *wireProtocol) _parse_status_vector() (*list.List, int, string, error) {
     sql_code := 0
     gds_code := 0
     gds_codes := list.New()
@@ -1143,7 +1143,7 @@ func (p *wireProtocol) _parse_status_vector() (*list.List, int, string) {
         n = bytes_to_bint32(b)
     }
 
-    return gds_codes, sql_code, message
+    return gds_codes, sql_code, message, err
 }
 
 
@@ -1154,7 +1154,7 @@ func (p *wireProtocol) _parse_op_response() (int32, int32, []byte, error) {
     buf_len := int(bytes_to_bint32(b[12:]))     // buffer length
     buf, err := p.recvPacketsAlignment(buf_len)
 
-    gds_codes, sql_code, message := p._parse_status_vector()
+    _, sql_code, message, err := p._parse_status_vector()
     if sql_code != 0 || message != "" {
         err = errors.New(message)
     }
@@ -1206,15 +1206,15 @@ func (p *wireProtocol) opCreate() {
 }
 
 func (p *wireProtocol) opAccept() {
-    b, err := p.recvPackets(4)
+    b, _ := p.recvPackets(4)
     for {
         if bytes_to_bint32(b) == op_dummy {
-            b, err = p.recvPackets(4)
+            b, _ = p.recvPackets(4)
         }
     }
 
     // assert bytes_to_bint32(b) == op_accept
-    b, err = p.recvPackets(12)
+    b, _ = p.recvPackets(12)
     // assert up.unpack_int() == 10
     // assert  up.unpack_int() == 1
     // assert up.unpack_int() == 3
@@ -1405,7 +1405,7 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*lis
     }
 
     if bytes_to_bint32(b) == op_response {
-        h, oid, buf, err := p._parse_op_response()      // error occured
+        p._parse_op_response()      // error occured
         return nil, errors.New("opFetchResponse:Internal Error")
     }
     if bytes_to_bint32(b) != op_fetch_response {
@@ -1417,7 +1417,7 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*lis
     rows := list.New()
     for ; count > 0; {
         r := list.New()
-        for i, x := range xsqlda {
+        for _, x := range xsqlda {
             var ln int
             if x.ioLength() < 0 {
                 b, err = p.recvPackets(4)
@@ -1425,7 +1425,7 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*lis
             } else {
                 ln = x.ioLength()
             }
-            raw_value, err := p.recvPacketsAlignment(ln)
+            raw_value, _ := p.recvPacketsAlignment(ln)
             b, err = p.recvPackets(4)
             if bytes_to_bint32(b) == 0 { // Not NULL
                 r.PushBack(x.value(raw_value))
@@ -1434,7 +1434,7 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*lis
         rows.PushBack(r)
 
         b, err = p.recvPackets(12)
-        op := int(bytes_to_bint32(b[:4]))
+        // op := int(bytes_to_bint32(b[:4]))
         status = bytes_to_bint32(b[4:8])
         count = int(bytes_to_bint32(b[8:]))
     }
@@ -1496,10 +1496,10 @@ func (p *wireProtocol)  opCloseBlob(blobHandle int32) {
 }
 
 func (p *wireProtocol) opResponse() (int32, int32, []byte, error) {
-    b, err := p.recvPackets(4)
+    b, _ := p.recvPackets(4)
     for {
         if bytes_to_bint32(b) == op_dummy {
-            b, err = p.recvPackets(4)
+            b, _ = p.recvPackets(4)
         }
     }
 
@@ -1522,18 +1522,18 @@ func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) (*list.List, error){
     }
 
     b, err = p.recvPackets(4)
-    count := int(bytes_to_bint32(b))
+    // count := int(bytes_to_bint32(b))
 
     r := list.New()
     var ln int
-    for i, x := range xsqlda {
+    for _, x := range xsqlda {
         if x.ioLength() < 0 {
             b, err = p.recvPackets(4)
             ln = int(bytes_to_bint32(b))
         } else {
             ln = x.ioLength()
         }
-        raw_value, err := p.recvPacketsAlignment(ln)
+        raw_value, _ := p.recvPacketsAlignment(ln)
         b, err = p.recvPackets(4)
         if bytes_to_bint32(b) == 0 {    // Not NULL
             r.PushBack(x.value(raw_value))
