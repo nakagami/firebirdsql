@@ -1015,6 +1015,7 @@ type wireProtocol struct {
 func NewWireProtocol (dsn string) *wireProtocol {
     p := new(wireProtocol)
     p.buffer_len = 1024
+    var err error
     p.buf, err = make([]byte, p.buffer_len)
 
     dsnPattern := regexp.MustCompile(
@@ -1248,13 +1249,13 @@ func (p *wireProtocol) opTransaction(tpb []byte) {
     p.sendPackets()
 }
 
-func (p *wireProtcol) opCommit(transHandle int32) {
+func (p *wireProtocol) opCommit(transHandle int32) {
     p.pack_int(op_commit)
     p.pack_int(transHandle)
     p.sendPackets()
 }
 
-func (p *wireProtcol) opCommitRetaining(transHandle int32) {
+func (p *wireProtocol) opCommitRetaining(transHandle int32) {
     p.pack_int(op_commit_retaining)
     p.pack_int(transHandle)
     p.sendPackets()
