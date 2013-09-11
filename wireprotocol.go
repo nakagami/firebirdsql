@@ -1008,7 +1008,7 @@ type wireProtocol struct {
     conn net.Conn
     dbHandle int32
     addr string
-    dbname string
+    dbName string
     user string
     passwd string
 }
@@ -1037,7 +1037,7 @@ func NewWireProtocol (dsn string) (*wireProtocol, error) {
         case "addr":
             p.addr = match
         case "dbname":
-            p.dbname = match
+            p.dbName = match
         }
     }
     if strings.ContainsRune(p.addr, ':') {
@@ -1167,9 +1167,9 @@ func (p *wireProtocol) opConnect() {
     p.packInt(op_attach)
     p.packInt(2)   // CONNECT_VERSION2
     p.packInt(1)   // Arch type (Generic = 1)
-    p.packString(bytes.NewBufferString(p.dbname))
+    p.packString(p.dbName)
     p.packInt(1)   // Protocol version understood count.
-    p.packBytes(p.uid())
+    p.packString(p.uid())
     p.packInt(10)  // PROTOCOL_VERSION10
     p.packInt(1)   // Arch type (Generic = 1)
     p.packInt(2)   // Min type
@@ -1180,24 +1180,24 @@ func (p *wireProtocol) opConnect() {
 
 
 func (p *wireProtocol) opCreate() {
-    page_size := 4096
+    var page_size int32
+    page_size = 4096
 
     encode := bytes.NewBufferString("UTF8").Bytes()
     user := bytes.NewBufferString(p.user).Bytes()
-    password := bytes.NewBufferString(p.password).Bytes()
+    passwd := bytes.NewBufferString(p.passwd).Bytes()
     dpb := bytes.Join([][]byte{
         []byte{1},
-        []byte{68, len(encode)}, encode,
-        []byte{48, len(encode)}, encode,
-        []byte{28, len(user)}, user,
-        []byte{29, len(password)}, password,
-        []byte{63, 4}, int32_to_byte(3),
-        []byte{24, 4}, bint32_to_byte(1),
-        []byte{54, 4}, bint32_to_byte(1),
-        []byte{4, 4}, int32_to_byte(page_size),
+        []byte{68, byte(len(encode))}, encode,
+        []byte{48, byte(len(encode))}, encode,
+        []byte{28, byte(len(user))}, user,
+        []byte{29, byte(len(passwd))}, passwd,
+        []byte{63, 4}, int32_to_bytes(3),
+        []byte{24, 4}, bint32_to_bytes(1),
+        []byte{54, 4}, bint32_to_bytes(1),
+        []byte{4, 4}, int32_to_bytes(page_size),
     }, nil)
 
-    p = xdrlib.Packer()
     p.packInt(op_create)
     p.packInt(0)                       // Database Object ID
     p.packString(p.dbName)
@@ -1206,15 +1206,15 @@ func (p *wireProtocol) opCreate() {
 }
 
 func (p *wireProtocol) opAccept() {
-    b, err = p.recvPackets(4)
+    b, err := p.recvPackets(4)
     for {
-        if bytes_to_bint(b) == op_dummy {
+        if bytes_to_bint32(b) == op_dummy {
             b, err = p.recvPackets(4)
         }
     }
 
-    // assert bytes_to_bint(b) == op_accept
-    b = p.recvPackets(12)
+    // assert bytes_to_bint32(b) == op_accept
+    b, err = p.recvPackets(12)
     // assert up.unpack_int() == 10
     // assert  up.unpack_int() == 1
     // assert up.unpack_int() == 3
@@ -1223,18 +1223,18 @@ func (p *wireProtocol) opAccept() {
 func (p *wireProtocol) opAttach() {
     encode := bytes.NewBufferString("UTF8").Bytes()
     user := bytes.NewBufferString(p.user).Bytes()
-    password := bytes.NewBufferString(p.password).Bytes()
+    passwd := bytes.NewBufferString(p.passwd).Bytes()
 
     dbp := bytes.Join([][]byte{
         []byte{1},
         []byte{48, len(encode)}, encode,
         []byte{28, len(user)}, user,
-        []byte{29, len(password)}, password,
-    })
+        []byte{29, len(passwd)}, passwd,
+    }, nil)
     p.packInt(op_attach)
     p.packInt(0)                       // Database Object ID
     p.packString(p.dbName)
-    p.packBytes(dpb)
+    p.packBytes(dbp)
     p.sendPackets()
 }
 
@@ -1396,7 +1396,7 @@ func (p *wireProtocol)  opFetch(stmtHandle int32, blr []byte) {
     p.sendPackets()
 }
 
-func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*list, error) {
+func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*list.List, error) {
     b, err = p.recvPackets(4)
     for {
         if bytes_to_bint(b) == op_dummy {
@@ -1470,10 +1470,10 @@ func (p *wireProtocol) opGetSegment(blobHandle int32) {
     p.sendPackets()
 }
 
-func (p *wireProtocol) opBatchSegments(blobHandle, seg_data) {
+func (p *wireProtocol) opBatchSegments(blobHandle int32, seg_data []byte) {
     ln := len(seg_data)
-    p.packInt(self.op_batch_segments)
-    p.packInt(blobHandle)
+    p.packInt(op_batch_segments)
+    p.packInt(int(blobHandle))
     p.packInt(ln + 2)
     p.packInt(ln + 2)
     pad_length = ((4-(ln+2)) & 3)
@@ -1484,9 +1484,9 @@ func (p *wireProtocol) opBatchSegments(blobHandle, seg_data) {
     p.sendPackets()
 }
 
-func (p *wireProtocol)  opCloseBlob(blobHandle) {
+func (p *wireProtocol)  opCloseBlob(blobHandle int32) {
     p.packInt(op_close_blob)
-    p.packInt(blobHandle)
+    p.packInt(int(blobHandle))
     p.sendPackets()
 }
 
@@ -1504,7 +1504,7 @@ func (p *wireProtocol) opResponse() (int32, int32, []byte, error) {
     return p._parse_op_response()
 }
 
-func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) (*list, error){
+func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) (*list.List, error){
     b, err = p.recvPackets(4)
     for {
         if bytes_to_bint(b) == op_dummy {
