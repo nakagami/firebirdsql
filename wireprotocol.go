@@ -28,6 +28,8 @@ import (
     "net"
     "bytes"
     "regexp"
+    "strings"
+    "container/list"
 )
 
 
@@ -998,6 +1000,19 @@ var errmsgs = map[int]string {
     337051649 : "Switches trusted_svc and trusted_role are not supported from command line\n", 
 }
 
+type protocolError struct {
+    message string
+}
+
+func (e *protocolError) String() string {
+    return e.message
+}
+
+func NewProtocolError (message string) *protocolError {
+    p := new(protocolError)
+    p.message = message
+    return p
+}
 
 type wirepPotocol struct {
     buf []byte
@@ -1097,50 +1112,60 @@ func (p *wireProtocol) recvPacketsAlignment(n int) ([]byte, error) {
 
 func (p *wireProtocol) _parse_status_vector() (int, int, string) {
     sql_code := 0
-    gds_codes := 0
+    gds_code := 0
+    gds_codes := list.New()
+    num_arg := 0
     message := ""
 
-    b, err = p.recvPackets(4)
-    for {
-        n = bytes_to_bit(b)
-
-        if n == isc_arg_gds:
-            gds_code = bytes_to_bint(recv_channel(self.sock, 4))
-            if gds_code:
-                gds_codes.add(gds_code)
-                message += messages.get(gds_code, '@1')
+    b, err := p.recvPackets(4)
+    n := bytes_to_bint32(b)
+    for ;n != isc_arg_end; {
+        switch {
+        case n == isc_arg_gds:
+            b, err = p.recvPackets(4)
+            gds_code := int(bytes_to_bint32(b))
+            if gds_code != 0 {
+                gds_codes.PushBack(gds_code)
+                message += errmsgs[gds_code]
                 num_arg = 0
-        elif n == isc_arg_number:
-            num = bytes_to_bint(recv_channel(self.sock, 4))
-            if gds_code == 335544436:
+            }
+        case n == isc_arg_numbe:
+            b, err = p.recvPackets(4)
+            num := int(bytes_to_bint32(b))
+            if gds_code == 335544436 {
                 sql_code = num
+            }
             num_arg += 1
-            message = message.replace('@' + str(num_arg), str(num))
-        elif n == isc_arg_string or n == isc_arg_interpreted:
-            nbytes = bytes_to_bint(recv_channel(self.sock, 4))
-            n = str(recv_channel(self.sock, nbytes, word_alignment=True))
+            message = strings.Replace(message, '@' + string(num_arg), string(num), 1)
+        case n == isc_arg_string || n == isc_arg_interpreted:
+            b, err = p.recvPackets(4)
+            nbytes := int(bytes_to_bint32(b))
+            b, err = p.recvPacketAlignment(nbytes)
+            s := bytes_to_str(b)
             num_arg += 1
-            message = message.replace('@' + str(num_arg), n)
-        n = bytes_to_bint(recv_channel(self.sock, 4))
+            message = string.Replace(message, '@' + string(num_arg), s)
+        }
+        b, err = p.recvPackets(4)
+        n = bytes_to_bint32(b)
     }
 
-    return (gds_codes, sql_code, message)
+    return gds_codes, sql_code, message
 }
 
 
 func (p *wireProtocol) _parse_op_response() {
     b = recv_channel(self.sock, 16)
-    h = bytes_to_bint(b[0:4])         # Object handle
-    oid = b[4:12]                       # Object ID
-    buf_len = bytes_to_bint(b[12:])   # buffer length
+    h = bytes_to_bint(b[0:4])           // Object handle
+    oid = b[4:12]                       // Object ID
+    buf_len = bytes_to_bint(b[12:])     // buffer length
     buf = recv_channel(self.sock, buf_len, word_alignment=True)
 
-    (gds_codes, sql_code, message) = self._parse_status_vector()
+    gds_codes, sql_code, message = self._parse_status_vector()
     if sql_code or message:
         raise OperationalError(message, gds_codes, sql_code)
 
     return (h, oid, buf)
-
+}
 
 func (p *wireProtocol) opConnect() {
     p.packInt(op_connect)
