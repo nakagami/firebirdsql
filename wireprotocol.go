@@ -1517,22 +1517,23 @@ func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) (*list.List, error){
         }
     }
 
-    if bytes_to_bint(b) != op_sql_response {
-        return 0, 0, nil, errors.New("Error op_sql_response")
+    if bytes_to_bint32(b) != op_sql_response {
+        return nil, errors.New("Error op_sql_response")
     }
 
-    b = p.recvPackets(4)
-    count = int(bytes_to_bint32(b))
+    b, err = p.recvPackets(4)
+    count := int(bytes_to_bint32(b))
 
     r := list.New()
+    var ln int
     for i, x := range xsqlda {
-        if x.io_length() < 0 {
+        if x.ioLength() < 0 {
             b, err = p.recvPackets(4)
             ln = int(bytes_to_bint32(b))
         } else {
-            ln = x.io_length()
+            ln = x.ioLength()
         }
-        raw_value, err = p.recvPacketsAlignment(ln)
+        raw_value, err := p.recvPacketsAlignment(ln)
         b, err = p.recvPackets(4)
         if bytes_to_bint32(b) == 0 {    // Not NULL
             r.PushBack(x.value(raw_value))
@@ -1541,7 +1542,7 @@ func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) (*list.List, error){
         }
     }
 
-    b = p.recvPackets(32)   // ??? 32 bytes skip
+    b, err = p.recvPackets(32)   // ??? 32 bytes skip
 
     return r, err
 }
