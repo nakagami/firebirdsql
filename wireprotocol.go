@@ -1153,18 +1153,20 @@ func (p *wireProtocol) _parse_status_vector() (int, int, string) {
 }
 
 
-func (p *wireProtocol) _parse_op_response() {
-    b = recv_channel(self.sock, 16)
+func (p *wireProtocol) _parse_op_response() (int32, int32, []byte, error) {
+    var err protocolError
+    b = p.recievePackets(16)
     h = bytes_to_bint(b[0:4])           // Object handle
     oid = b[4:12]                       // Object ID
     buf_len = bytes_to_bint(b[12:])     // buffer length
-    buf = recv_channel(self.sock, buf_len, word_alignment=True)
+    buf = p.recievePacketsAlignment(buf_len)
 
-    gds_codes, sql_code, message = self._parse_status_vector()
-    if sql_code or message:
-        raise OperationalError(message, gds_codes, sql_code)
+    gds_codes, sql_code, message = p._parse_status_vector()
+    if sql_code != 0 || message != "" {
+        err = NewProtocolError(message)
+    }
 
-    return (h, oid, buf)
+    return h, oid, buf, err
 }
 
 func (p *wireProtocol) opConnect() {
