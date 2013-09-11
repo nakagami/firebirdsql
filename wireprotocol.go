@@ -726,7 +726,7 @@ var errmsgs = map[int]string {
     335741012 : "unexpected end of input\n", 
     335741018 : "failed to reconnect to a transaction in database @1\n", 
     335741036 : "Transaction description item unknown\n", 
-    335741038 : ""read_only" or "read_write" required\n", 
+    335741038 : "\"read_only\" or \"read_write\" required\n", 
     335741042 : "positive or zero numeric value required\n", 
     336003074 : "Cannot SELECT RDB$DB_KEY from a stored procedure.\n", 
     336003075 : "Precision 10 to 18 changed from DOUBLE PRECISION in SQL dialect 1 to 64-bit scaled integer in SQL dialect 3\n", 
@@ -867,7 +867,7 @@ var errmsgs = map[int]string {
     336331023 : "file size given (@1) is less than minimum allowed (@2)\n", 
     336331025 : "service name parameter missing\n", 
     336331026 : "Cannot restore over current database, must be SYSDBA or owner of the existing database.\n", 
-    336331031 : ""read_only" or "read_write" required\n", 
+    336331031 : "\"read_only\" or \"read_write\" required\n", 
     336331033 : "just data ignore all constraints etc.\n", 
     336331034 : "restoring data only ignoring foreign key, unique, not null & other constraints\n", 
     336331093 : "Invalid metadata detected. Use -FIX_FSS_METADATA option.\n", 
@@ -1098,7 +1098,7 @@ func (p *wireProtocol) recvPacketsAlignment(n int) ([]byte, error) {
 func (p *wireProtocol) _parse_status_vector() (int, int, string) {
     sql_code := 0
     gds_codes := 0
-    message := ''
+    message := ""
 
     b, err = p.recvPackets(4)
     for {
