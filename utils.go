@@ -48,6 +48,10 @@ func bint32_to_bytes(i32 int32) []byte {
     return bs
 }
 
+func bytes_to_str(b []byte) string {
+    return bytes.NewBuffer(b).String()
+}
+
 func bytes_to_bint32(b []byte) int32 {
     var i32 int32
     buffer := bytes.NewBuffer(b)
@@ -55,7 +59,7 @@ func bytes_to_bint32(b []byte) int32 {
     return i32
 }
 
-func bytes_to_int(b []byte) int32 {
+func bytes_to_int32(b []byte) int32 {
     var i32 int32
     buffer := bytes.NewBuffer(b)
     binary.Read(buffer, binary.LittleEndian, &i32)

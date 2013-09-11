@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
+    "errors"
     "net"
     "bytes"
     "regexp"
@@ -1103,7 +1104,7 @@ func (p *wireProtocol) recvPacketsAlignment(n int) ([]byte, error) {
     return buf[0:n], err
 }
 
-func (p *wireProtocol) _parse_status_vector() (int, int, string) {
+func (p *wireProtocol) _parse_status_vector() (*list.List, int, string) {
     sql_code := 0
     gds_code := 0
     gds_codes := list.New()
@@ -1136,7 +1137,7 @@ func (p *wireProtocol) _parse_status_vector() (int, int, string) {
             b, err = p.recvPacketsAlignment(nbytes)
             s := bytes_to_str(b)
             num_arg += 1
-            message = string.Replace(message, "@" + string(num_arg), s)
+            message = strings.Replace(message, "@" + string(num_arg), s, 1)
         }
         b, err = p.recvPackets(4)
         n = bytes_to_bint32(b)
@@ -1148,14 +1149,14 @@ func (p *wireProtocol) _parse_status_vector() (int, int, string) {
 
 func (p *wireProtocol) _parse_op_response() (int32, int32, []byte, error) {
     b, err := p.recvPackets(16)
-    h = bytes_to_bint(b[0:4])           // Object handle
-    oid = b[4:12]                       // Object ID
-    buf_len = bytes_to_bint(b[12:])     // buffer length
-    buf, err = p.recvPacketsAlignment(buf_len)
+    h := bytes_to_bint32(b[0:4])           // Object handle
+    oid := bytes_to_bint32(b[4:12])                       // Object ID
+    buf_len := int(bytes_to_bint32(b[12:]))     // buffer length
+    buf, err := p.recvPacketsAlignment(buf_len)
 
-    gds_codes, sql_code, message = p._parse_status_vector()
+    gds_codes, sql_code, message := p._parse_status_vector()
     if sql_code != 0 || message != "" {
-        err = NewProtocolError(message)
+        err = errors.New(message)
     }
 
     return h, oid, buf, err
@@ -1168,7 +1169,7 @@ func (p *wireProtocol) opConnect() {
     p.packInt(1)   // Arch type (Generic = 1)
     p.packString(bytes.NewBufferString(p.dbname))
     p.packInt(1)   // Protocol version understood count.
-    p.pack_bytes(p.uid())
+    p.packBytes(p.uid())
     p.packInt(10)  // PROTOCOL_VERSION10
     p.packInt(1)   // Arch type (Generic = 1)
     p.packInt(2)   // Min type
@@ -1233,7 +1234,7 @@ func (p *wireProtocol) opAttach() {
     p.packInt(op_attach)
     p.packInt(0)                       // Database Object ID
     p.packString(p.dbName)
-    p.pack_bytes(dpb)
+    p.packBytes(dpb)
     p.sendPackets()
 }
 
@@ -1252,20 +1253,20 @@ func (p *wireProtocol) opTransaction(tpb []byte) {
 }
 
 func (p *wireProtocol) opCommit(transHandle int32) {
-    p.pack_int(op_commit)
-    p.pack_int(transHandle)
+    p.packInt(op_commit)
+    p.packInt(transHandle)
     p.sendPackets()
 }
 
 func (p *wireProtocol) opCommitRetaining(transHandle int32) {
-    p.pack_int(op_commit_retaining)
-    p.pack_int(transHandle)
+    p.packInt(op_commit_retaining)
+    p.packInt(transHandle)
     p.sendPackets()
 }
 
 func (p *wireProtocol) opRollback(transHandle int32) {
-    p.pack_int(op_rollback)
-    p.pack_int(transHandle)
+    p.packInt(op_rollback)
+    p.packInt(transHandle)
     p.sendPackets()
 }
 
@@ -1336,18 +1337,18 @@ func (p *wireProtocol) opPrepareStatement(stmtHandle int32, transHandle int32, q
 }
 
 func (p *wireProtocol) opInfoSql(stmtHandle int32, vars []byte) {
-    p.pack_int(self.op_info_sql)
-    p.pack_int(stmtHandle)
-    p.pack_int(0)
-    p.pack_bytes(vars)
-    p.pack_int(p.buffer_length)
+    p.packInt(self.op_info_sql)
+    p.packInt(stmtHandle)
+    p.packInt(0)
+    p.packBytes(vars)
+    p.packInt(p.buffer_length)
     p.sendPackets()
 }
 
 func (p *wireProtocol) opExecute(stmtHandle int32, transHandle int32, params []interface{}) {
-    p.pack_int(op_execute)
-    p.pack_int(stmtHandle)
-    p.pack_int(transHandle)
+    p.packInt(op_execute)
+    p.packInt(stmtHandle)
+    p.packInt(transHandle)
 
     if len(params) == 0 {
         p.packInt(0)        // packBytes([])
@@ -1365,9 +1366,9 @@ func (p *wireProtocol) opExecute(stmtHandle int32, transHandle int32, params []i
 }
 
 func (p *wireProtocol) opExecute2(stmtHandle int32, transHandle int32, params []interface{}, outputBlr []byte) {
-    p.pack_int(op_execute2)
-    p.pack_int(stmtHandle)
-    p.pack_int(transHandle)
+    p.packInt(op_execute2)
+    p.packInt(stmtHandle)
+    p.packInt(transHandle)
 
     if len(params) == 0 {
         p.packInt(0)        // packBytes([])
@@ -1405,10 +1406,10 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*lis
 
     if bytes_to_bint32(b) == self.op_response {
         h, oid, buf, err := p._parse_op_response()      // error occured
-        return nil, error.New("opFetchResponse:Internal Error")
+        return nil, errors.New("opFetchResponse:Internal Error")
     }
     if bytes_to_bint32(b) != self.op_fetch_response {
-        return nil, error.New("opFetchResponse:Internal Error")
+        return nil, errors.New("opFetchResponse:Internal Error")
     }
     b = p.recvPackets(8)
     status := bytes_to_bint32(b[:4])
@@ -1462,10 +1463,10 @@ func (p *wireProtocol)  opCreateBlob2(transHandle int32) {
 }
 
 func (p *wireProtocol) opGetSegment(blobHandle int32) {
-    p.pack_int(self.op_get_segment)
-    p.pack_int(blobHandle)
-    p.pack_int(self.buffer_length)
-    p.pack_int(0)
+    p.packInt(self.op_get_segment)
+    p.packInt(blobHandle)
+    p.packInt(self.buffer_length)
+    p.packInt(0)
     p.sendPackets()
 }
 
@@ -1498,7 +1499,7 @@ func (p *wireProtocol) opResponse() (int32, int32, []byte, error) {
     }
 
     if bytes_to_bint(b) != self.op_response {
-        return 0, 0, nil, error.New("Error op_response")
+        return 0, 0, nil, errors.New("Error op_response")
     }
     return p._parse_op_response()
 }
@@ -1512,7 +1513,7 @@ func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) (*list, error){
     }
 
     if bytes_to_bint(b) != self.op_sql_response {
-        return 0, 0, nil, error.New("Error op_sql_response")
+        return 0, 0, nil, errors.New("Error op_sql_response")
     }
 
     b = p.recvPackets(4)
