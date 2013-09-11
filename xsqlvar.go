@@ -164,7 +164,7 @@ func (x *xSQLVAR) _parseDate(raw_value []byte) time.Time {
         month -= 9
         year += 1
     }
-    return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
+    return time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
 }
 
 func (x *xSQLVAR) _parseTime(raw_value []byte) time.Time {
