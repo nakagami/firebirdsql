@@ -1227,9 +1227,9 @@ func (p *wireProtocol) opAttach() {
 
     dbp := bytes.Join([][]byte{
         []byte{1},
-        []byte{48, len(encode)}, encode,
-        []byte{28, len(user)}, user,
-        []byte{29, len(passwd)}, passwd,
+        []byte{48, byte(len(encode))}, encode,
+        []byte{28, byte(len(user))}, user,
+        []byte{29, byte(len(passwd))}, passwd,
     }, nil)
     p.packInt(op_attach)
     p.packInt(0)                       // Database Object ID
