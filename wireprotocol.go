@@ -1122,21 +1122,21 @@ func (p *wireProtocol) _parse_status_vector() (int, int, string) {
                 message += errmsgs[gds_code]
                 num_arg = 0
             }
-        case n == isc_arg_numbe:
+        case n == isc_arg_number:
             b, err = p.recvPackets(4)
             num := int(bytes_to_bint32(b))
             if gds_code == 335544436 {
                 sql_code = num
             }
             num_arg += 1
-            message = strings.Replace(message, '@' + string(num_arg), string(num), 1)
+            message = strings.Replace(message, "@" + string(num_arg), string(num), 1)
         case n == isc_arg_string || n == isc_arg_interpreted:
             b, err = p.recvPackets(4)
             nbytes := int(bytes_to_bint32(b))
-            b, err = p.recvPacketAlignment(nbytes)
+            b, err = p.recvPacketsAlignment(nbytes)
             s := bytes_to_str(b)
             num_arg += 1
-            message = string.Replace(message, '@' + string(num_arg), s)
+            message = string.Replace(message, "@" + string(num_arg), s)
         }
         b, err = p.recvPackets(4)
         n = bytes_to_bint32(b)
