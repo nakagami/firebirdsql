@@ -184,6 +184,10 @@ func (x *xSQLVAR) value(raw_value []byte) interface{} {
     return raw_value
 }
 
+func params_to_blr(prams []interface{}) ([]byte, []byte) {
+    return nil, nil
+}
+
 
 func calcBlr(xsqlda []xSQLVAR) []byte {
     // Calculate  BLR from XSQLVAR array.
