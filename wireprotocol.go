@@ -1000,20 +1000,6 @@ var errmsgs = map[int]string {
     337051649 : "Switches trusted_svc and trusted_role are not supported from command line\n", 
 }
 
-type protocolError struct {
-    message string
-}
-
-func (e *protocolError) String() string {
-    return e.message
-}
-
-func NewProtocolError (message string) *protocolError {
-    p := new(protocolError)
-    p.message = message
-    return p
-}
-
 type wirepPotocol struct {
     buf []byte
     buffer_len int
@@ -1158,7 +1144,7 @@ func (p *wireProtocol) _parse_status_vector() (int, int, string) {
 
 
 func (p *wireProtocol) _parse_op_response() (int32, int32, []byte, error) {
-    var err protocolError
+    var err error
     b = p.recvPackets(16)
     h = bytes_to_bint(b[0:4])           // Object handle
     oid = b[4:12]                       // Object ID
@@ -1417,10 +1403,10 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*lis
 
     if bytes_to_bint32(b) == self.op_response {
         h, oid, buf, err := p._parse_op_response()      // error occured
-        return nil, protocolError("opFetchResponse:Internal Error")
+        return nil, error.New("opFetchResponse:Internal Error")
     }
     if bytes_to_bint32(b) != self.op_fetch_response {
-        return nil, protocolError("opFetchResponse:Internal Error")
+        return nil, error.New("opFetchResponse:Internal Error")
     }
     b = p.recvPackets(8)
     status := bytes_to_bint32(b[:4])
