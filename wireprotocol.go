@@ -24,7 +24,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
-    "fmt"
     "net"
     "bytes"
     "regexp"
@@ -1000,7 +999,7 @@ var errmsgs = map[int]string {
     337051649 : "Switches trusted_svc and trusted_role are not supported from command line\n", 
 }
 
-type wirepPotocol struct {
+type wireProtocol struct {
     buf []byte
     buffer_len int
     bufCount int
@@ -1468,7 +1467,7 @@ func (p *wireProtocol) opGetSegment(blobHandle int32) {
 }
 
 func (p *wireProtocol) opBatchSegments(blobHandle, seg_data) {
-    ln = len(seg_data)
+    ln := len(seg_data)
     p.packInt(self.op_batch_segments)
     p.packInt(blobHandle)
     p.packInt(ln + 2)
@@ -1487,40 +1486,53 @@ func (p *wireProtocol)  opCloseBlob(blobHandle) {
     p.sendPackets()
 }
 
-func (p *wireProtocol) _op_response() {
-    b = recv_channel(self.sock, 4)
-    while bytes_to_bint(b) == self.op_dummy:
-        b = recv_channel(self.sock, 4)
-    if bytes_to_bint(b) != self.op_response:
-        raise InternalError
-    return self._parse_op_response()
+func (p *wireProtocol) opResponse() (int32, int32, []byte, error) {
+    b, err = p.recvPackets(4)
+    for {
+        if bytes_to_bint(b) == op_dummy {
+            b, err = p.recvPackets(4)
+        }
+    }
+
+    if bytes_to_bint(b) != self.op_response {
+        return 0, 0, nil, error.New("Error op_response")
+    }
+    return p._parse_op_response()
 }
 
-func (p *wireProtocol) _op_sql_response(xsqlda) {
-    b = recv_channel(self.sock, 4)
-    while bytes_to_bint(b) == self.op_dummy:
-        b = recv_channel(self.sock, 4)
-    if bytes_to_bint(b) != self.op_sql_response:
-        raise InternalError
+func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) (*list, error){
+    b, err = p.recvPackets(4)
+    for {
+        if bytes_to_bint(b) == op_dummy {
+            b, err = p.recvPackets(4)
+        }
+    }
 
-    b = recv_channel(self.sock, 4)
-    count = bytes_to_bint(b[:4])
+    if bytes_to_bint(b) != self.op_sql_response {
+        return 0, 0, nil, error.New("Error op_sql_response")
+    }
 
-    r = []
-    for i in range(len(xsqlda)):
-        x = xsqlda[i]
-        if x.io_length() < 0:
-            b = recv_channel(self.sock, 4)
-            ln = bytes_to_bint(b)
-        else:
+    b = p.recvPackets(4)
+    count = int(bytes_to_bint32(b))
+
+    r := list.New()
+    for i, x := range xsqlda {
+        if x.io_length() < 0 {
+            b, err = p.recvPackets(4)
+            ln = int(bytes_to_bint32(b))
+        } else {
             ln = x.io_length()
-        raw_value = recv_channel(self.sock, ln, word_alignment=True)
-        if recv_channel(self.sock, 4) == bytes([0]) * 4: # Not NULL
-            r.append(x.value(raw_value))
-        else:
-            r.append(None)
+        }
+        raw_value, err = p.recvPacketsAlignment(ln)
+        b, err = p.recvPackets(4)
+        if bytes_to_bint32(b) == 0 {    // Not NULL
+            r.pushBack(x.value(raw_value))
+        } else {
+            r.pushBack(nil)
+        }
+    }
 
-    b = recv_channel(self.sock, 32)     # ??? why 32 bytes skip
+    b = p.recvPackets(32)   // ??? 32 bytes skip
 
-    return r
+    return r, err
 }
