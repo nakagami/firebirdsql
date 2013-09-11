@@ -1106,7 +1106,11 @@ func (p *wireProtocol) recvPackets(n int) ([]byte, error) {
 }
 
 func (p *wireProtocol) recvPacketsAlignment(n int) ([]byte, error) {
-    buf, err := recvPackets(n)
+    padding := n % 4
+    if padding > 0 {
+        padding = 4 - padding
+    }
+    buf, err := recvPackets(n + padding)
     return buf[0:n], err
 }
 
@@ -1155,11 +1159,11 @@ func (p *wireProtocol) _parse_status_vector() (int, int, string) {
 
 func (p *wireProtocol) _parse_op_response() (int32, int32, []byte, error) {
     var err protocolError
-    b = p.recievePackets(16)
+    b = p.recvPackets(16)
     h = bytes_to_bint(b[0:4])           // Object handle
     oid = b[4:12]                       // Object ID
     buf_len = bytes_to_bint(b[12:])     // buffer length
-    buf = p.recievePacketsAlignment(buf_len)
+    buf = p.recvPacketsAlignment(buf_len)
 
     gds_codes, sql_code, message = p._parse_status_vector()
     if sql_code != 0 || message != "" {
@@ -1418,28 +1422,31 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*lis
     if bytes_to_bint32(b) != self.op_fetch_response {
         return nil, protocolError("opFetchResponse:Internal Error")
     }
-    b = p.recievePackets(8)
+    b = p.recvPackets(8)
     status := bytes_to_bint32(b[:4])
     count := bytes_to_bint32(b[4:8])
     rows := list.New()
     for ; count > 0; {
-        r = [None] * len(xsqlda)
-        for _, x in range(xsqlda) {
-            x = xsqlda[i]
-            if x.io_length() < 0:
-                b = recv_channel(self.sock, 4)
-                ln = bytes_to_bint(b)
-            else:
+        r = list.New()
+        for i, x := range xsqlda {
+            if x.io_length() < 0 {
+                b, err = p.recvPackets(4)
+                ln = int(bytes_to_bint32(b))
+            } else {
                 ln = x.io_length()
-            raw_value = recv_channel(self.sock, ln, word_alignment=True)
-            if recv_channel(self.sock, 4) == bytes([0]) * 4: # Not NULL
-                r[i] = x.value(raw_value)
+            }
+            raw_value, err = p.recvPacketsAlignment(ln)
+            b, err = p.recvPackets(4)
+            if bytes_to_bint32(b) == 0 { // Not NULL
+                r.pushBack(x.value(raw_value))
+            }
         }
-        rows.append(r)
-        b = recv_channel(self.sock, 12)
-        op = bytes_to_bint(b[:4])
-        status = bytes_to_bint(b[4:8])
-        count = bytes_to_bint(b[8:])
+        rows.pushBack(r)
+
+        b, err = p.recvPackets(12)
+        op = int(bytes_to_bint32(b[:4]))
+        status = bytes_to_bint32(b[4:8])
+        count = int(bytes_to_bint32(b[8:]))
     }
     return rows, status != 100
 }
@@ -1481,47 +1488,17 @@ func (p *wireProtocol) opBatchSegments(blobHandle, seg_data) {
     p.packInt(ln + 2)
     p.packInt(ln + 2)
     pad_length = ((4-(ln+2)) & 3)
-    send_channel(self.sock, p.get_buffer() 
-            + int_to_bytes(ln, 2) + seg_data + bytes([0])*pad_length)
+    padding, err = make([]byte, pad_length)
+    p.packBytes([]byte {ln & 255, ln >> 8})    // little endian int16
+    p.packBytes(seq_data)
+    p.packBytes(padding)
+    p.sendPackets()
 }
 
 func (p *wireProtocol)  opCloseBlob(blobHandle) {
     p.packInt(op_close_blob)
     p.packInt(blobHandle)
     p.sendPackets()
-}
-
-func (p *wireProtocol) opConnectRequest() {
-    p.packInt(op_connect_request)
-    p.packInt(1)    // async
-    p.packInt(p.dbHandle)
-    p.packInt(0)
-    p.sendPackets()
-
-    b, err = p.recvPackets(4)
-    for bytes_to_bint(b) == op_dummy {
-        b, err = p.recvPackets(4)
-    }
-
-    if bytes_to_bint(b) != self.op_response:
-        raise InternalError
-
-    h = bytes_to_bint(recv_channel(self.sock, 4))
-    recv_channel(self.sock, 8)  # garbase
-    ln = bytes_to_bint(recv_channel(self.sock, 4))
-    ln += ln % 4    # padding
-    family = bytes_to_bint(recv_channel(self.sock, 2))
-    port = bytes_to_bint(recv_channel(self.sock, 2), u=True)
-    b = recv_channel(self.sock, 4)
-    ip_address = '.'.join([str(byte_to_int(c)) for c in b])
-    ln -= 8
-    recv_channel(self.sock, ln)
-
-    (gds_codes, sql_code, message) = self._parse_status_vector()
-    if sql_code or message:
-        raise OperationalError(message, gds_codes, sql_code)
-
-    return (h, port, family, ip_address)
 }
 
 func (p *wireProtocol) _op_response() {
