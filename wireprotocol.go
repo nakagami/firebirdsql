@@ -1009,14 +1009,14 @@ type wireProtocol struct {
     addr string
     dbname string
     user string
-    password string
+    passwd string
 }
 
-func NewWireProtocol (dsn string) *wireProtocol {
+func NewWireProtocol (dsn string) (*wireProtocol, error) {
     p := new(wireProtocol)
     p.buffer_len = 1024
     var err error
-    p.buf, err = make([]byte, p.buffer_len)
+    p.buf = make([]byte, p.buffer_len)
 
     dsnPattern := regexp.MustCompile(
         `^(?:(?P<user>.*?)(?::(?P<passwd>.*))?@)?` + // [user[:password]@]
@@ -1024,6 +1024,9 @@ func NewWireProtocol (dsn string) *wireProtocol {
             `\/(?P<dbname>.*?)`)                    // /dbname
 
     p.addr = "127.0.0.1"
+
+    matches := dsnPattern.FindStringSubmatch(dsn)
+    names := dsnPattern.SubexpNames()
     for i, match := range matches {
         switch names[i] {
         case "user":
@@ -1040,7 +1043,6 @@ func NewWireProtocol (dsn string) *wireProtocol {
         p.addr += ":3050"
     }
 
-    var err error
     p.conn, err = net.Dial("tcp", p.addr)
 
     return p, err
@@ -1087,8 +1089,9 @@ func (p *wireProtocol) sendPackets() (n int, err error) {
 }
 
 func (p *wireProtocol) recvPackets(n int) ([]byte, error) {
-    buf, err := make([]byte, n)
-    return p.conn.Read(buf)
+    buf := make([]byte, n)
+    ln, err := p.conn.Read(buf)
+    return buf, err
 }
 
 func (p *wireProtocol) recvPacketsAlignment(n int) ([]byte, error) {
@@ -1096,7 +1099,7 @@ func (p *wireProtocol) recvPacketsAlignment(n int) ([]byte, error) {
     if padding > 0 {
         padding = 4 - padding
     }
-    buf, err := recvPackets(n + padding)
+    buf, err := p.recvPackets(n + padding)
     return buf[0:n], err
 }
 
@@ -1144,12 +1147,11 @@ func (p *wireProtocol) _parse_status_vector() (int, int, string) {
 
 
 func (p *wireProtocol) _parse_op_response() (int32, int32, []byte, error) {
-    var err error
-    b = p.recvPackets(16)
+    b, err := p.recvPackets(16)
     h = bytes_to_bint(b[0:4])           // Object handle
     oid = b[4:12]                       // Object ID
     buf_len = bytes_to_bint(b[12:])     // buffer length
-    buf = p.recvPacketsAlignment(buf_len)
+    buf, err = p.recvPacketsAlignment(buf_len)
 
     gds_codes, sql_code, message = p._parse_status_vector()
     if sql_code != 0 || message != "" {
@@ -1474,7 +1476,7 @@ func (p *wireProtocol) opBatchSegments(blobHandle, seg_data) {
     p.packInt(ln + 2)
     p.packInt(ln + 2)
     pad_length = ((4-(ln+2)) & 3)
-    padding, err = make([]byte, pad_length)
+    padding = make([]byte, pad_length)
     p.packBytes([]byte {ln & 255, ln >> 8})    // little endian int16
     p.packBytes(seq_data)
     p.packBytes(padding)

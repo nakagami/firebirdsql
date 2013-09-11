@@ -48,7 +48,7 @@ func bint32_to_bytes(i32 int32) []byte {
     return bs
 }
 
-func bytes_to_bint(b []byte) int32 {
+func bytes_to_bint32(b []byte) int32 {
     var i32 int32
     buffer := bytes.NewBuffer(b)
     binary.Read(buffer, binary.BigEndian, &i32)
