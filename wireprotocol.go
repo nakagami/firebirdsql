@@ -1403,7 +1403,7 @@ func (p *wireProtocol)  opFetch(stmtHandle int32, blr []byte) {
     p.sendPackets()
 }
 
-func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) {
+func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*list, error) {
     b, err = p.recvPackets(4)
     for {
         if bytes_to_bint(b) == op_dummy {
@@ -1411,19 +1411,20 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) {
         }
     }
 
-
-    // TODO:
-    if bytes_to_bint(b) == self.op_response:
-        return self._parse_op_response()    # error occured
-    if bytes_to_bint(b) != self.op_fetch_response:
-        raise InternalError
-    b = recv_channel(self.sock, 8)
-    status = bytes_to_bint(b[:4])
-    count = bytes_to_bint(b[4:8])
-    rows = []
-    while count:
+    if bytes_to_bint32(b) == self.op_response {
+        h, oid, buf, err := p._parse_op_response()      // error occured
+        return nil, protocolError("opFetchResponse:Internal Error")
+    }
+    if bytes_to_bint32(b) != self.op_fetch_response {
+        return nil, protocolError("opFetchResponse:Internal Error")
+    }
+    b = p.recievePackets(8)
+    status := bytes_to_bint32(b[:4])
+    count := bytes_to_bint32(b[4:8])
+    rows := list.New()
+    for ; count > 0; {
         r = [None] * len(xsqlda)
-        for i in range(len(xsqlda)):
+        for _, x in range(xsqlda) {
             x = xsqlda[i]
             if x.io_length() < 0:
                 b = recv_channel(self.sock, 4)
@@ -1433,17 +1434,19 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) {
             raw_value = recv_channel(self.sock, ln, word_alignment=True)
             if recv_channel(self.sock, 4) == bytes([0]) * 4: # Not NULL
                 r[i] = x.value(raw_value)
+        }
         rows.append(r)
         b = recv_channel(self.sock, 12)
         op = bytes_to_bint(b[:4])
         status = bytes_to_bint(b[4:8])
         count = bytes_to_bint(b[8:])
+    }
     return rows, status != 100
 }
 
 func (p *wireProtocol) opDetach() {
-    p.packInt(self.op_detach)
-    p.packInt(self.db_handle)
+    p.packInt(op_detach)
+    p.packInt(p.dbHandle)
     p.sendPackets()
 }
 
