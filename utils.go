@@ -104,3 +104,93 @@ func xdrString(s string) []byte {
     return xdrBytes(bs)
 }
 
+func params_to_blr(prams []interface{}) ([]byte, []byte) {
+    return nil, nil
+}
+
+func calcBlr(xsqlda []xSQLVAR) []byte {
+    // Calculate  BLR from XSQLVAR array.
+    ln := len(xsqlda) *2
+    blr := make([]byte, ln + 6)
+    blr[0] = 5
+    blr[1] = 2
+    blr[2] = 4
+    blr[3] = 0
+    blr[4] = byte(ln & 255)
+    blr[5] = byte(ln >> 8)
+    n := 6
+
+    for _, x := range xsqlda {
+        sqlscale := x.sqlscale
+        if sqlscale < 0 {
+            sqlscale += 256
+        }
+        switch x.sqltype {
+        case SQL_TYPE_VARYING:
+            blr[n] = 37
+            blr[n+1] = byte(x.sqllen & 255)
+            blr[n+2] = byte(x.sqllen >> 8)
+            n += 3
+        case SQL_TYPE_TEXT:
+            blr[n] = 14
+            blr[n+1] = byte(x.sqllen & 255)
+            blr[n+2] = byte(x.sqllen >> 8)
+            n += 3
+        case SQL_TYPE_LONG:
+            blr[n] = 8
+            blr[n+1] = byte(sqlscale)
+            n += 2
+        case SQL_TYPE_SHORT:
+            blr[n] = 7
+            blr[n+1] = byte(sqlscale)
+            n += 2
+        case SQL_TYPE_INT64:
+            blr[n] = 16
+            blr[n+1] = byte(sqlscale)
+            n += 2
+        case SQL_TYPE_QUAD:
+            blr[n] = 9
+            blr[n+1] = byte(sqlscale)
+            n += 2
+        case SQL_TYPE_BLOB:
+            blr[n] = 9
+            blr[n+1] = 0
+            n += 2
+        case SQL_TYPE_ARRAY:
+            blr[n] = 9
+            blr[n+1] = 0
+            n += 2
+        case SQL_TYPE_DOUBLE:
+            blr[n] = 27
+            n += 1
+        case SQL_TYPE_FLOAT:
+            blr[n] = 10
+            n += 1
+        case SQL_TYPE_D_FLOAT:
+            blr[n] = 11
+            n += 1
+        case SQL_TYPE_DATE:
+            blr[n] = 12
+            n += 1
+        case SQL_TYPE_TIME:
+            blr[n] = 13
+            n += 1
+        case SQL_TYPE_TIMESTAMP:
+            blr[n] = 35
+            n += 1
+        case SQL_TYPE_BOOLEAN:
+            blr[n] = 23
+            n += 1
+        }
+        // [blr_short, 0]
+        blr[n] = 7
+        blr[n+1] = 0
+        n += 2
+    }
+    // [blr_end, blr_eoc]
+    blr[n] = 255
+    blr[n+1] = 76
+
+    return blr
+}
+
