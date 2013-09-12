@@ -1356,7 +1356,7 @@ func (p *wireProtocol) opExecute(stmtHandle int32, transHandle int32, params []i
         p.packInt(0)
         p.sendPackets()
     } else {
-        blr, values := params_to_blr(params)
+        blr, values := paramsToBlr(params)
         p.packBytes(blr)
         p.packInt(0)
         p.packInt(1)
@@ -1375,7 +1375,7 @@ func (p *wireProtocol) opExecute2(stmtHandle int32, transHandle int32, params []
         p.packInt(0)
         p.packInt(0)
     } else {
-        blr, values := params_to_blr(params)
+        blr, values := paramsToBlr(params)
         p.packBytes(blr)
         p.packInt(0)
         p.packInt(1)

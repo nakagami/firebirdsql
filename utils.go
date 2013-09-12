@@ -26,7 +26,12 @@ package firebirdsql
 import (
     "bytes"
     "encoding/binary"
+    "container/list"
 )
+
+func str_to_bytes(s string) []byte {
+    return bytes.NewBufferString(s).Bytes()
+}
 
 func int32_to_bytes(i32 int32) []byte {
     bs := []byte {
@@ -104,8 +109,99 @@ func xdrString(s string) []byte {
     return xdrBytes(bs)
 }
 
-func params_to_blr(prams []interface{}) ([]byte, []byte) {
-    return nil, nil
+func flattenBytes(l *list.List) []byte {
+    n := 0
+    for e := l.Front(); e != nil; e = e.Next() {
+        n += len(e.Value)
+    }
+
+    bs := make([]byte, n)
+
+    n = 0
+    for e := l.Front(); e != nil; e = e.Next() {
+        for i, b := range e.Value {
+            bs[n+i] = b
+        }
+        n += len(e.Value)
+    }
+
+    return bs
+}
+
+func paramsToBlr(params []interface{}) ([]byte, []byte) {
+    // Convert parameter array to BLR and values format.
+    var v, blr []byte
+
+    ln := len(params) * 2
+    blrList := list.New()
+    valuesList := list.New()
+    blrList.PushBack([]byte {5, 2, 4, 0, byte(ln&255), byte(ln>>8)})
+
+    for _, p := range params {
+        switch f := p.(type) {
+        case string:
+            v = str_to_bytes(f)
+            nbytes := len(v)
+            pad_length := ((4-nbytes) & 3)
+            padding := make([]byte, pad_length)
+            v = bytes.Join([][]byte{
+                v,
+                padding,
+                []byte{0, 0, 0, 0},
+            }, nil)
+            blr = []byte{14, byte(nbytes&255), byte(nbytes>>8)}
+        case int:
+            v = bytes.Join([][]byte{
+                int32_to_bytes(int32(f)),
+                []byte{0, 0, 0, 0},
+            }, nil)
+            blr = []byte{8, 0}
+/*
+        case float32:
+            if t == float:
+                p = decimal.Decimal(str(p))
+            (sign, digits, exponent) = p.as_tuple()
+            v = 0
+            ln = len(digits)
+            for i in range(ln):
+                v += digits[i] * (10 ** (ln -i-1))
+            if sign:
+                v *= -1
+            v = bint_to_bytes(v, 8)
+            if exponent < 0:
+                exponent += 256
+            blr += bytes([16, exponent])
+        case time.Time: // Date
+            v = convert_date(p)
+            blr += bytes([12])
+        case time.Time  // Time
+            v = convert_time(p)
+            blr += bytes([13])
+        case time.Time  // timestamp
+            v = convert_timestamp(p)
+            blr += bytes([35])
+*/
+        case bool:
+            if f {
+                v = []byte{1, 0, 0, 0, 0}
+            } else {
+                v = []byte{0, 0, 0, 0, 0}
+            }
+            blr = []byte{23}
+        case nil:
+            v = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 0x32, 0x8c}
+            blr = []byte{9, 0}
+        }
+        valuesList.PushBack(v)
+        blrList.PushBack(blr)
+        blrList.PushBack([]byte{7, 0})
+    }
+    blrList.PushBack([]byte{255, 76})   // [blr_end, blr_eoc]
+
+    blr = flattenBytes(blrList)
+    v = flattenBytes(valuesList)
+
+    return blr, v
 }
 
 func calcBlr(xsqlda []xSQLVAR) []byte {
