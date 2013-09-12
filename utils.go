@@ -112,17 +112,17 @@ func xdrString(s string) []byte {
 func flattenBytes(l *list.List) []byte {
     n := 0
     for e := l.Front(); e != nil; e = e.Next() {
-        n += len(e.Value)
+        n += len((e.Value).([]byte))
     }
 
     bs := make([]byte, n)
 
     n = 0
     for e := l.Front(); e != nil; e = e.Next() {
-        for i, b := range e.Value {
+        for i, b := range (e.Value).([]byte) {
             bs[n+i] = b
         }
-        n += len(e.Value)
+        n += len((e.Value).([]byte))
     }
 
     return bs
