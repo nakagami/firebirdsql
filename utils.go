@@ -25,6 +25,8 @@ package firebirdsql
 
 import (
     "bytes"
+    "regexp"
+    "strings"
     "encoding/binary"
     "container/list"
 )
@@ -290,3 +292,31 @@ func calcBlr(xsqlda []xSQLVAR) []byte {
     return blr
 }
 
+
+func parseDSN(dsn string) (addr string, dbName string, user string, passwd string) {
+    dsnPattern := regexp.MustCompile(
+        `^(?:(?P<user>.*?)(?::(?P<passwd>.*))?@)?` + // [user[:password]@]
+            `(?:\((?P<addr>[^\)]*)\)?` +            // [(addr)]
+            `\/(?P<dbname>.*?)`)                    // /dbname
+
+    addr = "127.0.0.1"
+
+    matches := dsnPattern.FindStringSubmatch(dsn)
+    names := dsnPattern.SubexpNames()
+    for i, match := range matches {
+        switch names[i] {
+        case "user":
+            user = match
+        case "passwd":
+            passwd = match
+        case "addr":
+            addr = match
+        case "dbname":
+            dbName = match
+        }
+    }
+    if strings.ContainsRune(addr, ':') {
+        addr += ":3050"
+    }
+    return
+}

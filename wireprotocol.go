@@ -27,7 +27,6 @@ import (
     "errors"
     "net"
     "bytes"
-    "regexp"
     "strings"
     "container/list"
 )
@@ -1019,31 +1018,7 @@ func NewWireProtocol (dsn string) (*wireProtocol, error) {
     var err error
     p.buf = make([]byte, p.buffer_len)
 
-    dsnPattern := regexp.MustCompile(
-        `^(?:(?P<user>.*?)(?::(?P<passwd>.*))?@)?` + // [user[:password]@]
-            `(?:\((?P<addr>[^\)]*)\)?` +            // [(addr)]
-            `\/(?P<dbname>.*?)`)                    // /dbname
-
-    p.addr = "127.0.0.1"
-
-    matches := dsnPattern.FindStringSubmatch(dsn)
-    names := dsnPattern.SubexpNames()
-    for i, match := range matches {
-        switch names[i] {
-        case "user":
-            p.user = match
-        case "passwd":
-            p.passwd = match
-        case "addr":
-            p.addr = match
-        case "dbname":
-            p.dbName = match
-        }
-    }
-    if strings.ContainsRune(p.addr, ':') {
-        p.addr += ":3050"
-    }
-
+    p.addr, p.dbName, p.user, p.passwd = parseDSN(dsn)
     p.conn, err = net.Dial("tcp", p.addr)
 
     return p, err
