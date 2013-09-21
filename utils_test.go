@@ -25,7 +25,10 @@ package firebirdsql
 
 import (
     "testing"
+    "fmt"
 )
 
 func TestDSNParse(t *testing.T) {
+    addr, dbName, user, passwd, _ := parseDSN("user:password@localhost:3000/dbname")
+    fmt.Println(addr, dbName, user, passwd)
 }
