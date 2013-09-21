@@ -25,10 +25,29 @@ package firebirdsql
 
 import (
     "testing"
-    "fmt"
+    "errors"
 )
 
 func TestDSNParse(t *testing.T) {
-    addr, dbName, user, passwd, _ := parseDSN("user:password@localhost:3000/dbname")
-    fmt.Println(addr, dbName, user, passwd)
+    var testDSNs = [] struct {
+        dsn string
+        addr string
+        dbName string
+        user string
+        passwd string
+    }{
+        {"user:password@localhost:3000/dbname", "localhost:3000", "dbname", "user", "password"},
+        {"user:password@localhost/dbname", "localhost:3050", "dbname", "user", "password"},
+        {"user:password@localhost/dir/dbname", "localhost:3050", "dir/dbname", "user", "password"},
+    }
+
+    for _, d := range testDSNs {
+        addr, dbName, user, passwd, err := parseDSN(d.dsn)
+        if addr != d.addr || dbName != d.dbName || user != d.user || passwd != d.passwd {
+            err = errors.New("parse DSN fail")
+        }
+        if err != nil {
+            t.Error(err.Error())
+        }
+    }
 }
