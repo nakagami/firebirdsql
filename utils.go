@@ -295,11 +295,11 @@ func split1(src string, delm string) (string, string) {
     for i := 0; i< len(src); i++ {
         if src[i:i+1] == delm {
             s1 := src[0:i]
-            s2 := src[i:]
+            s2 := src[i+1:]
             return s1, s2
         }
     }
-    return "", ""
+    return src, ""
 }
 
 func parseDSN(dsn string) (addr string, dbName string, user string, passwd string, err error) {
@@ -308,6 +308,9 @@ func parseDSN(dsn string) (addr string, dbName string, user string, passwd strin
     addr, dbName = split1(s2, "/")
     if !strings.ContainsRune(addr, ':') {
         addr += ":3050"
+    }
+    if strings.ContainsRune(dbName, '/') {
+        dbName = "/" + dbName
     }
 
     return
