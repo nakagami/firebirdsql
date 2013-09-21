@@ -1007,18 +1007,15 @@ type wireProtocol struct {
     conn net.Conn
     dbHandle int32
     addr string
-    dbName string
-    user string
-    passwd string
 }
 
-func NewWireProtocol (dsn string) (*wireProtocol, error) {
+func NewWireProtocol (addr string) (*wireProtocol, error) {
     p := new(wireProtocol)
     p.buffer_len = 1024
     var err error
     p.buf = make([]byte, p.buffer_len)
 
-    p.addr, p.dbName, p.user, p.passwd = parseDSN(dsn)
+    p.addr = addr
     p.conn, err = net.Dial("tcp", p.addr)
 
     return p, err
@@ -1137,12 +1134,12 @@ func (p *wireProtocol) _parse_op_response() (int32, int32, []byte, error) {
     return h, oid, buf, err
 }
 
-func (p *wireProtocol) opConnect() {
+func (p *wireProtocol) opConnect(dbName string) {
     p.packInt(op_connect)
     p.packInt(op_attach)
     p.packInt(2)   // CONNECT_VERSION2
     p.packInt(1)   // Arch type (Generic = 1)
-    p.packString(p.dbName)
+    p.packString(dbName)
     p.packInt(1)   // Protocol version understood count.
     p.packString(p.uid())
     p.packInt(10)  // PROTOCOL_VERSION10
@@ -1154,19 +1151,19 @@ func (p *wireProtocol) opConnect() {
 }
 
 
-func (p *wireProtocol) opCreate() {
+func (p *wireProtocol) opCreate(dbName string, user string, passwd string) {
     var page_size int32
     page_size = 4096
 
     encode := bytes.NewBufferString("UTF8").Bytes()
-    user := bytes.NewBufferString(p.user).Bytes()
-    passwd := bytes.NewBufferString(p.passwd).Bytes()
+    userBytes := bytes.NewBufferString(user).Bytes()
+    passwdBytes := bytes.NewBufferString(passwd).Bytes()
     dpb := bytes.Join([][]byte{
         []byte{1},
         []byte{68, byte(len(encode))}, encode,
         []byte{48, byte(len(encode))}, encode,
-        []byte{28, byte(len(user))}, user,
-        []byte{29, byte(len(passwd))}, passwd,
+        []byte{28, byte(len(userBytes))}, userBytes,
+        []byte{29, byte(len(passwdBytes))}, passwdBytes,
         []byte{63, 4}, int32_to_bytes(3),
         []byte{24, 4}, bint32_to_bytes(1),
         []byte{54, 4}, bint32_to_bytes(1),
@@ -1175,7 +1172,7 @@ func (p *wireProtocol) opCreate() {
 
     p.packInt(op_create)
     p.packInt(0)                       // Database Object ID
-    p.packString(p.dbName)
+    p.packString(dbName)
     p.packBytes(dpb)
     p.sendPackets()
 }
@@ -1195,20 +1192,20 @@ func (p *wireProtocol) opAccept() {
     // assert up.unpack_int() == 3
 }
 
-func (p *wireProtocol) opAttach() {
+func (p *wireProtocol) opAttach(dbName string, user string, passwd string) {
     encode := bytes.NewBufferString("UTF8").Bytes()
-    user := bytes.NewBufferString(p.user).Bytes()
-    passwd := bytes.NewBufferString(p.passwd).Bytes()
+    userBytes := bytes.NewBufferString(user).Bytes()
+    passwdBytes := bytes.NewBufferString(passwd).Bytes()
 
     dbp := bytes.Join([][]byte{
         []byte{1},
         []byte{48, byte(len(encode))}, encode,
-        []byte{28, byte(len(user))}, user,
-        []byte{29, byte(len(passwd))}, passwd,
+        []byte{28, byte(len(userBytes))}, userBytes,
+        []byte{29, byte(len(passwdBytes))}, passwdBytes,
     }, nil)
     p.packInt(op_attach)
     p.packInt(0)                       // Database Object ID
-    p.packString(p.dbName)
+    p.packString(dbName)
     p.packBytes(dbp)
     p.sendPackets()
 }

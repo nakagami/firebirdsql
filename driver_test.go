@@ -24,12 +24,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
-    "errors"
     "testing"
+    "database/sql"
 )
 
 func TestConnect(t *testing.T) {
-    err := errors.New("test fail")
-    t.Error(err.Error)
+    conn, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost/3050")
+    if err != nil {
+        t.Fatalf("Error connecting: %v", err)
+    }
+    defer conn.Close()
 
 }

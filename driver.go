@@ -30,10 +30,21 @@ import (
 //    "net"
 )
 
-type firebirdsqlDriver struct{}
+type firebirdsqlDriver struct{
+    addr string
+    dbName string
+    user string
+    passwd string
+    wp *wireProtocol
+}
 
 func (d *firebirdsqlDriver) Open(dsn string) (driver.Conn, error) {
     var err error
+    d.addr, d.dbName, d.user, d.passwd, err = parseDSN(dsn)
+    d.wp, err = NewWireProtocol(d.addr)
+    if err != nil {
+        return nil, err
+    }
 
     return nil, err
 }

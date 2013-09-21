@@ -293,7 +293,7 @@ func calcBlr(xsqlda []xSQLVAR) []byte {
 }
 
 
-func parseDSN(dsn string) (addr string, dbName string, user string, passwd string) {
+func parseDSN(dsn string) (addr string, dbName string, user string, passwd string, err error) {
     dsnPattern := regexp.MustCompile(
         `^(?:(?P<user>.*?)(?::(?P<passwd>.*))?@)?` + // [user[:password]@]
             `(?:\((?P<addr>[^\)]*)\)?` +            // [(addr)]
