@@ -24,30 +24,38 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
-    "database/sql"
     "database/sql/driver"
 )
 
-type firebirdsqlDriver struct{}
-
-func (d *firebirdsqlDriver) Open(dsn string) (driver.Conn, error) {
-    addr, dbName, user, passwd, err := parseDSN(dsn)
-    wp, err := NewWireProtocol(addr)
-    if err != nil {
-        return nil, err
-    }
-
-    fc := &firebirdsqlConn {
-        wp: wp,
-        addr: addr,
-        dbName: dbName,
-        user: user,
-        passwd: passwd,
-    }
-
-    return fc, err
+type firebirdsqlConn struct{
+    wp *wireProtocol
+    addr string
+    dbName string
+    user string
+    passwd string
 }
 
-func init() {
-    sql.Register("firebirdsql", &firebirdsqlDriver{})
+func (fc *firebirdsqlConn) Begin() (driver.Tx, error) {
+    var err error
+    return nil, err
+}
+
+
+func (fc *firebirdsqlConn) Close() (err error) {
+    return
+}
+
+func (fc *firebirdsqlConn) Prepare(query string) (driver.Stmt, error) {
+    var err error
+    return nil, err
+}
+
+func (fc *firebirdsqlConn) Exec(query string, args []driver.Value) (driver.Result, error) {
+    var err error
+    return nil, err
+}
+
+func (fc *firebirdsqlConn) Query(query string, args []driver.Value) (driver.Rows, error) {
+    var err error
+    return nil, err
 }
