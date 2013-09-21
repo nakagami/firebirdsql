@@ -291,15 +291,21 @@ func calcBlr(xsqlda []xSQLVAR) []byte {
     return blr
 }
 
+func split1(src string, delm string) (string, string) {
+    for i := 0; i< len(src); i++ {
+        if src[i:i+1] == delm {
+            s1 := src[0:i]
+            s2 := src[i:]
+            return s1, s2
+        }
+    }
+    return "", ""
+}
 
 func parseDSN(dsn string) (addr string, dbName string, user string, passwd string, err error) {
-    s := strings.Split(dsn, "@")
-    user_pass := strings.Split(s[0], ":")
-    user = user_pass[0]
-    passwd = user_pass[1]
-    addr_db := strings.Split(s[1], "/")
-    addr = addr_db[0]
-    dbName = addr_db[1]
+    s1, s2 := split1(dsn, "@")
+    user, passwd = split1(s1, ":")
+    addr, dbName = split1(s2, "/")
     if !strings.ContainsRune(addr, ':') {
         addr += ":3050"
     }
