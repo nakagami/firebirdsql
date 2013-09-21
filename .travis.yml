@@ -1,0 +1,16 @@
+language: go
+go:
+  - "1.1"
+  - "tip"
+
+before_install:
+  - sudo apt-get update -qq
+  - sudo apt-get install -qq firebird2.5-super firebird2.5-dev
+  - sudo sed /ENABLE_FIREBIRD_SERVER=/s/no/yes/ -i /etc/default/firebird2.5
+  - cat /etc/default/firebird2.5 | grep ENABLE_FIREBIRD_SERVER
+  - sudo service firebird2.5-super start
+
+before_script:
+
+  - echo "create database '/tmp/go_test.fdb'; " | isql-fb -user sysdba -password masterkey 
+
