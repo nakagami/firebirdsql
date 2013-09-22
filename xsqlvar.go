@@ -25,6 +25,8 @@ package firebirdsql
 
 import (
     "time"
+    "bytes"
+    "encoding/binary"
 )
 
 const (
@@ -90,6 +92,28 @@ type xSQLVAR struct {
     aliasname string
 }
 
+func to_int32(b []byte) int32 {
+    var i32 int32
+    buffer := bytes.NewBuffer(b)
+    binary.Read(buffer, binary.BigEndian, &i32)
+    return i32
+}
+
+func to_int16(b []byte) int16 {
+    var i int16
+    buffer := bytes.NewBuffer(b)
+    binary.Read(buffer, binary.BigEndian, &i)
+    return i
+}
+
+func to_int64(b []byte) int64 {
+    var i int64
+    buffer := bytes.NewBuffer(b)
+    binary.Read(buffer, binary.BigEndian, &i)
+    return i
+}
+
+
 func NewXSQLVAR () *xSQLVAR {
     x := new(xSQLVAR)
     return x
@@ -112,7 +136,7 @@ func (x *xSQLVAR) displayLenght() int {
 }
 
 func (x *xSQLVAR) _parseDate(raw_value []byte) time.Time {
-    nday := int(bytes_to_bint32(raw_value)) + 678882
+    nday := int(to_int32(raw_value)) + 678882
     century := (4 * nday -1) / 146097
     nday = 4 * nday - 1 - 146097 * century
     day := nday / 4
@@ -152,20 +176,20 @@ func (x *xSQLVAR) value(raw_value []byte) interface{} {
         if x.sqlsubtype == 1 {          // OCTETS
             return raw_value
         } else {
-            return bytes_to_str(raw_value)
+            return bytes.NewBuffer(raw_value).String()
         }
     case SQL_TYPE_VARYING:
         if x.sqlsubtype == 1 {       // OCTETS
             return raw_value
         } else {
-            return bytes_to_str(raw_value)
+            return bytes.NewBuffer(raw_value).String()
         }
     case SQL_TYPE_SHORT:
-        return bytes_to_bint16(raw_value)
+        return to_int16(raw_value)
     case SQL_TYPE_LONG:
-        return bytes_to_bint32(raw_value) * int32(x.sqlscale)
+        return to_int32(raw_value) * int32(x.sqlscale)
     case SQL_TYPE_INT64:
-        return bytes_to_bint64(raw_value) * int64(x.sqlscale)
+        return to_int64(raw_value) * int64(x.sqlscale)
     case SQL_TYPE_DATE:
         return x._parseDate(raw_value)
 //    case SQL_TYPE_TIME:
@@ -182,5 +206,91 @@ func (x *xSQLVAR) value(raw_value []byte) interface{} {
         return raw_value[0] != 0
     }
     return raw_value
+}
+
+func calcBlr(xsqlda []xSQLVAR) []byte {
+    // Calculate  BLR from XSQLVAR array.
+    ln := len(xsqlda) *2
+    blr := make([]byte, ln + 6)
+    blr[0] = 5
+    blr[1] = 2
+    blr[2] = 4
+    blr[3] = 0
+    blr[4] = byte(ln & 255)
+    blr[5] = byte(ln >> 8)
+    n := 6
+
+    for _, x := range xsqlda {
+        sqlscale := x.sqlscale
+        if sqlscale < 0 {
+            sqlscale += 256
+        }
+        switch x.sqltype {
+        case SQL_TYPE_VARYING:
+            blr[n] = 37
+            blr[n+1] = byte(x.sqllen & 255)
+            blr[n+2] = byte(x.sqllen >> 8)
+            n += 3
+        case SQL_TYPE_TEXT:
+            blr[n] = 14
+            blr[n+1] = byte(x.sqllen & 255)
+            blr[n+2] = byte(x.sqllen >> 8)
+            n += 3
+        case SQL_TYPE_LONG:
+            blr[n] = 8
+            blr[n+1] = byte(sqlscale)
+            n += 2
+        case SQL_TYPE_SHORT:
+            blr[n] = 7
+            blr[n+1] = byte(sqlscale)
+            n += 2
+        case SQL_TYPE_INT64:
+            blr[n] = 16
+            blr[n+1] = byte(sqlscale)
+            n += 2
+        case SQL_TYPE_QUAD:
+            blr[n] = 9
+            blr[n+1] = byte(sqlscale)
+            n += 2
+        case SQL_TYPE_BLOB:
+            blr[n] = 9
+            blr[n+1] = 0
+            n += 2
+        case SQL_TYPE_ARRAY:
+            blr[n] = 9
+            blr[n+1] = 0
+            n += 2
+        case SQL_TYPE_DOUBLE:
+            blr[n] = 27
+            n += 1
+        case SQL_TYPE_FLOAT:
+            blr[n] = 10
+            n += 1
+        case SQL_TYPE_D_FLOAT:
+            blr[n] = 11
+            n += 1
+        case SQL_TYPE_DATE:
+            blr[n] = 12
+            n += 1
+        case SQL_TYPE_TIME:
+            blr[n] = 13
+            n += 1
+        case SQL_TYPE_TIMESTAMP:
+            blr[n] = 35
+            n += 1
+        case SQL_TYPE_BOOLEAN:
+            blr[n] = 23
+            n += 1
+        }
+        // [blr_short, 0]
+        blr[n] = 7
+        blr[n+1] = 0
+        n += 2
+    }
+    // [blr_end, blr_eoc]
+    blr[n] = 255
+    blr[n+1] = 76
+
+    return blr
 }
 
