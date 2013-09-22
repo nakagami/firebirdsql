@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
+    "os"
     "errors"
     "net"
     "bytes"
@@ -1051,9 +1052,20 @@ func (p *wireProtocol) appendBytes(bs [] byte) {
     }
 }
 
-func (p *wireProtocol) uid() string {
-    // TODO:
-    return "Firebird Go Driver"
+func (p *wireProtocol) uid() []byte {
+    user := os.Getenv("USER")
+    if user == "" {
+        user = os.Getenv("USERNAME")
+    }
+    hostname, _ := os.Hostname()
+
+    userBytes := bytes.NewBufferString(user).Bytes()
+    hostnameBytes := bytes.NewBufferString(hostname).Bytes()
+    return bytes.Join([][]byte{
+        []byte{1, byte(len(userBytes))}, userBytes,
+        []byte{4, byte(len(hostnameBytes))}, hostnameBytes,
+        []byte{6, 4},
+    }, nil)
 }
 
 func (p *wireProtocol) sendPackets() (n int, err error) {
@@ -1141,7 +1153,7 @@ func (p *wireProtocol) opConnect(dbName string) {
     p.packInt(1)   // Arch type (Generic = 1)
     p.packString(dbName)
     p.packInt(1)   // Protocol version understood count.
-    p.packString(p.uid())
+    p.packBytes(p.uid())
     p.packInt(10)  // PROTOCOL_VERSION10
     p.packInt(1)   // Arch type (Generic = 1)
     p.packInt(2)   // Min type
