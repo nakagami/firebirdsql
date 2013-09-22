@@ -33,6 +33,7 @@ type firebirdsqlConn struct{
     dbName string
     user string
     passwd string
+    dbHandle int32
 }
 
 func (fc *firebirdsqlConn) Begin() (driver.Tx, error) {

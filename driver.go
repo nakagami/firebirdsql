@@ -37,6 +37,11 @@ func (d *firebirdsqlDriver) Open(dsn string) (driver.Conn, error) {
         return nil, err
     }
 
+    wp.opConnect(dbName)
+    wp.opAccept()
+    wp.opAttach(dbName, user, passwd)
+    wp.dbHandle, _, _, err = wp.opResponse()
+
     fc := &firebirdsqlConn {
         wp: wp,
         addr: addr,

@@ -1018,6 +1018,9 @@ func NewWireProtocol (addr string) (*wireProtocol, error) {
 
     p.addr = addr
     p.conn, err = net.Dial("tcp", p.addr)
+    if err != nil {
+        return nil, err
+    }
 
     return p, err
 }
