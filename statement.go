@@ -53,5 +53,8 @@ func (stmt *firebirdsqlStmt) Query(args []driver.Value) (driver.Rows, error) {
 func newFirebirdsqlStmt(wp *wireProtocol, query string) (*firebirdsqlStmt, error) {
     var err error
     stmt := new(firebirdsqlStmt)
+    wp.opAllocateStatement()
+
+    stmt.stmtHandle, _, _, err = tx.wp.opResponse()
     return stmt, err
 }
