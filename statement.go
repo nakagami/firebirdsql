@@ -49,3 +49,9 @@ func (stmt *firebirdsqlStmt) Query(args []driver.Value) (driver.Rows, error) {
     var err error
     return nil, err
 }
+
+func newFirebirdsqlStmt(wp *wireProtocol, query string) (*firebirdsqlStmt, error) {
+    var err error
+    stmt := new(firebirdsqlStmt)
+    return stmt, err
+}
