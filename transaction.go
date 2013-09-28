@@ -29,15 +29,27 @@ type firebirdsqlTx struct {
 }
 
 func (tx *firebirdsqlTx) Commit() (err error) {
+    tx.wp.opCommit(tx.transHandle)
+    tx.transHandle, _, _, err = tx.wp.opResponse()
     return
 }
 
 func (tx *firebirdsqlTx) Rollback() (err error) {
+    tx.wp.opRollback(tx.transHandle)
+    tx.transHandle, _, _, err = tx.wp.opResponse()
     return
 }
 
-func newTransaction(wp *wireProtocol) (*firebirdsqlTx, error) {
+func newFirebirdsqlTx(wp *wireProtocol) (*firebirdsqlTx, error) {
     var err error
     tx := new(firebirdsqlTx)
+    wp.opTransaction([]byte {
+        byte(isc_tpb_version3),
+        byte(isc_tpb_write),
+        byte(isc_tpb_wait),
+        byte(isc_tpb_consistency),
+    })
+    tx.transHandle, _, _, err = wp.opResponse()
+
     return tx, err
 }

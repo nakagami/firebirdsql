@@ -29,6 +29,7 @@ import (
 
 type firebirdsqlConn struct{
     wp *wireProtocol
+    tx *firebirdsqlTx
     addr string
     dbName string
     user string
@@ -36,8 +37,8 @@ type firebirdsqlConn struct{
 }
 
 func (fc *firebirdsqlConn) Begin() (driver.Tx, error) {
-    var err error
-    return nil, err
+    tx, err := newFirebirdsqlTx(fc.wp)
+    return tx, err
 }
 
 
@@ -62,6 +63,7 @@ func (fc *firebirdsqlConn) Query(query string, args []driver.Value) (driver.Rows
 
 func newFirebirdsqlConn(wp *wireProtocol, addr string, dbName string, user string, passwd string) (*firebirdsqlConn, error) {
     fc, err := newFirebirdsqlConn(wp, addr, dbName, user, passwd)
+    fc.tx, err = newFirebirdsqlTx(wp)
 
     return fc, err
 }
