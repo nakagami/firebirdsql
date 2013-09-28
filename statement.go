@@ -29,6 +29,7 @@ import (
 
 type firebirdsqlStmt struct {
     wp *wireProtocol
+    stmtHandle int32
 }
 
 func (stmt *firebirdsqlStmt) Close() (err error) {

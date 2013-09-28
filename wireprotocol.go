@@ -1010,7 +1010,7 @@ type wireProtocol struct {
     addr string
 }
 
-func NewWireProtocol (addr string) (*wireProtocol, error) {
+func newWireProtocol (addr string) (*wireProtocol, error) {
     p := new(wireProtocol)
     p.buffer_len = 1024
     var err error
@@ -1298,6 +1298,7 @@ func (p *wireProtocol) opPrepareStatement(stmtHandle int32, transHandle int32, q
 
     descItems := []byte{
         isc_info_sql_stmt_type,
+        isc_info_sql_num_variables,
         isc_info_sql_select,
         isc_info_sql_describe_vars,
         isc_info_sql_sqlda_seq,

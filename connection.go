@@ -60,3 +60,9 @@ func (fc *firebirdsqlConn) Query(query string, args []driver.Value) (driver.Rows
     var err error
     return nil, err
 }
+
+func newFirebirdsqlConn(wp *wireProtocol, addr string, dbName string, user string, passwd string) (*firebirdsqlConn, error) {
+    fc, err := newFirebirdsqlConn(wp, addr, dbName, user, passwd)
+
+    return fc, err
+}

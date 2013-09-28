@@ -29,10 +29,11 @@ import (
 )
 
 func TestConnect(t *testing.T) {
-    conn, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
+    conn, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3060/tmp/go_test.fdb")
     if err != nil {
         t.Fatalf("Error connecting: %v", err)
     }
+    conn.Exec("create table foo (a int, var char(256))")
     defer conn.Close()
 
 }

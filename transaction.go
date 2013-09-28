@@ -25,6 +25,7 @@ package firebirdsql
 
 type firebirdsqlTx struct {
     wp *wireProtocol
+    transHandle int32
 }
 
 func (tx *firebirdsqlTx) Commit() (err error) {
@@ -33,4 +34,10 @@ func (tx *firebirdsqlTx) Commit() (err error) {
 
 func (tx *firebirdsqlTx) Rollback() (err error) {
     return
+}
+
+func newTransaction(wp *wireProtocol) (*firebirdsqlTx, error) {
+    var err error
+    tx := new(firebirdsqlTx)
+    return tx, err
 }
