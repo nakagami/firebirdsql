@@ -33,6 +33,25 @@ import (
     "container/list"
 )
 
+func _INFO_SQL_SELECT_DESCRIBE_VARS() [] byte {
+    return []byte{
+        isc_info_sql_stmt_type,
+        isc_info_sql_select,
+        isc_info_sql_describe_vars,
+        isc_info_sql_sqlda_seq,
+        isc_info_sql_type,
+        isc_info_sql_sub_type,
+        isc_info_sql_scale,
+        isc_info_sql_length,
+        isc_info_sql_null_ind,
+        isc_info_sql_field,
+        isc_info_sql_relation,
+        isc_info_sql_owner,
+        isc_info_sql_alias,
+        isc_info_sql_describe_end,
+    }
+}
+
 type wireProtocol struct {
     buf []byte
     buffer_len int
@@ -275,7 +294,7 @@ func (p *wireProtocol) parse_xsqlda(dbName string) (stmtType int32, xsqlda []xSQ
                 connection._op_info_sql(stmt_handle,
                             bytes([isc_info_sql_sqlda_start, 2])
                                 + int_to_bytes(next_index, 2)
-                                + INFO_SQL_SELECT_DESCRIBE_VARS)
+                                + _INFO_SQL_SELECT_DESCRIBE_VARS())
                 (h, oid, buf) = connection._op_response()
                 assert buf[:2] == bytes([0x04,0x07])
                 l = bytes_to_int(buf[2:4])
@@ -435,22 +454,10 @@ func (p *wireProtocol) opFreeStatement(stmtHandle int32, mode int32) {
 
 func (p *wireProtocol) opPrepareStatement(stmtHandle int32, transHandle int32, query string) {
 
-    descItems := []byte{
-        isc_info_sql_stmt_type,
-        isc_info_sql_select,
-        isc_info_sql_describe_vars,
-        isc_info_sql_sqlda_seq,
-        isc_info_sql_type,
-        isc_info_sql_sub_type,
-        isc_info_sql_scale,
-        isc_info_sql_length,
-        isc_info_sql_null_ind,
-        isc_info_sql_field,
-        isc_info_sql_relation,
-        isc_info_sql_owner,
-        isc_info_sql_alias,
-        isc_info_sql_describe_end,
-    }
+    descItems := bytes.Join([][]byte{
+        []byte {byte(isc_info_sql_stmt_type)},
+        _INFO_SQL_SELECT_DESCRIBE_VARS(),
+    }, nil)
 
     p.packInt(op_prepare_statement)
     p.packInt(transHandle)
