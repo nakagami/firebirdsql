@@ -79,10 +79,31 @@ func bytes_to_bint16(b []byte) int16 {
     return i
 }
 
+func bytes_to_int16(b []byte) int16 {
+    var i int16
+    buffer := bytes.NewBuffer(b)
+    binary.Read(buffer, binary.LittleEndian, &i)
+    return i
+}
+
 func bytes_to_bint64(b []byte) int64 {
     var i int64
     buffer := bytes.NewBuffer(b)
     binary.Read(buffer, binary.BigEndian, &i)
+    return i
+}
+
+func bytes_to_int64(b []byte) int64 {
+    var i int64
+    buffer := bytes.NewBuffer(b)
+    binary.Read(buffer, binary.LittleEndian, &i)
+    return i
+}
+
+func bytes_to_int(b []byte) int {
+    var i int
+    buffer := bytes.NewBuffer(b)
+    binary.Read(buffer, binary.LittleEndian, &i)
     return i
 }
 

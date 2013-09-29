@@ -26,7 +26,6 @@ package firebirdsql
 import (
     "time"
     "bytes"
-    "encoding/binary"
 )
 
 const (
@@ -92,32 +91,6 @@ type xSQLVAR struct {
     aliasname string
 }
 
-func to_int32(b []byte) int32 {
-    var i32 int32
-    buffer := bytes.NewBuffer(b)
-    binary.Read(buffer, binary.BigEndian, &i32)
-    return i32
-}
-
-func to_int16(b []byte) int16 {
-    var i int16
-    buffer := bytes.NewBuffer(b)
-    binary.Read(buffer, binary.BigEndian, &i)
-    return i
-}
-
-func to_int64(b []byte) int64 {
-    var i int64
-    buffer := bytes.NewBuffer(b)
-    binary.Read(buffer, binary.BigEndian, &i)
-    return i
-}
-
-
-func NewXSQLVAR () *xSQLVAR {
-    x := new(xSQLVAR)
-    return x
-}
 
 func (x *xSQLVAR) ioLength() int {
     if x.sqltype == SQL_TYPE_TEXT {
@@ -136,7 +109,7 @@ func (x *xSQLVAR) displayLenght() int {
 }
 
 func (x *xSQLVAR) _parseDate(raw_value []byte) time.Time {
-    nday := int(to_int32(raw_value)) + 678882
+    nday := int(bytes_to_int32(raw_value)) + 678882
     century := (4 * nday -1) / 146097
     nday = 4 * nday - 1 - 146097 * century
     day := nday / 4
@@ -185,11 +158,11 @@ func (x *xSQLVAR) value(raw_value []byte) interface{} {
             return bytes.NewBuffer(raw_value).String()
         }
     case SQL_TYPE_SHORT:
-        return to_int16(raw_value)
+        return bytes_to_int16(raw_value)
     case SQL_TYPE_LONG:
-        return to_int32(raw_value) * int32(x.sqlscale)
+        return bytes_to_int32(raw_value) * int32(x.sqlscale)
     case SQL_TYPE_INT64:
-        return to_int64(raw_value) * int64(x.sqlscale)
+        return bytes_to_int64(raw_value) * int64(x.sqlscale)
     case SQL_TYPE_DATE:
         return x._parseDate(raw_value)
 //    case SQL_TYPE_TIME:
