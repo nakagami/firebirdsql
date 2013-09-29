@@ -1263,7 +1263,7 @@ func (p *wireProtocol) opRollbackRetaining(transHandle int32) {
     p.sendPackets()
 }
 
-func (p *wireProtocol) opAallocateStatement() {
+func (p *wireProtocol) opAllocateStatement() {
     p.packInt(op_allocate_statement)
     p.packInt(p.dbHandle)
     p.sendPackets()
@@ -1298,7 +1298,6 @@ func (p *wireProtocol) opPrepareStatement(stmtHandle int32, transHandle int32, q
 
     descItems := []byte{
         isc_info_sql_stmt_type,
-        isc_info_sql_num_variables,
         isc_info_sql_select,
         isc_info_sql_describe_vars,
         isc_info_sql_sqlda_seq,

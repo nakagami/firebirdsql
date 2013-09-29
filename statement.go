@@ -25,6 +25,7 @@ package firebirdsql
 
 import (
     "database/sql/driver"
+    "errors"
     )
 
 type firebirdsqlStmt struct {
@@ -37,16 +38,18 @@ func (stmt *firebirdsqlStmt) Close() (err error) {
 }
 
 func (stmt *firebirdsqlStmt) NumInput() int {
-    return 0
+    return -1
 }
 
 func (stmt *firebirdsqlStmt) Exec(args []driver.Value) (driver.Result, error) {
     var err error
+    err = errors.New("Not implement")
     return nil, err
 }
 
 func (stmt *firebirdsqlStmt) Query(args []driver.Value) (driver.Rows, error) {
     var err error
+    err = errors.New("Not implement")
     return nil, err
 }
 
@@ -55,6 +58,6 @@ func newFirebirdsqlStmt(wp *wireProtocol, query string) (*firebirdsqlStmt, error
     stmt := new(firebirdsqlStmt)
     wp.opAllocateStatement()
 
-    stmt.stmtHandle, _, _, err = tx.wp.opResponse()
+    stmt.stmtHandle, _, _, err = wp.opResponse()
     return stmt, err
 }
