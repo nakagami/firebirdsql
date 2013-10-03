@@ -54,6 +54,13 @@ func bint32_to_bytes(i32 int32) []byte {
     return bs
 }
 
+func int16_to_bytes(i16 int16) []byte {
+    bs := []byte {
+        byte(i16 & 0xFF),
+        byte(i16 >> 8 & 0xFF),
+    }
+    return bs
+}
 func bytes_to_str(b []byte) string {
     return bytes.NewBuffer(b).String()
 }

@@ -273,10 +273,12 @@ func (p *wireProtocol) _parse_select_items(buf []byte, xsqlda []xSQLVAR) (int, e
     return -1, err   // no more info
 }
 
-func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (stmtType int32, xsqlda []xSQLVAR) {
+func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQLVAR, error) {
     var ln, col_len, next_index int
     var err error
     var stmt_type int32
+    var rbuf[]byte
+    var xsqlda []xSQLVAR
     i := 0
 
     for i < len(buf) {
@@ -292,26 +294,26 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (stmtType int3
             i += 2
             col_len = bytes_to_int(buf[i:i+ln])
             xsqlda = make([]xSQLVAR, col_len)
-            next_index, err = _parse_select_items(buf[i+ln:], xsqlda)
+            next_index, err = p._parse_select_items(buf[i+ln:], xsqlda)
             for next_index > 0 {   // more describe vars
                 p.opInfoSql(stmtHandle,
                     bytes.Join([][]byte{
                         []byte{isc_info_sql_sqlda_start, 2},
-                        int16_to_bytes(next_index),
+                        int16_to_bytes(int16(next_index)),
                         _INFO_SQL_SELECT_DESCRIBE_VARS(),
                     }, nil))
 
-                _, _, rbuf := p.opResponse()
+                _, _, rbuf, err = p.opResponse()
                 // buf[:2] == []byte{0x04,0x07}
                 ln = bytes_to_int(rbuf[2:4])
                 // bytes_to_int(rbuf[4:4+l]) == col_len
-                next_index = p._parse_select_items(rbuf[4+ln:], xsqlda)
+                next_index, err = p._parse_select_items(rbuf[4+ln:], xsqlda)
             }
         } else {
             break
         }
     }
-    return stmt_type, xsqlda
+    return stmt_type, xsqlda, err
 }
 
 func (p *wireProtocol) opConnect(dbName string) {
