@@ -273,39 +273,46 @@ func (p *wireProtocol) _parse_select_items(buf []byte, xsqlda []xSQLVAR) (int, e
     return -1, err   // no more info
 }
 
-/*
+func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (stmtType int32, xsqlda []xSQLVAR) {
+    var ln, col_len, next_index int
+    var err error
+    var stmt_type int32
+    i := 0
 
-func (p *wireProtocol) parse_xsqlda(dbName string) (stmtType int32, xsqlda []xSQLVAR) {
-    xsqlda = []
-    stmt_type = None
-    i = 0
-    while i < len(buf):
-        if buf[i:i+3] == bytes([isc_info_sql_stmt_type,0x04,0x00]):
-            stmt_type = bytes_to_int(buf[i+3:i+7])
-            i += 7
-        elif buf[i:i+2] == bytes([isc_info_sql_select, isc_info_sql_describe_vars]):
+    for i < len(buf) {
+        if buf[i] == byte(isc_info_sql_stmt_type) {
+            ln = bytes_to_int(buf[i:i+2])
             i += 2
-            l = bytes_to_int(buf[i:i+2])
+            stmt_type = int32(bytes_to_int(buf[i:i+ln]))
+            i += ln
+        }
+        if buf[i] == byte(isc_info_sql_select) && buf[i+1] == byte(isc_info_sql_describe_vars) {
             i += 2
-            col_len = bytes_to_int(buf[i:i+l])
-            xsqlda = [None] * col_len
-            next_index = _parse_select_items(buf[i+l:], xsqlda, connection)
-            while next_index > 0:   # more describe vars
-                connection._op_info_sql(stmt_handle,
-                            bytes([isc_info_sql_sqlda_start, 2])
-                                + int_to_bytes(next_index, 2)
-                                + _INFO_SQL_SELECT_DESCRIBE_VARS())
-                (h, oid, buf) = connection._op_response()
-                assert buf[:2] == bytes([0x04,0x07])
-                l = bytes_to_int(buf[2:4])
-                assert bytes_to_int(buf[4:4+l]) == col_len
-                next_index = _parse_select_items(buf[4+l:], xsqlda, connection)
-        else:
+            ln = bytes_to_int(buf[i:i+2])
+            i += 2
+            col_len = bytes_to_int(buf[i:i+ln])
+            xsqlda = make([]xSQLVAR, col_len)
+            next_index, err = _parse_select_items(buf[i+ln:], xsqlda)
+            for next_index > 0 {   // more describe vars
+                p.opInfoSql(stmtHandle,
+                    bytes.Join([][]byte{
+                        []byte{isc_info_sql_sqlda_start, 2},
+                        int16_to_bytes(next_index),
+                        _INFO_SQL_SELECT_DESCRIBE_VARS(),
+                    }, nil))
+
+                _, _, rbuf := p.opResponse()
+                // buf[:2] == []byte{0x04,0x07}
+                ln = bytes_to_int(rbuf[2:4])
+                // bytes_to_int(rbuf[4:4+l]) == col_len
+                next_index = p._parse_select_items(rbuf[4+ln:], xsqlda)
+            }
+        } else {
             break
+        }
+    }
     return stmt_type, xsqlda
 }
-*/
-
 
 func (p *wireProtocol) opConnect(dbName string) {
     p.packInt(op_connect)
