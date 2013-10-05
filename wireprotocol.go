@@ -124,7 +124,7 @@ func (p *wireProtocol) uid() []byte {
 }
 
 func (p *wireProtocol) sendPackets() (n int, err error) {
-    n, err = p.conn.Write(p.buf)
+    n, err = p.conn.Write(p.buf[:p.bufCount])
     return
 }
 
