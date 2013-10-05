@@ -119,7 +119,7 @@ func (p *wireProtocol) uid() []byte {
     return bytes.Join([][]byte{
         []byte{1, byte(len(userBytes))}, userBytes,
         []byte{4, byte(len(hostnameBytes))}, hostnameBytes,
-        []byte{6, 4},
+        []byte{6, 0},
     }, nil)
 }
 
