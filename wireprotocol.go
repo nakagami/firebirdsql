@@ -359,19 +359,20 @@ func (p *wireProtocol) opCreate(dbName string, user string, passwd string) {
     p.sendPackets()
 }
 
-func (p *wireProtocol) opAccept() {
+func (p *wireProtocol) opAccept() (err error) {
     b, _ := p.recvPackets(4)
-    for {
-        if bytes_to_bint32(b) == op_dummy {
-            b, _ = p.recvPackets(4)
-        }
+    for bytes_to_bint32(b) == op_dummy {
+        b, _ = p.recvPackets(4)
     }
 
-    // assert bytes_to_bint32(b) == op_accept
+    if bytes_to_bint32(b) != op_accept {
+        err = errors.New("opAccept() protocol error")
+    }
     b, _ = p.recvPackets(12)
     // assert up.unpack_int() == 10
     // assert  up.unpack_int() == 1
     // assert up.unpack_int() == 3
+    return
 }
 
 func (p *wireProtocol) opAttach(dbName string, user string, passwd string) {
