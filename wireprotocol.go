@@ -641,10 +641,8 @@ func (p *wireProtocol)  opCloseBlob(blobHandle int32) {
 
 func (p *wireProtocol) opResponse() (int32, int32, []byte, error) {
     b, _ := p.recvPackets(4)
-    for {
-        if bytes_to_bint32(b) == op_dummy {
-            b, _ = p.recvPackets(4)
-        }
+    for bytes_to_bint32(b) == op_dummy {
+        b, _ = p.recvPackets(4)
     }
 
     if bytes_to_bint32(b) != op_response {
@@ -655,10 +653,8 @@ func (p *wireProtocol) opResponse() (int32, int32, []byte, error) {
 
 func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) (*list.List, error){
     b, err := p.recvPackets(4)
-    for {
-        if bytes_to_bint32(b) == op_dummy {
-            b, err = p.recvPackets(4)
-        }
+    for bytes_to_bint32(b) == op_dummy {
+        b, err = p.recvPackets(4)
     }
 
     if bytes_to_bint32(b) != op_sql_response {
