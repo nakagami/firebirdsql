@@ -34,11 +34,13 @@ type firebirdsqlConn struct{
     dbName string
     user string
     passwd string
+    isAutocommit bool
 }
 
 func (fc *firebirdsqlConn) Begin() (driver.Tx, error) {
     tx, err := newFirebirdsqlTx(fc.wp)
     fc.tx = tx
+    fc.isAutocommit = false
     return driver.Tx(tx), err
 }
 
@@ -53,20 +55,28 @@ func (fc *firebirdsqlConn) Prepare(query string) (driver.Stmt, error) {
     return newFirebirdsqlStmt(fc, query)
 }
 
-func (fc *firebirdsqlConn) Exec(query string, args []driver.Value) (driver.Result, error) {
+func (fc *firebirdsqlConn) Exec(query string, args []driver.Value) (result driver.Result, err error) {
     stmt, err := fc.Prepare(query)
     if err != nil {
-        return nil, err
+        return
     }
-    return stmt.Exec(args)
+    result, err =  stmt.Exec(args)
+    if fc.isAutocommit {
+        fc.tx.Commit()
+    }
+    return
 }
 
-func (fc *firebirdsqlConn) Query(query string, args []driver.Value) (driver.Rows, error) {
+func (fc *firebirdsqlConn) Query(query string, args []driver.Value) (result driver.Rows, err error) {
     stmt, err := fc.Prepare(query)
     if err != nil {
-        return nil, err
+        return
     }
-    return stmt.Query(args)
+    result, err =  stmt.Query(args)
+    if fc.isAutocommit {
+        fc.tx.Commit()
+    }
+    return
 }
 
 func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
@@ -91,6 +101,7 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
     fc.user = user
     fc.passwd = passwd
     fc.tx, err = newFirebirdsqlTx(wp)
+    fc.isAutocommit = true
 
     return fc, err
 }
