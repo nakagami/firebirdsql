@@ -54,13 +54,13 @@ func (fc *firebirdsqlConn) Prepare(query string) (driver.Stmt, error) {
 }
 
 func (fc *firebirdsqlConn) Exec(query string, args []driver.Value) (driver.Result, error) {
-    var err error
-    return nil, err
+    stmt, err := fc.Prepare(query)
+    return stmt.Exec(args)
 }
 
 func (fc *firebirdsqlConn) Query(query string, args []driver.Value) (driver.Rows, error) {
-    var err error
-    return nil, err
+    stmt, err := fc.Prepare(query)
+    return stmt.Query(args)
 }
 
 func newFirebirdsqlConn(wp *wireProtocol, addr string, dbName string, user string, passwd string) (*firebirdsqlConn, error) {
