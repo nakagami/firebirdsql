@@ -67,12 +67,12 @@ func (fc *firebirdsqlConn) Exec(query string, args []driver.Value) (result drive
     return
 }
 
-func (fc *firebirdsqlConn) Query(query string, args []driver.Value) (result driver.Rows, err error) {
+func (fc *firebirdsqlConn) Query(query string, args []driver.Value) (rows driver.Rows, err error) {
     stmt, err := fc.Prepare(query)
     if err != nil {
         return
     }
-    result, err =  stmt.Query(args)
+    rows, err =  stmt.Query(args)
     if fc.isAutocommit {
         fc.tx.Commit()
     }
