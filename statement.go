@@ -28,6 +28,18 @@ import (
     "errors"
     )
 
+
+type _result struct {
+}
+func (r *_result) LastInsertId() (int64, error) {
+    return 0, nil
+}
+
+func (r *_result) RowsAffected() (int64, error) {
+    return 0, nil
+}
+
+
 type firebirdsqlStmt struct {
     wp *wireProtocol
     stmtHandle int32
@@ -42,10 +54,13 @@ func (stmt *firebirdsqlStmt) NumInput() int {
     return -1
 }
 
-func (stmt *firebirdsqlStmt) Exec(args []driver.Value) (driver.Result, error) {
-    var err error
-    err = errors.New("Not implement")
-    return nil, err
+func (stmt *firebirdsqlStmt) Exec(args []driver.Value) (result driver.Result, err error) {
+    if len(args) > 0 {
+        err = errors.New("Not implement")
+        return
+    }
+    result = new(_result)
+    return
 }
 
 func (stmt *firebirdsqlStmt) Query(args []driver.Value) (driver.Rows, error) {
