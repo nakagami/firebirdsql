@@ -47,6 +47,7 @@ type firebirdsqlStmt struct {
 }
 
 func (stmt *firebirdsqlStmt) Close() (err error) {
+    stmt.wp.opFreeStatement(stmt.stmtHandle, 2)     // DSQL_drop
     return
 }
 
