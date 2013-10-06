@@ -31,6 +31,7 @@ import (
     "bytes"
     "strings"
     "container/list"
+    "database/sql/driver"
 )
 
 func _INFO_SQL_SELECT_DESCRIBE_VARS() [] byte {
@@ -489,7 +490,7 @@ func (p *wireProtocol) opInfoSql(stmtHandle int32, vars []byte) {
     p.sendPackets()
 }
 
-func (p *wireProtocol) opExecute(stmtHandle int32, transHandle int32, params []interface{}) {
+func (p *wireProtocol) opExecute(stmtHandle int32, transHandle int32, params []driver.Value) {
     p.packInt(op_execute)
     p.packInt(stmtHandle)
     p.packInt(transHandle)
@@ -509,7 +510,7 @@ func (p *wireProtocol) opExecute(stmtHandle int32, transHandle int32, params []i
     }
 }
 
-func (p *wireProtocol) opExecute2(stmtHandle int32, transHandle int32, params []interface{}, outputBlr []byte) {
+func (p *wireProtocol) opExecute2(stmtHandle int32, transHandle int32, params []driver.Value, outputBlr []byte) {
     p.packInt(op_execute2)
     p.packInt(stmtHandle)
     p.packInt(transHandle)

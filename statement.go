@@ -24,8 +24,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
-    "database/sql/driver"
     "errors"
+    "database/sql/driver"
     )
 
 
@@ -56,10 +56,9 @@ func (stmt *firebirdsqlStmt) NumInput() int {
 }
 
 func (stmt *firebirdsqlStmt) Exec(args []driver.Value) (result driver.Result, err error) {
-    if len(args) > 0 {
-        err = errors.New("Not implement")
-        return
-    }
+    stmt.wp.opExecute(stmt.stmtHandle, stmt.tx.transHandle, args)
+    _, _, _, err = stmt.wp.opResponse()
+
     result = new(_result)
     return
 }

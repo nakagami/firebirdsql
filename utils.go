@@ -28,6 +28,7 @@ import (
     "strings"
     "encoding/binary"
     "container/list"
+    "database/sql/driver"
 )
 
 func str_to_bytes(s string) []byte {
@@ -157,7 +158,7 @@ func flattenBytes(l *list.List) []byte {
     return bs
 }
 
-func paramsToBlr(params []interface{}) ([]byte, []byte) {
+func paramsToBlr(params []driver.Value) ([]byte, []byte) {
     // Convert parameter array to BLR and values format.
     var v, blr []byte
 
