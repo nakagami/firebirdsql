@@ -31,20 +31,7 @@ import (
 type firebirdsqlDriver struct{}
 
 func (d *firebirdsqlDriver) Open(dsn string) (driver.Conn, error) {
-    addr, dbName, user, passwd, err := parseDSN(dsn)
-    wp, err := newWireProtocol(addr)
-    if err != nil {
-        return nil, err
-    }
-
-    wp.opConnect(dbName)
-    wp.opAccept()
-    wp.opAttach(dbName, user, passwd)
-    wp.dbHandle, _, _, err = wp.opResponse()
-
-    fc, err := newFirebirdsqlConn(wp, addr, dbName, user, passwd)
-
-    return fc, err
+    return newFirebirdsqlConn(dsn)
 }
 
 func init() {

@@ -55,17 +55,36 @@ func (fc *firebirdsqlConn) Prepare(query string) (driver.Stmt, error) {
 
 func (fc *firebirdsqlConn) Exec(query string, args []driver.Value) (driver.Result, error) {
     stmt, err := fc.Prepare(query)
+    if err != nil {
+        return nil, err
+    }
     return stmt.Exec(args)
 }
 
 func (fc *firebirdsqlConn) Query(query string, args []driver.Value) (driver.Rows, error) {
     stmt, err := fc.Prepare(query)
+    if err != nil {
+        return nil, err
+    }
     return stmt.Query(args)
 }
 
-func newFirebirdsqlConn(wp *wireProtocol, addr string, dbName string, user string, passwd string) (*firebirdsqlConn, error) {
-    var err error
-    fc := new(firebirdsqlConn)
+func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
+    addr, dbName, user, passwd, err := parseDSN(dsn)
+    wp, err := newWireProtocol(addr)
+    if err != nil {
+        return
+    }
+
+    wp.opConnect(dbName)
+    wp.opAccept()
+    wp.opAttach(dbName, user, passwd)
+    wp.dbHandle, _, _, err = wp.opResponse()
+    if err != nil {
+        return
+    }
+
+    fc = new(firebirdsqlConn)
     fc.wp = wp
     fc.addr = addr
     fc.dbName = dbName
