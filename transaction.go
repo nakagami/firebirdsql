@@ -40,9 +40,9 @@ func (tx *firebirdsqlTx) Rollback() (err error) {
     return
 }
 
-func newFirebirdsqlTx(wp *wireProtocol) (*firebirdsqlTx, error) {
-    var err error
-    tx := new(firebirdsqlTx)
+func newFirebirdsqlTx(wp *wireProtocol) (tx *firebirdsqlTx, err error) {
+    tx = new(firebirdsqlTx)
+    tx.wp = wp
     wp.opTransaction([]byte {
         byte(isc_tpb_version3),
         byte(isc_tpb_write),
@@ -50,6 +50,5 @@ func newFirebirdsqlTx(wp *wireProtocol) (*firebirdsqlTx, error) {
         byte(isc_tpb_consistency),
     })
     tx.transHandle, _, _, err = wp.opResponse()
-
-    return tx, err
+    return
 }
