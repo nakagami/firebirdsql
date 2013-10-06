@@ -38,17 +38,19 @@ type firebirdsqlConn struct{
 
 func (fc *firebirdsqlConn) Begin() (driver.Tx, error) {
     tx, err := newFirebirdsqlTx(fc.wp)
-    return tx, err
+    fc.tx = tx
+    return driver.Tx(tx), err
 }
 
 
 func (fc *firebirdsqlConn) Close() (err error) {
+    fc.wp.opDetach()
+    fc.wp.conn.Close()
     return
 }
 
 func (fc *firebirdsqlConn) Prepare(query string) (driver.Stmt, error) {
-    var err error
-    return nil, err
+    return newFirebirdsqlStmt(fc, query)
 }
 
 func (fc *firebirdsqlConn) Exec(query string, args []driver.Value) (driver.Result, error) {

@@ -31,6 +31,7 @@ import (
 type firebirdsqlStmt struct {
     wp *wireProtocol
     stmtHandle int32
+    tx *firebirdsqlTx
 }
 
 func (stmt *firebirdsqlStmt) Close() (err error) {
@@ -53,11 +54,13 @@ func (stmt *firebirdsqlStmt) Query(args []driver.Value) (driver.Rows, error) {
     return nil, err
 }
 
-func newFirebirdsqlStmt(wp *wireProtocol, query string) (*firebirdsqlStmt, error) {
+func newFirebirdsqlStmt(fc *firebirdsqlConn, query string) (*firebirdsqlStmt, error) {
     var err error
     stmt := new(firebirdsqlStmt)
-    wp.opAllocateStatement()
+    stmt.wp = fc.wp
+    stmt.tx = fc.tx
+    fc.wp.opAllocateStatement()
 
-    stmt.stmtHandle, _, _, err = wp.opResponse()
+    stmt.stmtHandle, _, _, err = fc.wp.opResponse()
     return stmt, err
 }
