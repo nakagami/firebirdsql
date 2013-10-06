@@ -465,18 +465,12 @@ func (p *wireProtocol) opFreeStatement(stmtHandle int32, mode int32) {
 }
 
 func (p *wireProtocol) opPrepareStatement(stmtHandle int32, transHandle int32, query string) {
-
-    descItems := bytes.Join([][]byte{
-        []byte {byte(isc_info_sql_stmt_type)},
-        _INFO_SQL_SELECT_DESCRIBE_VARS(),
-    }, nil)
-
     p.packInt(op_prepare_statement)
     p.packInt(transHandle)
     p.packInt(stmtHandle)
     p.packInt(3)                        // dialect = 3
     p.packString(query)
-    p.packBytes(descItems)
+    p.packBytes(_INFO_SQL_SELECT_DESCRIBE_VARS())
     p.packInt(int32(p.buffer_len))
     p.sendPackets()
 }

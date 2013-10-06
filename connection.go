@@ -61,6 +61,7 @@ func (fc *firebirdsqlConn) Exec(query string, args []driver.Value) (result drive
         return
     }
     result, err =  stmt.Exec(args)
+    stmt.Close()
     if fc.isAutocommit {
         fc.tx.Commit()
     }
