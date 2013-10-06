@@ -69,13 +69,16 @@ func (stmt *firebirdsqlStmt) Query(args []driver.Value) (driver.Rows, error) {
     return nil, err
 }
 
-func newFirebirdsqlStmt(fc *firebirdsqlConn, query string) (*firebirdsqlStmt, error) {
-    var err error
-    stmt := new(firebirdsqlStmt)
+func newFirebirdsqlStmt(fc *firebirdsqlConn, query string) (stmt *firebirdsqlStmt, err error) {
+    stmt = new(firebirdsqlStmt)
     stmt.wp = fc.wp
     stmt.tx = fc.tx
     fc.wp.opAllocateStatement()
-
     stmt.stmtHandle, _, _, err = fc.wp.opResponse()
-    return stmt, err
+    if err != nil {
+        return
+    }
+    fc.wp.opPrepareStatement(stmt.stmtHandle, stmt.tx.transHandle, query)
+    _, _, _, err = fc.wp.opResponse()
+    return
 }
