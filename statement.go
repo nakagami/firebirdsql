@@ -24,7 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
-    "errors"
+    "fmt"
     "database/sql/driver"
     )
 
@@ -44,6 +44,8 @@ type firebirdsqlStmt struct {
     wp *wireProtocol
     stmtHandle int32
     tx *firebirdsqlTx
+    xsqlda []xSQLVAR
+    stmtType int32
 }
 
 func (stmt *firebirdsqlStmt) Close() (err error) {
@@ -65,7 +67,8 @@ func (stmt *firebirdsqlStmt) Exec(args []driver.Value) (result driver.Result, er
 
 func (stmt *firebirdsqlStmt) Query(args []driver.Value) (driver.Rows, error) {
     var err error
-    err = errors.New("Not implement")
+    stmt.wp.opExecute(stmt.stmtHandle, stmt.tx.transHandle, args)
+    _, _, _, err = stmt.wp.opResponse()
     return nil, err
 }
 
@@ -79,6 +82,11 @@ func newFirebirdsqlStmt(fc *firebirdsqlConn, query string) (stmt *firebirdsqlStm
         return
     }
     fc.wp.opPrepareStatement(stmt.stmtHandle, stmt.tx.transHandle, query)
-    _, _, _, err = fc.wp.opResponse()
+    _, _, buf, err := fc.wp.opResponse()
+
+    stmt.stmtType, stmt.xsqlda, err = fc.wp.parse_xsqlda(buf, stmt.stmtHandle)
+    fmt.Println(stmt.stmtType)
+    fmt.Println(stmt.xsqlda)
+
     return
 }
