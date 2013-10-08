@@ -328,6 +328,7 @@ const (
     isc_arg_netware = 16
     isc_arg_win32 = 17
     isc_arg_warning = 18
+    isc_arg_sql_state = 19
 
     op_connect = 1
     op_exit = 2

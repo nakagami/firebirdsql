@@ -179,6 +179,11 @@ func (p *wireProtocol) _parse_status_vector() (*list.List, int, string, error) {
             s := bytes_to_str(b)
             num_arg += 1
             message = strings.Replace(message, "@" + string(num_arg), s, 1)
+        case n == isc_arg_sql_state:
+            b, err = p.recvPackets(4)
+            nbytes := int(bytes_to_bint32(b))
+            b, err = p.recvPacketsAlignment(nbytes)
+            _ = bytes_to_str(b)    // skip status code
         }
         b, err = p.recvPackets(4)
         n = bytes_to_bint32(b)
