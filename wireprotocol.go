@@ -290,12 +290,12 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
 
     for i < len(buf) {
         if buf[i] == byte(isc_info_sql_stmt_type) {
-            ln = bytes_to_int(buf[i:i+2])
+            i += 1
+            ln = int(bytes_to_int16(buf[i:i+2]))
             i += 2
             stmt_type = int32(bytes_to_int(buf[i:i+ln]))
             i += ln
-        }
-        if buf[i] == byte(isc_info_sql_select) && buf[i+1] == byte(isc_info_sql_describe_vars) {
+        } else if buf[i] == byte(isc_info_sql_select) && buf[i+1] == byte(isc_info_sql_describe_vars) {
             i += 2
             ln = bytes_to_int(buf[i:i+2])
             i += 2
