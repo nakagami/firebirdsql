@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
+    "fmt"
     "testing"
     "database/sql"
 )
@@ -34,6 +35,19 @@ func TestConnect(t *testing.T) {
         t.Fatalf("Error connecting: %v", err)
     }
     conn.Exec("create table foo (a int, var char(256))")
+    rows, err := conn.Query("select count(*) cnt from foo")
+    if err != nil {
+        t.Fatalf("Error Query: %v", err)
+    }
+    columns, _ := rows.Columns()
+    fmt.Println("Columns:", columns)
+
+    var n int
+    for rows.Next() {
+        rows.Scan(&n)
+        fmt.Println(n)
+    }
+
     defer conn.Close()
 
 }
