@@ -108,13 +108,6 @@ func bytes_to_int64(b []byte) int64 {
     return i
 }
 
-func bytes_to_int(b []byte) int {
-    var i int
-    buffer := bytes.NewBuffer(b)
-    binary.Read(buffer, binary.LittleEndian, &i)
-    return i
-}
-
 func xdrBytes(bs []byte) []byte {
     // XDR encoding bytes
     n := len(bs)

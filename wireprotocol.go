@@ -221,50 +221,50 @@ func (p *wireProtocol) _parse_select_items(buf []byte, xsqlda []xSQLVAR) (int, e
         case isc_info_sql_sqlda_seq:
             ln = int(bytes_to_int16(buf[i:i+2]))
             i += 2
-            index = bytes_to_int(buf[i:i+ln])
+            index = int(bytes_to_int32(buf[i:i+ln]))
             i += ln
         case isc_info_sql_type:
             ln = int(bytes_to_int16(buf[i:i+2]))
             i += 2
-            xsqlda[index-1].sqltype = bytes_to_int(buf[i:i+ln])
+            xsqlda[index-1].sqltype = int(bytes_to_int32(buf[i:i+ln]))
             i += ln
         case isc_info_sql_sub_type:
-            ln = bytes_to_int(buf[i:i+2])
+            ln = int(bytes_to_int16(buf[i:i+2]))
             i += 2
-            xsqlda[index-1].sqlsubtype = bytes_to_int(buf[i:i+ln])
+            xsqlda[index-1].sqlsubtype = int(bytes_to_int32(buf[i:i+ln]))
             i += ln
         case isc_info_sql_scale:
-            ln = bytes_to_int(buf[i:i+2])
+            ln = int(bytes_to_int16(buf[i:i+2]))
             i += 2
-            xsqlda[index-1].sqlscale = bytes_to_int(buf[i:i+ln])
+            xsqlda[index-1].sqlscale = int(bytes_to_int32(buf[i:i+ln]))
             i += ln
         case isc_info_sql_length:
-            ln = bytes_to_int(buf[i:i+2])
+            ln = int(bytes_to_int16(buf[i:i+2]))
             i += 2
-            xsqlda[index-1].sqllen = bytes_to_int(buf[i:i+ln])
+            xsqlda[index-1].sqllen = int(bytes_to_int32(buf[i:i+ln]))
             i += ln
         case isc_info_sql_null_ind:
-            ln = bytes_to_int(buf[i:i+2])
+            ln = int(bytes_to_int16(buf[i:i+2]))
             i += 2
-            xsqlda[index-1].null_ok = bytes_to_int(buf[i:i+ln]) != 0
+            xsqlda[index-1].null_ok = bytes_to_int32(buf[i:i+ln]) != 0
             i += ln
         case isc_info_sql_field:
-            ln = bytes_to_int(buf[i:i+2])
+            ln = int(bytes_to_int16(buf[i:i+2]))
             i += 2
             xsqlda[index-1].fieldname = bytes_to_str(buf[i:i+ln])
             i += ln
         case isc_info_sql_relation:
-            ln = bytes_to_int(buf[i:i+2])
+            ln = int(bytes_to_int16(buf[i:i+2]))
             i += 2
             xsqlda[index-1].relname = bytes_to_str(buf[i:i+ln])
             i += ln
         case isc_info_sql_owner:
-            ln = bytes_to_int(buf[i:i+2])
+            ln = int(bytes_to_int16(buf[i:i+2]))
             i += 2
             xsqlda[index-1].ownname = bytes_to_str(buf[i:i+ln])
             i += ln
         case isc_info_sql_alias:
-            ln = bytes_to_int(buf[i:i+2])
+            ln = int(bytes_to_int16(buf[i:i+2]))
             i += 2
             xsqlda[index-1].aliasname = bytes_to_str(buf[i:i+ln])
             i += ln
@@ -293,13 +293,14 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
             i += 1
             ln = int(bytes_to_int16(buf[i:i+2]))
             i += 2
-            stmt_type = int32(bytes_to_int(buf[i:i+ln]))
+            stmt_type = int32(bytes_to_int32(buf[i:i+ln]))
             i += ln
+            fmt.Println("stmt_type", stmt_type)
         } else if buf[i] == byte(isc_info_sql_select) && buf[i+1] == byte(isc_info_sql_describe_vars) {
             i += 2
-            ln = bytes_to_int(buf[i:i+2])
+            ln = int(bytes_to_int16(buf[i:i+2]))
             i += 2
-            col_len = bytes_to_int(buf[i:i+ln])
+            col_len = int(bytes_to_int32(buf[i:i+ln]))
             xsqlda = make([]xSQLVAR, col_len)
             next_index, err = p._parse_select_items(buf[i+ln:], xsqlda)
             for next_index > 0 {   // more describe vars
@@ -312,7 +313,7 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
 
                 _, _, rbuf, err = p.opResponse()
                 // buf[:2] == []byte{0x04,0x07}
-                ln = bytes_to_int(rbuf[2:4])
+                ln = int(bytes_to_int16(rbuf[2:4]))
                 // bytes_to_int(rbuf[4:4+l]) == col_len
                 next_index, err = p._parse_select_items(rbuf[4+ln:], xsqlda)
             }
