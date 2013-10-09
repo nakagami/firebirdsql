@@ -214,8 +214,7 @@ func (p *wireProtocol) _parse_select_items(buf []byte, xsqlda []xSQLVAR) (int, e
     var ln int
     index := 0
     i := 0
-    item := int(buf[i])
-    for item=int(buf[i]); item != isc_info_end; item = int(buf[i]) {
+    for item := int(buf[i]); item != isc_info_end; item=int(buf[i]) {
         i++
         switch item {
         case isc_info_sql_sqlda_seq:
@@ -271,7 +270,7 @@ func (p *wireProtocol) _parse_select_items(buf []byte, xsqlda []xSQLVAR) (int, e
         case isc_info_truncated:
             return index, err    // return next index
         case isc_info_sql_describe_end:
-            i = i + 1
+            /* NOTHING */
         default:
             err = errors.New(fmt.Sprintf("Invalid item [%02x] ! i=%d", buf[i], i))
             break
@@ -295,7 +294,6 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
             i += 2
             stmt_type = int32(bytes_to_int32(buf[i:i+ln]))
             i += ln
-            fmt.Println("stmt_type", stmt_type)
         } else if buf[i] == byte(isc_info_sql_select) && buf[i+1] == byte(isc_info_sql_describe_vars) {
             i += 2
             ln = int(bytes_to_int16(buf[i:i+2]))
@@ -321,6 +319,7 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
             break
         }
     }
+    fmt.Println("xsqlda()", stmt_type, xsqlda)
     return stmt_type, xsqlda, err
 }
 

@@ -34,7 +34,7 @@ func TestConnect(t *testing.T) {
     if err != nil {
         t.Fatalf("Error connecting: %v", err)
     }
-    conn.Exec("create table foo (a int, var char(256))")
+//    conn.Exec("create table foo (a int, var char(256))")
     rows, err := conn.Query("select count(*) cnt from foo")
     if err != nil {
         t.Fatalf("Error Query: %v", err)
