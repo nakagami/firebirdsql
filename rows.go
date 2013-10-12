@@ -31,16 +31,22 @@ import (
 )
 
 type firebirdsqlRows struct {
+    stmt *firebirdsqlStmt
 	curNum int
 }
 
-func NewStubRows() *firebirdsqlRows {
-	return new(firebirdsqlRows)
+func newFirebirdsqlRows(stmt *firebirdsqlStmt) *firebirdsqlRows {
+	r :=  new(firebirdsqlRows)
+    r.stmt = stmt
+    return r
 }
 
 func (rows *firebirdsqlRows) Columns() []string {
-	fmt.Println("firebirdsqlRows.Columns()")
-	return []string{"Column1", "Column2"}
+    columns := make([]string, len(rows.stmt.xsqlda))
+    for i, x := range rows.stmt.xsqlda {
+        columns[i] = x.aliasname
+    }
+	return columns
 }
 
 func (rows *firebirdsqlRows) Close() (er error) {

@@ -24,7 +24,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
-    "fmt"
     "database/sql/driver"
     )
 
@@ -65,11 +64,11 @@ func (stmt *firebirdsqlStmt) Exec(args []driver.Value) (result driver.Result, er
     return
 }
 
-func (stmt *firebirdsqlStmt) Query(args []driver.Value) (driver.Rows, error) {
-    var err error
+func (stmt *firebirdsqlStmt) Query(args []driver.Value) (rows driver.Rows, err error) {
     stmt.wp.opExecute(stmt.stmtHandle, stmt.tx.transHandle, args)
     _, _, _, err = stmt.wp.opResponse()
-    return nil, err
+    rows = newFirebirdsqlRows(stmt)
+    return
 }
 
 func newFirebirdsqlStmt(fc *firebirdsqlConn, query string) (stmt *firebirdsqlStmt, err error) {
@@ -85,8 +84,6 @@ func newFirebirdsqlStmt(fc *firebirdsqlConn, query string) (stmt *firebirdsqlStm
     _, _, buf, err := fc.wp.opResponse()
 
     stmt.stmtType, stmt.xsqlda, err = fc.wp.parse_xsqlda(buf, stmt.stmtHandle)
-    fmt.Println(stmt.stmtType)
-    fmt.Println(stmt.xsqlda)
 
     return
 }
