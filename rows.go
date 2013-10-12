@@ -25,20 +25,26 @@ package firebirdsql
 
 
 import (
-	"database/sql/driver"
 	"fmt"
 	"io"
+    "container/list"
+	"database/sql/driver"
 )
 
 type firebirdsqlRows struct {
     stmt *firebirdsqlStmt
-	curNum int
+    chunk *list.List
+    rowElem *list.Element
+    moreData bool
 }
 
 func newFirebirdsqlRows(stmt *firebirdsqlStmt) *firebirdsqlRows {
-	r :=  new(firebirdsqlRows)
-    r.stmt = stmt
-    return r
+	rows :=  new(firebirdsqlRows)
+    rows.stmt = stmt
+    if stmt.stmtType == isc_info_sql_stmt_select {
+        rows.moreData = true
+    }
+    return rows
 }
 
 func (rows *firebirdsqlRows) Columns() []string {
@@ -55,14 +61,26 @@ func (rows *firebirdsqlRows) Close() (er error) {
 }
 
 func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
-	fmt.Println("firebirdsqlRows.Next()")
-	rows.curNum++
-	if rows.curNum < 5 {
-		dest[0] = rows.curNum
-		dest[1] = "ABC"
-	} else {
+    if rows.rowElem == nil && rows.moreData == false {
+        // No data
 		err = io.EOF
-	}
+        return
+    } else if rows.rowElem == nil && rows.moreData == true {
+        // Get one chunk
+        rows.stmt.wp.opFetch(rows.stmt.stmtHandle, rows.stmt.blr)
+        rows.chunk, err = rows.stmt.wp.opFetchResponse(rows.stmt.stmtHandle, rows.stmt.xsqlda)
+        rows.rowElem = rows.chunk.Front()
+    } else {
+        rows.rowElem = rows.rowElem.Next()
+    }
+
+    i := 0
+    var row *list.List
+    row = rows.rowElem.Value
+    for e := row.Front(); e != nil; e = e.Next() {
+        dest[i] = e.Value
+        i++
+    }
 
 	return
 }

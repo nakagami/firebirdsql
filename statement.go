@@ -44,6 +44,7 @@ type firebirdsqlStmt struct {
     stmtHandle int32
     tx *firebirdsqlTx
     xsqlda []xSQLVAR
+    blr []byte
     stmtType int32
 }
 
@@ -84,6 +85,7 @@ func newFirebirdsqlStmt(fc *firebirdsqlConn, query string) (stmt *firebirdsqlStm
     _, _, buf, err := fc.wp.opResponse()
 
     stmt.stmtType, stmt.xsqlda, err = fc.wp.parse_xsqlda(buf, stmt.stmtHandle)
+    stmt.blr = calcBlr(stmt.xsqlda)
 
     return
 }
