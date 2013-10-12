@@ -67,7 +67,6 @@ func (stmt *firebirdsqlStmt) Exec(args []driver.Value) (result driver.Result, er
 
 func (stmt *firebirdsqlStmt) Query(args []driver.Value) (rows driver.Rows, err error) {
     stmt.wp.opExecute(stmt.stmtHandle, stmt.tx.transHandle, args)
-    _, _, _, err = stmt.wp.opResponse()
     rows = newFirebirdsqlRows(stmt)
     return
 }
