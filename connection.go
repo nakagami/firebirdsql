@@ -74,9 +74,6 @@ func (fc *firebirdsqlConn) Query(query string, args []driver.Value) (rows driver
         return
     }
     rows, err =  stmt.Query(args)
-    if fc.isAutocommit {
-        fc.tx.Commit()
-    }
     return
 }
 
