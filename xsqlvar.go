@@ -184,7 +184,7 @@ func (x *xSQLVAR) value(raw_value []byte) interface{} {
 func calcBlr(xsqlda []xSQLVAR) []byte {
     // Calculate  BLR from XSQLVAR array.
     ln := len(xsqlda) *2
-    blr := make([]byte, ln + 6)
+    blr := make([]byte, (ln*2) + 8)
     blr[0] = 5
     blr[1] = 2
     blr[2] = 4
@@ -263,7 +263,8 @@ func calcBlr(xsqlda []xSQLVAR) []byte {
     // [blr_end, blr_eoc]
     blr[n] = 255
     blr[n+1] = 76
+    n += 2
 
-    return blr
+    return blr[:n]
 }
 
