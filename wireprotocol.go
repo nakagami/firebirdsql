@@ -651,7 +651,7 @@ func (p *wireProtocol) opResponse() (int32, int32, []byte, error) {
     return p._parse_op_response()
 }
 
-func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) (*list.List, error){
+func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) ([]driver.Value, error){
     b, err := p.recvPackets(4)
     for bytes_to_bint32(b) == op_dummy {
         b, err = p.recvPackets(4)
@@ -664,9 +664,9 @@ func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) (*list.List, error){
     b, err = p.recvPackets(4)
     // count := int(bytes_to_bint32(b))
 
-    r := list.New()
+    r := make([]driver.Value, len(xsqlda))
     var ln int
-    for _, x := range xsqlda {
+    for i, x := range xsqlda {
         if x.ioLength() < 0 {
             b, err = p.recvPackets(4)
             ln = int(bytes_to_bint32(b))
@@ -676,9 +676,7 @@ func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) (*list.List, error){
         raw_value, _ := p.recvPacketsAlignment(ln)
         b, err = p.recvPackets(4)
         if bytes_to_bint32(b) == 0 {    // Not NULL
-            r.PushBack(x.value(raw_value))
-        } else {
-            r.PushBack(nil)
+            r[i] = x.value(raw_value)
         }
     }
 

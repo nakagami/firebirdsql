@@ -33,8 +33,7 @@ import (
 
 type firebirdsqlRows struct {
     stmt *firebirdsqlStmt
-    chunk *list.List
-    rowElem *list.Element
+    currentChunkRow *list.Element
     moreData bool
 }
 
@@ -61,25 +60,22 @@ func (rows *firebirdsqlRows) Close() (er error) {
 }
 
 func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
-    if rows.rowElem == nil && rows.moreData == false {
+    if rows.currentChunkRow == nil && rows.moreData == false {
         // No data
 		err = io.EOF
         return
-    } else if rows.rowElem == nil && rows.moreData == true {
+    } else if rows.currentChunkRow == nil && rows.moreData == true {
         // Get one chunk
+        var chunk *list.List
         rows.stmt.wp.opFetch(rows.stmt.stmtHandle, rows.stmt.blr)
-        rows.chunk, err = rows.stmt.wp.opFetchResponse(rows.stmt.stmtHandle, rows.stmt.xsqlda)
-        rows.rowElem = rows.chunk.Front()
+        chunk, err = rows.stmt.wp.opFetchResponse(rows.stmt.stmtHandle, rows.stmt.xsqlda)
+        rows.currentChunkRow = chunk.Front()
     } else {
-        rows.rowElem = rows.rowElem.Next()
+        rows.currentChunkRow = rows.currentChunkRow.Next()
     }
-
-    i := 0
-    var row *list.List
-    row = rows.rowElem.Value
-    for e := row.Front(); e != nil; e = e.Next() {
-        dest[i] = e.Value
-        i++
+    row, _ := rows.currentChunkRow.Value.([]driver.Value)
+    for i, v := range row {
+        dest[i] = v
     }
 
 	return
