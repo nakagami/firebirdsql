@@ -542,10 +542,8 @@ func (p *wireProtocol)  opFetch(stmtHandle int32, blr []byte) {
 
 func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*list.List, error) {
     b, err := p.recvPackets(4)
-    for {
-        if bytes_to_bint32(b) == op_dummy {
-            b, err = p.recvPackets(4)
-        }
+    for bytes_to_bint32(b) == op_dummy {
+        b, _ = p.recvPackets(4)
     }
 
     if bytes_to_bint32(b) == op_response {
