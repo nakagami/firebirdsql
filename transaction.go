@@ -47,7 +47,8 @@ func newFirebirdsqlTx(wp *wireProtocol) (tx *firebirdsqlTx, err error) {
         byte(isc_tpb_version3),
         byte(isc_tpb_write),
         byte(isc_tpb_wait),
-        byte(isc_tpb_consistency),
+        byte(isc_tpb_read_committed),
+        byte(isc_tpb_no_rec_version),
     })
     tx.transHandle, _, _, err = wp.opResponse()
     return
