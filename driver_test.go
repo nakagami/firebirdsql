@@ -40,7 +40,9 @@ func TestConnect(t *testing.T) {
         t.Fatalf("Error Query: %v", err)
     }
     columns, _ := rows.Columns()
-    fmt.Println("Columns:", columns)
+    if len(columns) != 1 {
+        t.Fatalf("Columns count error")
+    }
 
     var n int
     for rows.Next() {

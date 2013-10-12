@@ -35,7 +35,7 @@ import (
 )
 
 func debugPrint(s string) {
-    fmt.Println(s)
+//    fmt.Println(s)
 }
 
 func _INFO_SQL_SELECT_DESCRIBE_VARS() [] byte {
@@ -324,7 +324,6 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
             break
         }
     }
-    fmt.Println("xsqlda()", stmt_type, xsqlda)
     return stmt_type, xsqlda, err
 }
 
@@ -511,7 +510,7 @@ func (p *wireProtocol) opInfoSql(stmtHandle int32, vars []byte) {
 }
 
 func (p *wireProtocol) opExecute(stmtHandle int32, transHandle int32, params []driver.Value) {
-    fmt.Println("opExecute()")
+    debugPrint("opExecute")
     p.packInt(op_execute)
     p.packInt(stmtHandle)
     p.packInt(transHandle)

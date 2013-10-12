@@ -25,7 +25,6 @@ package firebirdsql
 
 
 import (
-	"fmt"
 	"io"
     "container/list"
 	"database/sql/driver"
@@ -55,7 +54,6 @@ func (rows *firebirdsqlRows) Columns() []string {
 }
 
 func (rows *firebirdsqlRows) Close() (er error) {
-	fmt.Println("firebirdsqlRows.Close()")
 	return
 }
 
