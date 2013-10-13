@@ -71,6 +71,11 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
     } else {
         rows.currentChunkRow = rows.currentChunkRow.Next()
     }
+
+    if rows.currentChunkRow == nil {
+		err = io.EOF
+        return
+    }
     row, _ := rows.currentChunkRow.Value.([]driver.Value)
     for i, v := range row {
         dest[i] = v
