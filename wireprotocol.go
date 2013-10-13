@@ -563,7 +563,7 @@ func (p *wireProtocol)  opFetch(stmtHandle int32, blr []byte) {
     p.sendPackets()
 }
 
-func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*list.List, error) {
+func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*list.List, bool, error) {
     debugPrint("opFetchResponse")
     b, err := p.recvPackets(4)
     for bytes_to_bint32(b) == op_dummy {
@@ -572,10 +572,10 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*lis
 
     if bytes_to_bint32(b) == op_response {
         p._parse_op_response()      // error occured
-        return nil, errors.New("opFetchResponse:Internal Error")
+        return nil, false, errors.New("opFetchResponse:Internal Error")
     }
     if bytes_to_bint32(b) != op_fetch_response {
-        return nil, errors.New("opFetchResponse:Internal Error")
+        return nil, false, errors.New("opFetchResponse:Internal Error")
     }
     b, err = p.recvPackets(8)
     status := bytes_to_bint32(b[:4])
@@ -604,11 +604,8 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*lis
         status = bytes_to_bint32(b[4:8])
         count = int(bytes_to_bint32(b[8:]))
     }
-    if status == 100 {
-        err = errors.New("Error: op_fetch_response")
-    }
-        
-    return rows, err
+
+    return rows, status != 100, err
 }
 
 func (p *wireProtocol) opDetach() {

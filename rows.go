@@ -66,7 +66,7 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
         // Get one chunk
         var chunk *list.List
         rows.stmt.wp.opFetch(rows.stmt.stmtHandle, rows.stmt.blr)
-        chunk, err = rows.stmt.wp.opFetchResponse(rows.stmt.stmtHandle, rows.stmt.xsqlda)
+        chunk, rows.moreData, err = rows.stmt.wp.opFetchResponse(rows.stmt.stmtHandle, rows.stmt.xsqlda)
         rows.currentChunkRow = chunk.Front()
     } else {
         rows.currentChunkRow = rows.currentChunkRow.Next()
