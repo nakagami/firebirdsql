@@ -34,7 +34,25 @@ func TestConnect(t *testing.T) {
     if err != nil {
         t.Fatalf("Error connecting: %v", err)
     }
-//    conn.Exec("create table foo (a int, var char(256))")
+    var sql string
+    sql = "CREATE TABLE foo (\n"
+    sql += "     a INTEGER NOT NULL,\n"
+    sql += "     b VARCHAR(30) NOT NULL UNIQUE,\n"
+    sql += "     c VARCHAR(1024),\n"
+    sql += "     d DECIMAL(16,3) DEFAULT -0.123,\n"
+    sql += "     e DATE DEFAULT '1967-08-11',\n"
+    sql += "     f TIMESTAMP DEFAULT '1967-08-11 23:45:01',\n"
+    sql += "     g TIME DEFAULT '23:45:01',\n"
+    sql += "     h BLOB SUB_TYPE 1,\n"
+    sql += "     i DOUBLE PRECISION DEFAULT 0.0,\n"
+    sql += "     j FLOAT DEFAULT 0.0,\n"
+    sql += "     PRIMARY KEY (a),\n"
+    sql += "     CONSTRAINT CHECK_A CHECK (a <> 0)\n"
+    sql += ")"
+    fmt.Println(sql)
+    conn.Exec(sql)
+
+
     rows, err := conn.Query("select count(*) cnt from foo")
     if err != nil {
         t.Fatalf("Error Query: %v", err)
