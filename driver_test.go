@@ -35,6 +35,14 @@ func TestConnect(t *testing.T) {
         t.Fatalf("Error connecting: %v", err)
     }
     var sql string
+    var n int
+
+    sql = "SELECT Count(*) FROM rdb$relations where rdb$relation_name='FOO'"
+    err = conn.QueryRow(sql).Scan(&n)
+    if err != nil {
+        t.Fatalf("Error QueryRow: %v", err)
+    }
+
     sql = "CREATE TABLE foo (\n"
     sql += "     a INTEGER NOT NULL,\n"
     sql += "     b VARCHAR(30) NOT NULL UNIQUE,\n"
@@ -62,7 +70,6 @@ func TestConnect(t *testing.T) {
         t.Fatalf("Columns count error")
     }
 
-    var n int
     for rows.Next() {
         rows.Scan(&n)
         fmt.Println(n)
