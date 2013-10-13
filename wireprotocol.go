@@ -582,8 +582,8 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*lis
     count := int(bytes_to_bint32(b[4:8]))
     rows := list.New()
     for ; count > 0; {
-        r := list.New()
-        for _, x := range xsqlda {
+        r := make([]driver.Value, len(xsqlda))
+        for i, x := range xsqlda {
             var ln int
             if x.ioLength() < 0 {
                 b, err = p.recvPackets(4)
@@ -594,7 +594,7 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*lis
             raw_value, _ := p.recvPacketsAlignment(ln)
             b, err = p.recvPackets(4)
             if bytes_to_bint32(b) == 0 { // Not NULL
-                r.PushBack(x.value(raw_value))
+                r[i] = x.value(raw_value)
             }
         }
         rows.PushBack(r)
