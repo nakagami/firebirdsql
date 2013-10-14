@@ -255,7 +255,7 @@ func parseDSN(dsn string) (addr string, dbName string, user string, passwd strin
 func calcBlr(xsqlda []xSQLVAR) []byte {
     // Calculate  BLR from XSQLVAR array.
     ln := len(xsqlda) *2
-    blr := make([]byte, (ln*2) + 8)
+    blr := make([]byte, (ln*4) + 8)
     blr[0] = 5
     blr[1] = 2
     blr[2] = 4
