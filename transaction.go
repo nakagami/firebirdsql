@@ -30,13 +30,13 @@ type firebirdsqlTx struct {
 
 func (tx *firebirdsqlTx) Commit() (err error) {
     tx.wp.opCommit(tx.transHandle)
-    tx.transHandle, _, _, err = tx.wp.opResponse()
+    _, _, _, err = tx.wp.opResponse()
     return
 }
 
 func (tx *firebirdsqlTx) Rollback() (err error) {
     tx.wp.opRollback(tx.transHandle)
-    tx.transHandle, _, _, err = tx.wp.opResponse()
+    _, _, _, err = tx.wp.opResponse()
     return
 }
 
