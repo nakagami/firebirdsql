@@ -30,7 +30,7 @@ import (
 )
 
 func TestConnect(t *testing.T) {
-    conn, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3060/tmp/go_test.fdb")
+    conn, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
     if err != nil {
         t.Fatalf("Error connecting: %v", err)
     }
@@ -46,23 +46,23 @@ func TestConnect(t *testing.T) {
         conn.Exec("DROP TABLE foo")
     }
 
-    sql = "CREATE TABLE foo (\n"
-    sql += "     a INTEGER NOT NULL,\n"
-    sql += "     b VARCHAR(30) NOT NULL UNIQUE,\n"
-    sql += "     c VARCHAR(1024),\n"
-    sql += "     d DECIMAL(16,3) DEFAULT -0.123,\n"
-    sql += "     e DATE DEFAULT '1967-08-11',\n"
-    sql += "     f TIMESTAMP DEFAULT '1967-08-11 23:45:01',\n"
-    sql += "     g TIME DEFAULT '23:45:01',\n"
-    sql += "     h BLOB SUB_TYPE 1,\n"
-    sql += "     i DOUBLE PRECISION DEFAULT 0.0,\n"
-    sql += "     j FLOAT DEFAULT 0.0,\n"
-    sql += "     PRIMARY KEY (a),\n"
-    sql += "     CONSTRAINT CHECK_A CHECK (a <> 0)\n"
-    sql += ")"
-    fmt.Println(sql)
+    sql = `
+        CREATE TABLE foo (
+            a INTEGER NOT NULL,
+            b VARCHAR(30) NOT NULL UNIQUE,
+            c VARCHAR(1024),
+            d DECIMAL(16,3) DEFAULT -0.123,
+            e DATE DEFAULT '1967-08-11',
+            f TIMESTAMP DEFAULT '1967-08-11 23:45:01',
+            g TIME DEFAULT '23:45:01',
+            h BLOB SUB_TYPE 1, 
+            i DOUBLE PRECISION DEFAULT 0.0,
+            j FLOAT DEFAULT 0.0,
+            PRIMARY KEY (a),
+            CONSTRAINT CHECK_A CHECK (a <> 0)
+        )
+    `
     conn.Exec(sql)
-
 
     rows, err := conn.Query("select count(*) cnt from foo")
     if err != nil {
