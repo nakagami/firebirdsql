@@ -230,7 +230,11 @@ func (p *wireProtocol) _parse_select_items(buf []byte, xsqlda []xSQLVAR) (int, e
         case isc_info_sql_type:
             ln = int(bytes_to_int16(buf[i:i+2]))
             i += 2
-            xsqlda[index-1].sqltype = int(bytes_to_int32(buf[i:i+ln]))
+            sqltype := int(bytes_to_int32(buf[i:i+ln]))
+            if (sqltype % 2 != 0) {
+                sqltype--
+            }
+            xsqlda[index-1].sqltype = sqltype
             i += ln
         case isc_info_sql_sub_type:
             ln = int(bytes_to_int16(buf[i:i+2]))

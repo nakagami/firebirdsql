@@ -24,7 +24,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
-    "fmt"
     "testing"
     "database/sql"
 )
@@ -77,9 +76,8 @@ func TestConnect(t *testing.T) {
     }
 
     rows, err := conn.Query("select a, b, c, i, j from foo")
-    fmt.Println("a")
     for rows.Next() {
-        fmt.Println("b")
+        // TODO:
     }
 
     defer conn.Close()
