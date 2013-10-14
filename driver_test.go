@@ -75,6 +75,9 @@ func TestConnect(t *testing.T) {
         t.Fatalf("Error bad record count: %v", n)
     }
 
+    var name string
+    err = conn.QueryRow("select b from foo where a=1").Scan(&name)
+
     defer conn.Close()
 
 }
