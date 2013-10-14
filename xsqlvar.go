@@ -26,6 +26,7 @@ package firebirdsql
 import (
     "time"
     "bytes"
+    "encoding/binary"
 )
 
 const (
@@ -143,43 +144,49 @@ func (x *xSQLVAR) _parseTime(raw_value []byte) time.Time {
 }
 */
 
-func (x *xSQLVAR) value(raw_value []byte) interface{} {
+func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
     switch x.sqltype {
     case SQL_TYPE_TEXT:
         if x.sqlsubtype == 1 {          // OCTETS
-            return raw_value
+            v = raw_value
         } else {
-            return bytes.NewBuffer(raw_value).String()
+            v = bytes.NewBuffer(raw_value).String()
         }
     case SQL_TYPE_VARYING:
         if x.sqlsubtype == 1 {       // OCTETS
-            return raw_value
+            v = raw_value
         } else {
-            return bytes.NewBuffer(raw_value).String()
+            v = bytes.NewBuffer(raw_value).String()
         }
     case SQL_TYPE_SHORT:
-        return bytes_to_bint16(raw_value)
+        v = bytes_to_bint16(raw_value)
     case SQL_TYPE_LONG:
-        return bytes_to_bint32(raw_value)
+        v = bytes_to_bint32(raw_value)
         // return bytes_to_bint32(raw_value) ** x.sqlscale
     case SQL_TYPE_INT64:
-        return bytes_to_bint64(raw_value)
+        v = bytes_to_bint64(raw_value)
         // return bytes_to_bint64(raw_value) ** x.sqlscale
     case SQL_TYPE_DATE:
-        return x._parseDate(raw_value)
+        v = x._parseDate(raw_value)
 //    case SQL_TYPE_TIME:
 //        return x._parseTime(raw_value)
 //    case SQL_TYPE_TIMESTAMP:
 //        yyyy, mm, dd = self._parse_date(raw_value[:4])
 //        h, m, s, ms = self._parse_time(raw_value[4:])
 //        return datetime.datetime(yyyy, mm, dd, h, m, s, ms)
-//    case SQL_TYPE_FLOAT:
-//        return struct.unpack('!f', raw_value)[0]
-//    case SQL_TYPE_DOUBLE:
-//        return struct.unpack('!d', raw_value)[0]
+    case SQL_TYPE_FLOAT:
+        var f32 float32
+        b := bytes.NewReader(raw_value)
+        err = binary.Read(b, binary.BigEndian, &f32)
+        v = f32
+    case SQL_TYPE_DOUBLE:
+        b := bytes.NewReader(raw_value)
+        var f64 float64
+        err = binary.Read(b, binary.BigEndian, &f64)
+        v = f64
     case SQL_TYPE_BOOLEAN:
-        return raw_value[0] != 0
+        v = raw_value[0] != 0
     }
-    return raw_value
+    return
 }
 

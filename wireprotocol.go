@@ -594,7 +594,7 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*lis
             raw_value, _ := p.recvPacketsAlignment(ln)
             b, err = p.recvPackets(4)
             if bytes_to_bint32(b) == 0 { // Not NULL
-                r[i] = x.value(raw_value)
+                r[i], err = x.value(raw_value)
             }
         }
         rows.PushBack(r)
@@ -702,7 +702,7 @@ func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) ([]driver.Value, error){
         raw_value, _ := p.recvPacketsAlignment(ln)
         b, err = p.recvPackets(4)
         if bytes_to_bint32(b) == 0 {    // Not NULL
-            r[i] = x.value(raw_value)
+            r[i], err = x.value(raw_value)
         }
     }
 
