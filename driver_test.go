@@ -42,6 +42,9 @@ func TestConnect(t *testing.T) {
     if err != nil {
         t.Fatalf("Error QueryRow: %v", err)
     }
+    if n > 0 {
+        conn.Exec("DROP TABLE foo")
+    }
 
     sql = "CREATE TABLE foo (\n"
     sql += "     a INTEGER NOT NULL,\n"
