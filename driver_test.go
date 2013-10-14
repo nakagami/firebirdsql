@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
+    "fmt"
     "testing"
     "database/sql"
 )
@@ -75,8 +76,11 @@ func TestConnect(t *testing.T) {
         t.Fatalf("Error bad record count: %v", n)
     }
 
-    var name string
-    err = conn.QueryRow("select b from foo where a=1").Scan(&name)
+    rows, err := conn.Query("select a, b, c, i, j from foo")
+    fmt.Println("a")
+    for rows.Next() {
+        fmt.Println("b")
+    }
 
     defer conn.Close()
 
