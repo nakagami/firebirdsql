@@ -76,8 +76,13 @@ func TestConnect(t *testing.T) {
     }
 
     rows, err := conn.Query("select a, b, c, i, j from foo")
+    var a int
+    var b, c string
+    var i float64
+    var j float32
     for rows.Next() {
-        // TODO:
+        rows.Scan(&a, &b, &c, &i, &j)
+//        fmt.Println(a, b, i, j)
     }
 
     defer conn.Close()
