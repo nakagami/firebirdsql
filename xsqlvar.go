@@ -158,13 +158,13 @@ func (x *xSQLVAR) value(raw_value []byte) interface{} {
             return bytes.NewBuffer(raw_value).String()
         }
     case SQL_TYPE_SHORT:
-        return bytes_to_int16(raw_value)
+        return bytes_to_bint16(raw_value)
     case SQL_TYPE_LONG:
-        return bytes_to_int32(raw_value)
-        // return bytes_to_int32(raw_value) ** x.sqlscale
+        return bytes_to_bint32(raw_value)
+        // return bytes_to_bint32(raw_value) ** x.sqlscale
     case SQL_TYPE_INT64:
-        return bytes_to_int64(raw_value)
-        // return bytes_to_int64(raw_value) ** x.sqlscale
+        return bytes_to_bint64(raw_value)
+        // return bytes_to_bint64(raw_value) ** x.sqlscale
     case SQL_TYPE_DATE:
         return x._parseDate(raw_value)
 //    case SQL_TYPE_TIME:
