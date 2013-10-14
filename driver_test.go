@@ -24,7 +24,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
-    "fmt"
     "testing"
     "database/sql"
 )
@@ -63,19 +62,17 @@ func TestConnect(t *testing.T) {
         )
     `
     conn.Exec(sql)
+    // 3 records insert
+    conn.Exec("insert into foo(a, b, c,h) values (1, 'a', 'b','This is a memo')")
+    conn.Exec("insert into foo(a, b, c, e, g, i, j) values (2, 'A', 'B', '1999-01-25', '00:00:01', 0.1, 0.1)")
+    conn.Exec("insert into foo(a, b, c, e, g, i, j) values (3, 'X', 'Y', '2001-07-05', '00:01:02', 0.2, 0.2)")
 
-    rows, err := conn.Query("select count(*) cnt from foo")
+    err = conn.QueryRow("select count(*) cnt from foo").Scan(&n)
     if err != nil {
-        t.Fatalf("Error Query: %v", err)
+        t.Fatalf("Error QueryRow: %v", err)
     }
-    columns, _ := rows.Columns()
-    if len(columns) != 1 {
-        t.Fatalf("Columns count error")
-    }
-
-    for rows.Next() {
-        rows.Scan(&n)
-        fmt.Println(n)
+    if n != 3 {
+        t.Fatalf("Error bad record count: %v", n)
     }
 
     defer conn.Close()
