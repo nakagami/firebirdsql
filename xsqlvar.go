@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
+    "math"
     "time"
     "bytes"
     "encoding/binary"
@@ -159,13 +160,32 @@ func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
             v = bytes.NewBuffer(raw_value).String()
         }
     case SQL_TYPE_SHORT:
-        v = bytes_to_bint16(raw_value)
+        i16 := bytes_to_bint16(raw_value)
+        if x.sqlscale > 0 {
+            v = int64(i16) * int64(math.Pow(10.0, float64(x.sqlscale)))
+        } else if x.sqlscale < 0 {
+            v = float64(i16) * math.Pow(10.0, float64(x.sqlscale))
+        } else {
+            v = i16
+        }
     case SQL_TYPE_LONG:
-        v = bytes_to_bint32(raw_value)
-        // return bytes_to_bint32(raw_value) ** x.sqlscale
+        i32 := bytes_to_bint32(raw_value)
+        if x.sqlscale > 0 {
+            v = int64(i32) * int64(math.Pow(10.0, float64(x.sqlscale)))
+        } else if x.sqlscale < 0 {
+            v = float64(i32) * math.Pow(10.0, float64(x.sqlscale))
+        } else {
+            v = i32
+        }
     case SQL_TYPE_INT64:
-        v = bytes_to_bint64(raw_value)
-        // return bytes_to_bint64(raw_value) ** x.sqlscale
+        i64 := bytes_to_bint64(raw_value)
+        if x.sqlscale > 0 {
+            v = i64 * int64(math.Pow(10.0, float64(x.sqlscale)))
+        } else if x.sqlscale < 0 {
+            v = float64(i64) * math.Pow(10.0, float64(x.sqlscale))
+        } else {
+            v = i64
+        }
     case SQL_TYPE_DATE:
         v = x._parseDate(raw_value)
 //    case SQL_TYPE_TIME:
