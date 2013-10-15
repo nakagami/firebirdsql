@@ -110,8 +110,8 @@ func (x *xSQLVAR) displayLenght() int {
     }
 }
 
-func (x *xSQLVAR) _parseDate(raw_value []byte) time.Time {
-    nday := int(bytes_to_int32(raw_value)) + 678882
+func (x *xSQLVAR) _parseDate(raw_value []byte) (int, int, int) {
+    nday := int(bytes_to_bint32(raw_value)) + 678882
     century := (4 * nday -1) / 146097
     nday = 4 * nday - 1 - 146097 * century
     day := nday / 4
@@ -130,6 +130,11 @@ func (x *xSQLVAR) _parseDate(raw_value []byte) time.Time {
         month -= 9
         year += 1
     }
+    return year, month, day
+}
+
+func (x *xSQLVAR) parseDate(raw_value []byte) time.Time {
+    year, month, day := x._parseDate(raw_value)
     return time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
 }
 
@@ -187,7 +192,7 @@ func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
             v = i64
         }
     case SQL_TYPE_DATE:
-        v = x._parseDate(raw_value)
+        v = x.parseDate(raw_value)
 //    case SQL_TYPE_TIME:
 //        return x._parseTime(raw_value)
 //    case SQL_TYPE_TIMESTAMP:
