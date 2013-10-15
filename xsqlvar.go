@@ -133,22 +133,25 @@ func (x *xSQLVAR) _parseDate(raw_value []byte) (int, int, int) {
     return year, month, day
 }
 
-func (x *xSQLVAR) parseDate(raw_value []byte) time.Time {
-    year, month, day := x._parseDate(raw_value)
-    return time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
-}
-
-/*
-func (x *xSQLVAR) _parseTime(raw_value []byte) time.Time {
+func (x *xSQLVAR) _parseTime(raw_value []byte) (int, int, int, int) {
         n := int(bytes_to_bint32(raw_value))
         s := n / 10000
         m := s / 60
         h := m / 60
         m = m % 60
         s = s % 60
-        return time.Time(h, m, s, (n % 10000) * 100)
+        return h, m, s, (n % 10000) * 100
 }
-*/
+
+func (x *xSQLVAR) parseDate(raw_value []byte) time.Time {
+    year, month, day := x._parseDate(raw_value)
+    return time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
+}
+
+func (x *xSQLVAR) parseTime(raw_value []byte) time.Time {
+    h, m, s, n := x._parseTime(raw_value)
+    return time.Date(0, time.Month(1), 1, h, m, s, n, time.UTC)
+}
 
 func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
     switch x.sqltype {
@@ -193,8 +196,8 @@ func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
         }
     case SQL_TYPE_DATE:
         v = x.parseDate(raw_value)
-//    case SQL_TYPE_TIME:
-//        return x._parseTime(raw_value)
+    case SQL_TYPE_TIME:
+        v = x.parseTime(raw_value)
 //    case SQL_TYPE_TIMESTAMP:
 //        yyyy, mm, dd = self._parse_date(raw_value[:4])
 //        h, m, s, ms = self._parse_time(raw_value[4:])

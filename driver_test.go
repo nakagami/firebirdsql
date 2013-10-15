@@ -77,18 +77,18 @@ func TestConnect(t *testing.T) {
         t.Fatalf("Error bad record count: %v", n)
     }
 
-    rows, err := conn.Query("select a, b, c, d, e, i, j from foo")
+    rows, err := conn.Query("select a, b, c, d, e, g, i, j from foo")
     var a int
     var b, c string
     var d float64
     var e time.Time
+    var g time.Time
     var i float64
     var j float32
     for rows.Next() {
-        rows.Scan(&a, &b, &c, &d, &e, &i, &j)
-        fmt.Println(a, b, c, d, e, i, j)
+        rows.Scan(&a, &b, &c, &d, &e, &g, &i, &j)
+        fmt.Println(a, b, c, d, e, &g, i, j)
     }
 
     defer conn.Close()
-
 }
