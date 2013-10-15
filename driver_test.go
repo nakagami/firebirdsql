@@ -91,5 +91,14 @@ func TestConnect(t *testing.T) {
         fmt.Println(a, b, c, d, e, f, g, i, j)
     }
 
+    stmt, _ := conn.Prepare("select count(*) from foo where a=?")
+    err = stmt.QueryRow(1).Scan(&n)
+    if err != nil {
+        t.Fatalf("Error QueryRow: %v", err)
+    }
+    if n != 1 {
+        t.Fatalf("Error bad record count: %v", n)
+    }
+
     defer conn.Close()
 }
