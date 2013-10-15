@@ -204,10 +204,8 @@ func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
         v = x.parseDate(raw_value)
     case SQL_TYPE_TIME:
         v = x.parseTime(raw_value)
-//    case SQL_TYPE_TIMESTAMP:
-//        yyyy, mm, dd = self._parse_date(raw_value[:4])
-//        h, m, s, ms = self._parse_time(raw_value[4:])
-//        return datetime.datetime(yyyy, mm, dd, h, m, s, ms)
+    case SQL_TYPE_TIMESTAMP:
+        v = x.parseTimestamp(raw_value)
     case SQL_TYPE_FLOAT:
         var f32 float32
         b := bytes.NewReader(raw_value)
