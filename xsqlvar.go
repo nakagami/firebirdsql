@@ -153,6 +153,12 @@ func (x *xSQLVAR) parseTime(raw_value []byte) time.Time {
     return time.Date(0, time.Month(1), 1, h, m, s, n, time.UTC)
 }
 
+func (x *xSQLVAR) parseTimestamp(raw_value []byte) time.Time {
+    year, month, day := x._parseDate(raw_value[:4])
+    h, m, s, n := x._parseTime(raw_value[4:])
+    return time.Date(year, time.Month(month), day, h, m, s, n, time.UTC)
+}
+
 func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
     switch x.sqltype {
     case SQL_TYPE_TEXT:
