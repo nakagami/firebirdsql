@@ -153,7 +153,7 @@ func flattenBytes(l *list.List) []byte {
 
 func _int32ToBlr(i32 int32) ([]byte, []byte) {
     v := bytes.Join([][]byte{
-        int32_to_bytes(i32),
+        bint32_to_bytes(i32),
         []byte{0, 0, 0, 0},
     }, nil)
     blr := []byte{8, 0}
