@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
+    "fmt"
     "bytes"
     "strings"
     "encoding/binary"
@@ -161,6 +162,20 @@ func _int32ToBlr(i32 int32) ([]byte, []byte) {
     return blr, v
 }
 
+func _strToBlr(s string) ([]byte, []byte) {
+    v := str_to_bytes(s)
+    nbytes := len(v)
+    pad_length := ((4-nbytes) & 3)
+    padding := make([]byte, pad_length)
+    v = bytes.Join([][]byte{
+        v,
+        padding,
+        []byte{0, 0, 0, 0},
+    }, nil)
+    blr := []byte{14, byte(nbytes&255), byte(nbytes>>8)}
+    return blr, v
+}
+
 func paramsToBlr(params []driver.Value) ([]byte, []byte) {
     // Convert parameter array to BLR and values format.
     var v, blr []byte
@@ -173,16 +188,7 @@ func paramsToBlr(params []driver.Value) ([]byte, []byte) {
     for _, p := range params {
         switch f := p.(type) {
         case string:
-            v = str_to_bytes(f)
-            nbytes := len(v)
-            pad_length := ((4-nbytes) & 3)
-            padding := make([]byte, pad_length)
-            v = bytes.Join([][]byte{
-                v,
-                padding,
-                []byte{0, 0, 0, 0},
-            }, nil)
-            blr = []byte{14, byte(nbytes&255), byte(nbytes>>8)}
+            blr, v = _strToBlr(f)
         case int:
             blr, v = _int32ToBlr(int32(f))
         case int16:
@@ -226,6 +232,8 @@ func paramsToBlr(params []driver.Value) ([]byte, []byte) {
         case nil:
             v = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 0x32, 0x8c}
             blr = []byte{9, 0}
+        default:
+            blr, v = _strToBlr(fmt.Sprintf("%v", f))
         }
         valuesList.PushBack(v)
         blrList.PushBack(blr)
