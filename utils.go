@@ -233,6 +233,7 @@ func paramsToBlr(params []driver.Value) ([]byte, []byte) {
             v = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 0x32, 0x8c}
             blr = []byte{9, 0}
         default:
+            // can't convert directory
             blr, v = _strToBlr(fmt.Sprintf("%v", f))
         }
         valuesList.PushBack(v)
