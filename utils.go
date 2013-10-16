@@ -151,6 +151,16 @@ func flattenBytes(l *list.List) []byte {
     return bs
 }
 
+func _int32ToBlr(i32 int32) ([]byte, []byte) {
+    v := bytes.Join([][]byte{
+        int32_to_bytes(i32),
+        []byte{0, 0, 0, 0},
+    }, nil)
+    blr := []byte{8, 0}
+
+    return blr, v
+}
+
 func paramsToBlr(params []driver.Value) ([]byte, []byte) {
     // Convert parameter array to BLR and values format.
     var v, blr []byte
@@ -174,11 +184,13 @@ func paramsToBlr(params []driver.Value) ([]byte, []byte) {
             }, nil)
             blr = []byte{14, byte(nbytes&255), byte(nbytes>>8)}
         case int:
-            v = bytes.Join([][]byte{
-                int32_to_bytes(int32(f)),
-                []byte{0, 0, 0, 0},
-            }, nil)
-            blr = []byte{8, 0}
+            blr, v = _int32ToBlr(int32(f))
+        case int16:
+            blr, v = _int32ToBlr(int32(f))
+        case int32:
+            blr, v = _int32ToBlr(f)
+        case int64:
+            blr, v = _int32ToBlr(int32(f))
 /*
         case float32:
             if t == float:
