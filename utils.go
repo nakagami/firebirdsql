@@ -214,6 +214,7 @@ func _timestampToBlr(t time.Time) ([]byte, []byte) {
     v := bytes.Join([][]byte{
         _convert_date(t),
         _convert_time(t),
+        []byte{0, 0, 0, 0},
     }, nil)
 
     blr := []byte{35}

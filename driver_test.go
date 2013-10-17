@@ -31,7 +31,7 @@ import (
 )
 
 func TestConnect(t *testing.T) {
-    conn, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
+    conn, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3060/tmp/go_test.fdb")
     if err != nil {
         t.Fatalf("Error connecting: %v", err)
     }
@@ -91,9 +91,10 @@ func TestConnect(t *testing.T) {
         fmt.Println(a, b, c, d, e, f, g, i, j)
     }
 
-    stmt, _ := conn.Prepare("select count(*) from foo where a=? and b=? and d=? and g=?")
+    stmt, _ := conn.Prepare("select count(*) from foo where a=? and b=? and c=? and d=? and g=?")
+    cp := time.Date(1967, 8, 11, 0, 0, 0, 0, time.UTC)
     gp, err := time.Parse("15:04:05", "23:45:01")
-    err = stmt.QueryRow(1, "a", -0.123, gp).Scan(&n)
+    err = stmt.QueryRow(1, "a", cp, -0.123, gp).Scan(&n)
     if err != nil {
         t.Fatalf("Error QueryRow: %v", err)
     }
