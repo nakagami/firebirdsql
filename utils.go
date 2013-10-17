@@ -193,13 +193,19 @@ func _convert_time(t time.Time) []byte{
 }
 
 func _dateToBlr(t time.Time) ([]byte, []byte) {
-    v := _convert_time(t)
+    v := bytes.Join([][]byte{
+        _convert_date(t),
+        []byte{0, 0, 0, 0},
+    }, nil)
     blr := []byte{12}
     return blr, v
 }
 
 func _timeToBlr(t time.Time) ([]byte, []byte) {
-    v := _convert_time(t)
+    v := bytes.Join([][]byte{
+        _convert_time(t),
+        []byte{0, 0, 0, 0},
+    }, nil)
     blr := []byte{13}
     return blr, v
 }
