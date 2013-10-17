@@ -24,13 +24,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
-    "fmt"
     "testing"
     "time"
     "database/sql"
 )
 
-func TestConnect(t *testing.T) {
+func TestBasic(t *testing.T) {
     conn, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
     if err != nil {
         t.Fatalf("Error connecting: %v", err)
@@ -86,15 +85,16 @@ func TestConnect(t *testing.T) {
     var g time.Time
     var i float64
     var j float32
+
     for rows.Next() {
         rows.Scan(&a, &b, &c, &d, &e, &f, &g, &i, &j)
-        fmt.Println(a, b, c, d, e, f, g, i, j)
     }
 
-    stmt, _ := conn.Prepare("select count(*) from foo where a=? and b=? and e=? and d=? and g=?")
+    stmt, _ := conn.Prepare("select count(*) from foo where a=? and b=? and d=? and e=? and f=? and g=?")
     ep := time.Date(1967, 8, 11, 0, 0, 0, 0, time.UTC)
+    fp := time.Date(1967, 8, 11, 23, 45, 1, 0, time.UTC)
     gp, err := time.Parse("15:04:05", "23:45:01")
-    err = stmt.QueryRow(1, "a", ep, -0.123, gp).Scan(&n)
+    err = stmt.QueryRow(1, "a", -0.123, ep, fp, gp).Scan(&n)
     if err != nil {
         t.Fatalf("Error QueryRow: %v", err)
     }
