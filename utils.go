@@ -27,6 +27,7 @@ import (
     "fmt"
     "bytes"
     "strings"
+    "time"
     "encoding/binary"
     "container/list"
     "database/sql/driver"
@@ -176,6 +177,43 @@ func _strToBlr(s string) ([]byte, []byte) {
     return blr, v
 }
 
+func _convert_date(t time.Time) []byte{
+    i := int(t.Month()) + 9
+    jy := t.Year() + (i / 12) -1
+    jm := i % 12
+    c := jy / 100
+    jy -= 100 * c
+    j := (146097*c) / 4 + (1461*jy) / 4 + (153*jm+2) / 5 + t.Day() - 678882
+    return bint32_to_bytes(int32(j))
+}
+
+func _convert_time(t time.Time) []byte{
+    v := (t.Hour()*3600 + t.Minute()*60 + t.Second()) *10000 + t.Nanosecond()
+    return bint32_to_bytes(int32(v))
+}
+
+func _dateToBlr(t time.Time) ([]byte, []byte) {
+    v := _convert_time(t)
+    blr := []byte{12}
+    return blr, v
+}
+
+func _timeToBlr(t time.Time) ([]byte, []byte) {
+    v := _convert_time(t)
+    blr := []byte{13}
+    return blr, v
+}
+
+func _timestampToBlr(t time.Time) ([]byte, []byte) {
+    v := bytes.Join([][]byte{
+        _convert_date(t),
+        _convert_time(t),
+    }, nil)
+
+    blr := []byte{35}
+    return blr, v
+}
+
 func paramsToBlr(params []driver.Value) ([]byte, []byte) {
     // Convert parameter array to BLR and values format.
     var v, blr []byte
@@ -197,31 +235,12 @@ func paramsToBlr(params []driver.Value) ([]byte, []byte) {
             blr, v = _int32ToBlr(f)
         case int64:
             blr, v = _int32ToBlr(int32(f))
-/*
-        case float32:
-            if t == float:
-                p = decimal.Decimal(str(p))
-            (sign, digits, exponent) = p.as_tuple()
-            v = 0
-            ln = len(digits)
-            for i in range(ln):
-                v += digits[i] * (10 ** (ln -i-1))
-            if sign:
-                v *= -1
-            v = bint_to_bytes(v, 8)
-            if exponent < 0:
-                exponent += 256
-            blr += bytes([16, exponent])
-        case time.Time: // Date
-            v = convert_date(p)
-            blr += bytes([12])
-        case time.Time  // Time
-            v = convert_time(p)
-            blr += bytes([13])
-        case time.Time  // timestamp
-            v = convert_timestamp(p)
-            blr += bytes([35])
-*/
+        case time.Time:
+            if f.Year() == 0 {
+                blr, v = _timeToBlr(f)
+            } else {
+                blr, v = _timestampToBlr(f)
+            }
         case bool:
             if f {
                 v = []byte{1, 0, 0, 0, 0}
