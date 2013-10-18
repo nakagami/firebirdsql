@@ -205,8 +205,8 @@ func (p *wireProtocol) _parse_op_response() (int32, int32, []byte, error) {
     buf_len := int(bytes_to_bint32(b[12:]))     // buffer length
     buf, err := p.recvPacketsAlignment(buf_len)
 
-    _, sql_code, message, err := p._parse_status_vector()
-    if sql_code != 0 || message != "" {
+    gds_code_list, sql_code, message, err := p._parse_status_vector()
+    if gds_code_list.Len() > 0 || sql_code != 0 {
         err = errors.New(message)
     }
 

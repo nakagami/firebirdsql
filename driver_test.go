@@ -63,6 +63,11 @@ func TestBasic(t *testing.T) {
         )
     `
     conn.Exec(sql)
+    _, err = conn.Exec("CREATE TABLE foo (a INTEGER)")
+    if err == nil {
+        t.Fatalf("Need metadata update error")
+    }
+
     // 3 records insert
     conn.Exec("insert into foo(a, b, c,h) values (1, 'a', 'b','This is a memo')")
     conn.Exec("insert into foo(a, b, c, e, g, i, j) values (2, 'A', 'B', '1999-01-25', '00:00:01', 0.1, 0.1)")
