@@ -331,6 +331,8 @@ const (
 	op_connect            = 1
 	op_exit               = 2
 	op_accept             = 3
+	op_reject             = 4
+	op_protocrol          = 5
 	op_disconnect         = 6
 	op_response           = 9
 	op_attach             = 19

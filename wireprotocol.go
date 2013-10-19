@@ -380,8 +380,14 @@ func (p *wireProtocol) opAccept() (err error) {
 		b, _ = p.recvPackets(4)
 	}
 
+	if bytes_to_bint32(b) == op_reject {
+		err = errors.New("opAccept() connection is rejected")
+		return
+	}
+
 	if bytes_to_bint32(b) != op_accept {
 		err = errors.New("opAccept() protocol error")
+		return
 	}
 	b, _ = p.recvPackets(12)
 	// assert up.unpack_int() == 10
