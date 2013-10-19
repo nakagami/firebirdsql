@@ -29,4 +29,4 @@ Usage
 
    conn, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
 
-And see driver_test.go
+See also driver_test.go
