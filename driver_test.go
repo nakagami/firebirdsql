@@ -24,29 +24,29 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
-    "testing"
-    "time"
-    "database/sql"
+	"database/sql"
+	"testing"
+	"time"
 )
 
 func TestBasic(t *testing.T) {
-    conn, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
-    if err != nil {
-        t.Fatalf("Error connecting: %v", err)
-    }
-    var sql string
-    var n int
+	conn, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	var sql string
+	var n int
 
-    sql = "SELECT Count(*) FROM rdb$relations where rdb$relation_name='FOO'"
-    err = conn.QueryRow(sql).Scan(&n)
-    if err != nil {
-        t.Fatalf("Error QueryRow: %v", err)
-    }
-    if n > 0 {
-        conn.Exec("DROP TABLE foo")
-    }
+	sql = "SELECT Count(*) FROM rdb$relations where rdb$relation_name='FOO'"
+	err = conn.QueryRow(sql).Scan(&n)
+	if err != nil {
+		t.Fatalf("Error QueryRow: %v", err)
+	}
+	if n > 0 {
+		conn.Exec("DROP TABLE foo")
+	}
 
-    sql = `
+	sql = `
         CREATE TABLE foo (
             a INTEGER NOT NULL,
             b VARCHAR(30) NOT NULL UNIQUE,
@@ -62,53 +62,53 @@ func TestBasic(t *testing.T) {
             CONSTRAINT CHECK_A CHECK (a <> 0)
         )
     `
-    conn.Exec(sql)
-    _, err = conn.Exec("CREATE TABLE foo (a INTEGER)")
-    if err == nil {
-        t.Fatalf("Need metadata update error")
-    }
-    if err.Error() != "unsuccessful metadata update\nTable FOO already exists\n" {
-        t.Fatalf("Bad message:%v", err.Error())
-    }
+	conn.Exec(sql)
+	_, err = conn.Exec("CREATE TABLE foo (a INTEGER)")
+	if err == nil {
+		t.Fatalf("Need metadata update error")
+	}
+	if err.Error() != "unsuccessful metadata update\nTable FOO already exists\n" {
+		t.Fatalf("Bad message:%v", err.Error())
+	}
 
-    // 3 records insert
-    conn.Exec("insert into foo(a, b, c,h) values (1, 'a', 'b','This is a memo')")
-    conn.Exec("insert into foo(a, b, c, e, g, i, j) values (2, 'A', 'B', '1999-01-25', '00:00:01', 0.1, 0.1)")
-    conn.Exec("insert into foo(a, b, c, e, g, i, j) values (3, 'X', 'Y', '2001-07-05', '00:01:02', 0.2, 0.2)")
+	// 3 records insert
+	conn.Exec("insert into foo(a, b, c,h) values (1, 'a', 'b','This is a memo')")
+	conn.Exec("insert into foo(a, b, c, e, g, i, j) values (2, 'A', 'B', '1999-01-25', '00:00:01', 0.1, 0.1)")
+	conn.Exec("insert into foo(a, b, c, e, g, i, j) values (3, 'X', 'Y', '2001-07-05', '00:01:02', 0.2, 0.2)")
 
-    err = conn.QueryRow("select count(*) cnt from foo").Scan(&n)
-    if err != nil {
-        t.Fatalf("Error QueryRow: %v", err)
-    }
-    if n != 3 {
-        t.Fatalf("Error bad record count: %v", n)
-    }
+	err = conn.QueryRow("select count(*) cnt from foo").Scan(&n)
+	if err != nil {
+		t.Fatalf("Error QueryRow: %v", err)
+	}
+	if n != 3 {
+		t.Fatalf("Error bad record count: %v", n)
+	}
 
-    rows, err := conn.Query("select a, b, c, d, e, f, g, i, j from foo")
-    var a int
-    var b, c string
-    var d float64
-    var e time.Time
-    var f time.Time
-    var g time.Time
-    var i float64
-    var j float32
+	rows, err := conn.Query("select a, b, c, d, e, f, g, i, j from foo")
+	var a int
+	var b, c string
+	var d float64
+	var e time.Time
+	var f time.Time
+	var g time.Time
+	var i float64
+	var j float32
 
-    for rows.Next() {
-        rows.Scan(&a, &b, &c, &d, &e, &f, &g, &i, &j)
-    }
+	for rows.Next() {
+		rows.Scan(&a, &b, &c, &d, &e, &f, &g, &i, &j)
+	}
 
-    stmt, _ := conn.Prepare("select count(*) from foo where a=? and b=? and d=? and e=? and f=? and g=?")
-    ep := time.Date(1967, 8, 11, 0, 0, 0, 0, time.UTC)
-    fp := time.Date(1967, 8, 11, 23, 45, 1, 0, time.UTC)
-    gp, err := time.Parse("15:04:05", "23:45:01")
-    err = stmt.QueryRow(1, "a", -0.123, ep, fp, gp).Scan(&n)
-    if err != nil {
-        t.Fatalf("Error QueryRow: %v", err)
-    }
-    if n != 1 {
-        t.Fatalf("Error bad record count: %v", n)
-    }
+	stmt, _ := conn.Prepare("select count(*) from foo where a=? and b=? and d=? and e=? and f=? and g=?")
+	ep := time.Date(1967, 8, 11, 0, 0, 0, 0, time.UTC)
+	fp := time.Date(1967, 8, 11, 23, 45, 1, 0, time.UTC)
+	gp, err := time.Parse("15:04:05", "23:45:01")
+	err = stmt.QueryRow(1, "a", -0.123, ep, fp, gp).Scan(&n)
+	if err != nil {
+		t.Fatalf("Error QueryRow: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("Error bad record count: %v", n)
+	}
 
-    defer conn.Close()
+	defer conn.Close()
 }

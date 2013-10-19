@@ -24,16 +24,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
-    "database/sql"
-    "database/sql/driver"
+	"database/sql"
+	"database/sql/driver"
 )
 
 type firebirdsqlDriver struct{}
 
 func (d *firebirdsqlDriver) Open(dsn string) (driver.Conn, error) {
-    return newFirebirdsqlConn(dsn)
+	return newFirebirdsqlConn(dsn)
 }
 
 func init() {
-    sql.Register("firebirdsql", &firebirdsqlDriver{})
+	sql.Register("firebirdsql", &firebirdsqlDriver{})
 }

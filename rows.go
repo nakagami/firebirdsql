@@ -23,64 +23,63 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 package firebirdsql
 
-
 import (
-	"io"
-    "container/list"
+	"container/list"
 	"database/sql/driver"
+	"io"
 )
 
 type firebirdsqlRows struct {
-    stmt *firebirdsqlStmt
-    currentChunkRow *list.Element
-    moreData bool
+	stmt            *firebirdsqlStmt
+	currentChunkRow *list.Element
+	moreData        bool
 }
 
 func newFirebirdsqlRows(stmt *firebirdsqlStmt) *firebirdsqlRows {
-	rows :=  new(firebirdsqlRows)
-    rows.stmt = stmt
-    if stmt.stmtType == isc_info_sql_stmt_select {
-        rows.moreData = true
-    }
-    return rows
+	rows := new(firebirdsqlRows)
+	rows.stmt = stmt
+	if stmt.stmtType == isc_info_sql_stmt_select {
+		rows.moreData = true
+	}
+	return rows
 }
 
 func (rows *firebirdsqlRows) Columns() []string {
-    columns := make([]string, len(rows.stmt.xsqlda))
-    for i, x := range rows.stmt.xsqlda {
-        columns[i] = x.aliasname
-    }
+	columns := make([]string, len(rows.stmt.xsqlda))
+	for i, x := range rows.stmt.xsqlda {
+		columns[i] = x.aliasname
+	}
 	return columns
 }
 
 func (rows *firebirdsqlRows) Close() (er error) {
-    rows.stmt.Close()
+	rows.stmt.Close()
 	return
 }
 
 func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
-    if rows.currentChunkRow == nil && rows.moreData == false {
-        // No data
+	if rows.currentChunkRow == nil && rows.moreData == false {
+		// No data
 		err = io.EOF
-        return
-    } else if rows.currentChunkRow == nil && rows.moreData == true {
-        // Get one chunk
-        var chunk *list.List
-        rows.stmt.wp.opFetch(rows.stmt.stmtHandle, rows.stmt.blr)
-        chunk, rows.moreData, err = rows.stmt.wp.opFetchResponse(rows.stmt.stmtHandle, rows.stmt.xsqlda)
-        rows.currentChunkRow = chunk.Front()
-    } else {
-        rows.currentChunkRow = rows.currentChunkRow.Next()
-    }
+		return
+	} else if rows.currentChunkRow == nil && rows.moreData == true {
+		// Get one chunk
+		var chunk *list.List
+		rows.stmt.wp.opFetch(rows.stmt.stmtHandle, rows.stmt.blr)
+		chunk, rows.moreData, err = rows.stmt.wp.opFetchResponse(rows.stmt.stmtHandle, rows.stmt.xsqlda)
+		rows.currentChunkRow = chunk.Front()
+	} else {
+		rows.currentChunkRow = rows.currentChunkRow.Next()
+	}
 
-    if rows.currentChunkRow == nil {
+	if rows.currentChunkRow == nil {
 		err = io.EOF
-        return
-    }
-    row, _ := rows.currentChunkRow.Value.([]driver.Value)
-    for i, v := range row {
-        dest[i] = v
-    }
+		return
+	}
+	row, _ := rows.currentChunkRow.Value.([]driver.Value)
+	for i, v := range row {
+		dest[i] = v
+	}
 
 	return
 }

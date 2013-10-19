@@ -24,30 +24,30 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
-    "testing"
-    "errors"
+	"errors"
+	"testing"
 )
 
 func TestDSNParse(t *testing.T) {
-    var testDSNs = [] struct {
-        dsn string
-        addr string
-        dbName string
-        user string
-        passwd string
-    }{
-        {"user:password@localhost:3000/dbname", "localhost:3000", "dbname", "user", "password"},
-        {"user:password@localhost/dbname", "localhost:3050", "dbname", "user", "password"},
-        {"user:password@localhost/dir/dbname", "localhost:3050", "/dir/dbname", "user", "password"},
-    }
+	var testDSNs = []struct {
+		dsn    string
+		addr   string
+		dbName string
+		user   string
+		passwd string
+	}{
+		{"user:password@localhost:3000/dbname", "localhost:3000", "dbname", "user", "password"},
+		{"user:password@localhost/dbname", "localhost:3050", "dbname", "user", "password"},
+		{"user:password@localhost/dir/dbname", "localhost:3050", "/dir/dbname", "user", "password"},
+	}
 
-    for _, d := range testDSNs {
-        addr, dbName, user, passwd, err := parseDSN(d.dsn)
-        if addr != d.addr || dbName != d.dbName || user != d.user || passwd != d.passwd {
-            err = errors.New("parse DSN fail")
-        }
-        if err != nil {
-            t.Error(err.Error())
-        }
-    }
+	for _, d := range testDSNs {
+		addr, dbName, user, passwd, err := parseDSN(d.dsn)
+		if addr != d.addr || dbName != d.dbName || user != d.user || passwd != d.passwd {
+			err = errors.New("parse DSN fail")
+		}
+		if err != nil {
+			t.Error(err.Error())
+		}
+	}
 }

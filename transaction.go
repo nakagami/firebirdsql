@@ -24,32 +24,32 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 type firebirdsqlTx struct {
-    wp *wireProtocol
-    transHandle int32
+	wp          *wireProtocol
+	transHandle int32
 }
 
 func (tx *firebirdsqlTx) Commit() (err error) {
-    tx.wp.opCommit(tx.transHandle)
-    _, _, _, err = tx.wp.opResponse()
-    return
+	tx.wp.opCommit(tx.transHandle)
+	_, _, _, err = tx.wp.opResponse()
+	return
 }
 
 func (tx *firebirdsqlTx) Rollback() (err error) {
-    tx.wp.opRollback(tx.transHandle)
-    _, _, _, err = tx.wp.opResponse()
-    return
+	tx.wp.opRollback(tx.transHandle)
+	_, _, _, err = tx.wp.opResponse()
+	return
 }
 
 func newFirebirdsqlTx(wp *wireProtocol) (tx *firebirdsqlTx, err error) {
-    tx = new(firebirdsqlTx)
-    tx.wp = wp
-    wp.opTransaction([]byte {
-        byte(isc_tpb_version3),
-        byte(isc_tpb_write),
-        byte(isc_tpb_wait),
-        byte(isc_tpb_read_committed),
-        byte(isc_tpb_no_rec_version),
-    })
-    tx.transHandle, _, _, err = wp.opResponse()
-    return
+	tx = new(firebirdsqlTx)
+	tx.wp = wp
+	wp.opTransaction([]byte{
+		byte(isc_tpb_version3),
+		byte(isc_tpb_write),
+		byte(isc_tpb_wait),
+		byte(isc_tpb_read_committed),
+		byte(isc_tpb_no_rec_version),
+	})
+	tx.transHandle, _, _, err = wp.opResponse()
+	return
 }
