@@ -17,16 +17,27 @@ Installation
    $ go get github.com/go-sql-driver/mysql
 
 
-Usage
+Example
 -------------
 
 ::
 
+   package main
+
    import (
+       "fmt"
        "database/sql"
-       "github.com/nakagami/firebirdsql"
+       _ "github.com/nakagami/firebirdsql"
    )
 
-   conn, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
+   func main() {
+       var n int
+       conn, _ := sql.Open("firebirdsql", "user:password@servername/foo/bar.fdb")
+       conn.QueryRow("SELECT Count(*) FROM rdb$relations").Scan(&n)
+       fmt.Println("Relations count=", n)
+
+       defer conn.Close()
+   }
+
 
 See also driver_test.go
