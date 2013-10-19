@@ -183,7 +183,7 @@ func (p *wireProtocol) _parse_status_vector() (*list.List, int, string, error) {
             b, err = p.recvPacketsAlignment(nbytes)
             s := bytes_to_str(b)
             num_arg += 1
-            message = strings.Replace(message, "@" + string(num_arg), s, 1)
+            message = strings.Replace(message, fmt.Sprintf("@%d", num_arg), s, 1)
         case n == isc_arg_sql_state:
             b, err = p.recvPackets(4)
             nbytes := int(bytes_to_bint32(b))

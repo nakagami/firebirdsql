@@ -67,6 +67,9 @@ func TestBasic(t *testing.T) {
     if err == nil {
         t.Fatalf("Need metadata update error")
     }
+    if err.Error() != "unsuccessful metadata update\nTable FOO already exists\n" {
+        t.Fatalf("Bad message:%v", err.Error())
+    }
 
     // 3 records insert
     conn.Exec("insert into foo(a, b, c,h) values (1, 'a', 'b','This is a memo')")

@@ -61,6 +61,9 @@ func (fc *firebirdsqlConn) Exec(query string, args []driver.Value) (result drive
         return
     }
     result, err =  stmt.Exec(args)
+    if err != nil {
+        return
+    }
     if fc.isAutocommit {
         fc.tx.Commit()
         fc.tx, err = newFirebirdsqlTx(fc.wp)
