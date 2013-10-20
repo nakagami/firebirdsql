@@ -112,3 +112,56 @@ func TestBasic(t *testing.T) {
 
 	defer conn.Close()
 }
+
+func TestFB3(t *testing.T) {
+	conn, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	var sql string
+	var n int
+
+	sql = "SELECT Count(*) FROM rdb$relations where rdb$relation_name='TEST_FB3'"
+	err = conn.QueryRow(sql).Scan(&n)
+	if err != nil {
+		t.Fatalf("Error QueryRow: %v", err)
+	}
+	if n > 0 {
+		conn.Exec("DROP TABLE test_fb3")
+	}
+
+	sql = `
+        CREATE TABLE test_fb3 (
+            b BOOLEAN,
+        )
+    `
+	conn.Exec(sql)
+	conn.Exec("insert into foo(b) values (true)")
+	conn.Exec("insert into foo(b) values (false)")
+    var b bool
+	err = conn.QueryRow("select * from boolean_test where b is true").Scan(&b)
+	if err != nil {
+		t.Fatalf("Error QueryRow: %v", err)
+	}
+	if b != true{
+		conn.Exec("Invalid boolean value")
+	}
+	err = conn.QueryRow("select * from boolean_test where b is false").Scan(&b)
+	if err != nil {
+		t.Fatalf("Error QueryRow: %v", err)
+	}
+	if b != false{
+		conn.Exec("Invalid boolean value")
+	}
+
+	stmt, _ := conn.Prepare("select * from boolean_test where b=?")
+	err = stmt.QueryRow(true).Scan(&b)
+	if err != nil {
+		t.Fatalf("Error QueryRow: %v", err)
+	}
+	if b != false{
+		conn.Exec("Invalid boolean value")
+	}
+
+	defer conn.Close()
+}
