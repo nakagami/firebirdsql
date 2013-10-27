@@ -35,7 +35,7 @@ import (
 )
 
 func debugPrint(s string) {
-	//    fmt.Println(s)
+//	    fmt.Println(s)
 }
 
 func _INFO_SQL_SELECT_DESCRIBE_VARS() []byte {
@@ -486,7 +486,7 @@ func (p *wireProtocol) opInfoDatabase(bs []byte) {
 }
 
 func (p *wireProtocol) opFreeStatement(stmtHandle int32, mode int32) {
-	debugPrint("opFreeStatement")
+	debugPrint(fmt.Sprintf("opFreeStatement:<%v>", stmtHandle))
 	p.packInt(op_free_statement)
 	p.packInt(stmtHandle)
 	p.packInt(mode)
@@ -494,7 +494,7 @@ func (p *wireProtocol) opFreeStatement(stmtHandle int32, mode int32) {
 }
 
 func (p *wireProtocol) opPrepareStatement(stmtHandle int32, transHandle int32, query string) {
-	debugPrint("opPrepareStatement")
+	debugPrint("opPrepareStatement:" + query)
 	p.packInt(op_prepare_statement)
 	p.packInt(transHandle)
 	p.packInt(stmtHandle)
