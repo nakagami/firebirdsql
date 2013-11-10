@@ -132,7 +132,7 @@ func TestFB3(t *testing.T) {
 
 	sql = `
         CREATE TABLE test_fb3 (
-            b BOOLEAN,
+            b BOOLEAN
         )
     `
 	conn.Exec(sql)
