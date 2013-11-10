@@ -113,6 +113,7 @@ func TestBasic(t *testing.T) {
 	defer conn.Close()
 }
 
+/*
 func TestFB3(t *testing.T) {
 	conn, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
 	if err != nil {
@@ -165,3 +166,4 @@ func TestFB3(t *testing.T) {
 
 	defer conn.Close()
 }
+*/
