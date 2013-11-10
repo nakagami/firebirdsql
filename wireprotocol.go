@@ -129,7 +129,7 @@ func (p *wireProtocol) uid() []byte {
 }
 
 func (p *wireProtocol) sendPackets() (n int, err error) {
-	debugPrint(fmt.Sprintf("sendPackets():%v", p.buf[:p.bufCount]))
+	debugPrint(fmt.Sprintf("\tsendPackets():%v", p.buf[:p.bufCount]))
 	n, err = p.conn.Write(p.buf[:p.bufCount])
 	p.bufCount = 0
 	return
@@ -138,6 +138,7 @@ func (p *wireProtocol) sendPackets() (n int, err error) {
 func (p *wireProtocol) recvPackets(n int) ([]byte, error) {
 	buf := make([]byte, n)
 	_, err := p.conn.Read(buf)
+	debugPrint(fmt.Sprintf("\trecvPackets():%v:%v", buf, err))
 	return buf, err
 }
 
@@ -494,7 +495,7 @@ func (p *wireProtocol) opFreeStatement(stmtHandle int32, mode int32) {
 }
 
 func (p *wireProtocol) opPrepareStatement(stmtHandle int32, transHandle int32, query string) {
-	debugPrint("opPrepareStatement:" + query)
+	debugPrint(fmt.Sprintf("opPrepareStatement():%d,%d,%v", transHandle, stmtHandle, query))
 	p.packInt(op_prepare_statement)
 	p.packInt(transHandle)
 	p.packInt(stmtHandle)
@@ -516,7 +517,7 @@ func (p *wireProtocol) opInfoSql(stmtHandle int32, vars []byte) {
 }
 
 func (p *wireProtocol) opExecute(stmtHandle int32, transHandle int32, params []driver.Value) {
-	debugPrint("opExecute")
+	debugPrint(fmt.Sprintf("opExecute():%d,%d,%v", transHandle, stmtHandle, params))
 	p.packInt(op_execute)
 	p.packInt(stmtHandle)
 	p.packInt(transHandle)
