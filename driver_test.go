@@ -153,7 +153,7 @@ func TestFB3(t *testing.T) {
 	if b != false{
 		conn.Exec("Invalid boolean value")
 	}
-/*
+
 	stmt, _ := conn.Prepare("select * from test_fb3 where b=?")
 	err = stmt.QueryRow(true).Scan(&b)
 	if err != nil {
@@ -162,6 +162,6 @@ func TestFB3(t *testing.T) {
 	if b != false{
 		conn.Exec("Invalid boolean value")
 	}
-*/
+
 	defer conn.Close()
 }

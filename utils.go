@@ -250,9 +250,9 @@ func paramsToBlr(params []driver.Value) ([]byte, []byte) {
 			}
 		case bool:
 			if f {
-				v = []byte{1, 0, 0, 0, 0}
+				v = []byte{1, 0, 0, 0, 0, 0, 0, 0}
 			} else {
-				v = []byte{0, 0, 0, 0, 0}
+				v = []byte{0, 0, 0, 0, 0, 0, 0, 0}
 			}
 			blr = []byte{23}
 		case nil:
