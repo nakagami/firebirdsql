@@ -113,6 +113,17 @@ func TestBasic(t *testing.T) {
 	defer conn.Close()
 }
 
+func TestError(t *testing.T) {
+	conn, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	_, err = conn.Exec("bad sql")
+	if err != nil {
+		t.Fatalf("Error conn.Exec(): %v", err)
+	}
+}
+
 /*
 func TestFB3(t *testing.T) {
 	conn, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
