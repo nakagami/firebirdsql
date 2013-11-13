@@ -84,6 +84,9 @@ func newFirebirdsqlStmt(fc *firebirdsqlConn, query string) (stmt *firebirdsqlStm
 	}
 	fc.wp.opPrepareStatement(stmt.stmtHandle, stmt.tx.transHandle, query)
 	_, _, buf, err := fc.wp.opResponse()
+	if err != nil {
+		return
+	}
 
 	stmt.stmtType, stmt.xsqlda, err = fc.wp.parse_xsqlda(buf, stmt.stmtHandle)
 	stmt.blr = calcBlr(stmt.xsqlda)
