@@ -32,6 +32,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"strconv"
 )
 
 func debugPrint(s string) {
@@ -177,14 +178,14 @@ func (p *wireProtocol) _parse_status_vector() (*list.List, int, string, error) {
 				sql_code = num
 			}
 			num_arg += 1
-			message = strings.Replace(message, "@"+string(num_arg), string(num), 1)
+			message = strings.Replace(message, "@"+strconv.Itoa(num_arg), strconv.Itoa(num), 1)
 		case n == isc_arg_string || n == isc_arg_interpreted:
 			b, err = p.recvPackets(4)
 			nbytes := int(bytes_to_bint32(b))
 			b, err = p.recvPacketsAlignment(nbytes)
 			s := bytes_to_str(b)
 			num_arg += 1
-			message = strings.Replace(message, fmt.Sprintf("@%d", num_arg), s, 1)
+			message = strings.Replace(message, "@"+strconv.Itoa(num_arg), s, 1)
 		case n == isc_arg_sql_state:
 			b, err = p.recvPackets(4)
 			nbytes := int(bytes_to_bint32(b))
