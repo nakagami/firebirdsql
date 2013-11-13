@@ -119,8 +119,8 @@ func TestError(t *testing.T) {
 		t.Fatalf("Error connecting: %v", err)
 	}
 	_, err = conn.Exec("incorrect sql statement")
-	if err != nil {
-		t.Fatalf("Error conn.Exec(): %v", err)
+	if err == nil {
+		t.Fatalf("Bad conn.Exec() not return errro")
 	}
 }
 
