@@ -27,6 +27,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"math"
+	"math/big"
 	"time"
 )
 
@@ -175,27 +176,27 @@ func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
 	case SQL_TYPE_SHORT:
 		i16 := bytes_to_bint16(raw_value)
 		if x.sqlscale > 0 {
-			v = int64(i16) * int64(math.Pow(10.0, float64(x.sqlscale)))
+			v = int64(i16) * int64(math.Pow10(x.sqlscale))
 		} else if x.sqlscale < 0 {
-			v = float64(i16) * math.Pow(10.0, float64(x.sqlscale))
+			v = big.NewRat(int64(i16), int64(math.Pow10(x.sqlscale*-1)))
 		} else {
 			v = i16
 		}
 	case SQL_TYPE_LONG:
 		i32 := bytes_to_bint32(raw_value)
 		if x.sqlscale > 0 {
-			v = int64(i32) * int64(math.Pow(10.0, float64(x.sqlscale)))
+			v = int64(i32) * int64(math.Pow10(x.sqlscale))
 		} else if x.sqlscale < 0 {
-			v = float64(i32) * math.Pow(10.0, float64(x.sqlscale))
+			v = big.NewRat(int64(i32), int64(math.Pow10(x.sqlscale*-1)))
 		} else {
 			v = i32
 		}
 	case SQL_TYPE_INT64:
 		i64 := bytes_to_bint64(raw_value)
 		if x.sqlscale > 0 {
-			v = i64 * int64(math.Pow(10.0, float64(x.sqlscale)))
+			v = i64 * int64(math.Pow10(x.sqlscale))
 		} else if x.sqlscale < 0 {
-			v = float64(i64) * math.Pow(10.0, float64(x.sqlscale))
+			v = big.NewRat(i64, int64(math.Pow10(x.sqlscale*-1)))
 		} else {
 			v = i64
 		}
