@@ -14,6 +14,7 @@ Installation
 
 ::
 
+   $ go get github.com/cznic/mathutil
    $ go get github.com/nakagami/firebirdsql
 
 
