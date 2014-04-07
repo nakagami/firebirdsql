@@ -59,10 +59,13 @@ func bigToSha1(n *big.Int) []byte {
 func pad(v *big.Int) []byte {
 	buf := make([]byte, SRP_KEY_SIZE)
 	var m big.Int
+	var n *big.Int
+	n = big.NewInt(0)
+	n = n.Add(n, v)
 
 	for i, _ := range buf {
-		buf[i] = byte(m.And(m.SetInt64(255), v).Int64())
-		v = v.Div(v, m.SetInt64(255))
+		buf[i] = byte(m.And(m.SetInt64(255), n).Int64())
+		n = n.Div(n, m.SetInt64(255))
 	}
 
 	// reverse
