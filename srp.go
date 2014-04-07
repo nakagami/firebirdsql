@@ -24,17 +24,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
-    "bytes"
+	"bytes"
 	"crypto/sha1"
+	"github.com/cznic/mathutil"
 	"math/big"
-    "math/rand"
-    "github.com/cznic/mathutil"
+	"math/rand"
 )
 
 const (
-	SRP_KEY_SIZE  = 128
-	SRP_SALT_SIZE = 32
-    DEBUG_PRIVATE_KEY = "60975527035CF2AD1989806F0407210BC81EDC04E2762A56AFD529DDDA2D4393"
+	SRP_KEY_SIZE      = 128
+	SRP_SALT_SIZE     = 32
+	DEBUG_PRIVATE_KEY = "60975527035CF2AD1989806F0407210BC81EDC04E2762A56AFD529DDDA2D4393"
 )
 
 func bigFromHexString(s string) *big.Int {
@@ -57,44 +57,44 @@ func bigToSha1(n *big.Int) []byte {
 }
 
 func pad(v *big.Int) []byte {
-    buf := make([]byte, SRP_KEY_SIZE)
-    var m big.Int
+	buf := make([]byte, SRP_KEY_SIZE)
+	var m big.Int
 
-  	for i, _ := range buf {
-        buf[i] = byte(m.And(m.SetInt64(255), v).Int64())
-        v = v.Div(v, m.SetInt64(255))
-  	}
+	for i, _ := range buf {
+		buf[i] = byte(m.And(m.SetInt64(255), v).Int64())
+		v = v.Div(v, m.SetInt64(255))
+	}
 
-    // reverse
-    for i, j := 0, len(buf)-1; i < j; i, j = i+1, j-1 {
-        buf[i], buf[j] = buf[j], buf[i]
-    }
+	// reverse
+	for i, j := 0, len(buf)-1; i < j; i, j = i+1, j-1 {
+		buf[i], buf[j] = buf[j], buf[i]
+	}
 
-    return buf
+	return buf
 }
 
-func bigToBytes(v *big.Int) [] byte{
-    buf := pad(v)
-    for i, _ := range buf {
-        if buf[i] != 0 {
-            return buf[i:]
-        }
-    }
+func bigToBytes(v *big.Int) []byte {
+	buf := pad(v)
+	for i, _ := range buf {
+		if buf[i] != 0 {
+			return buf[i:]
+		}
+	}
 
-    return buf[:1]  // 0
+	return buf[:1] // 0
 }
 
 func bytesToBig(v []byte) (r *big.Int) {
-    m := new(big.Int)
-    m.SetInt64(255)
-    a := new(big.Int)
+	m := new(big.Int)
+	m.SetInt64(255)
+	a := new(big.Int)
 	r = new(big.Int)
-    r.SetInt64(0)
-    for _, b := range v {
-        r = r.Mul(r, m)
-        r = r.Add(r, a.SetInt64(int64(b)))
-    }
-    return r
+	r.SetInt64(0)
+	for _, b := range v {
+		r = r.Mul(r, m)
+		r = r.Add(r, a.SetInt64(int64(b)))
+	}
+	return r
 }
 
 func getPrime() (prime *big.Int, g *big.Int, k *big.Int) {
@@ -112,91 +112,89 @@ func getScramble(keyA *big.Int, keyB *big.Int) *big.Int {
 	sha1.Write(pad(keyA))
 	sha1.Write(pad(keyB))
 
-    return bytesToBig(sha1.Sum(nil))
+	return bytesToBig(sha1.Sum(nil))
 }
 
 func getStringHash(s string) *big.Int {
-    hash := sha1.New()
-    hash.Write(bytes.NewBufferString(s).Bytes())
-    return bytesToBig(hash.Sum(nil))
+	hash := sha1.New()
+	hash.Write(bytes.NewBufferString(s).Bytes())
+	return bytesToBig(hash.Sum(nil))
 }
 
 func getUserHash(salt []byte, user string, password string) *big.Int {
-    hash1 := sha1.New()
-    hash1.Write(bytes.NewBufferString(user + ":" + password).Bytes())
-    hash2 := sha1.New()
-    hash2.Write(salt)
-    hash2.Write(hash1.Sum(nil))
-    return bytesToBig(hash2.Sum(nil))
+	hash1 := sha1.New()
+	hash1.Write(bytes.NewBufferString(user + ":" + password).Bytes())
+	hash2 := sha1.New()
+	hash2.Write(salt)
+	hash2.Write(hash1.Sum(nil))
+	return bytesToBig(hash2.Sum(nil))
 }
 
 func getClientSeed(user string, password string) (keyA *big.Int, keya *big.Int) {
-    prime, g, _ := getPrime()
-	keya = new(big.Int).Rand(rand.New(rand.NewSource(0)), 
-        bigFromString("340282366920938463463374607431768211456")) // 1 << 128
-    keyA = mathutil.ModPowBigInt(g, keya, prime)
+	prime, g, _ := getPrime()
+	keya = new(big.Int).Rand(rand.New(rand.NewSource(0)),
+		bigFromString("340282366920938463463374607431768211456")) // 1 << 128
+	keyA = mathutil.ModPowBigInt(g, keya, prime)
 	return
 }
 
 func getSalt() []byte {
-    buf := make([]byte, SRP_SALT_SIZE)
-  	for i, _ := range buf {
-        buf[i] = byte(rand.Intn(256))
-    }
-    return buf
+	buf := make([]byte, SRP_SALT_SIZE)
+	for i, _ := range buf {
+		buf[i] = byte(rand.Intn(256))
+	}
+	return buf
 }
-
 
 func getVerifier(user string, password string, salt []byte) *big.Int {
-    prime, g, _ := getPrime()
-    x := getUserHash(salt, user, password)
-    return mathutil.ModPowBigInt(g, x, prime)
+	prime, g, _ := getPrime()
+	x := getUserHash(salt, user, password)
+	return mathutil.ModPowBigInt(g, x, prime)
 }
 
-
-func getServerSeed(v *big.Int) (keyB *big.Int, keyb *big.Int){
-    prime, g, k := getPrime()
-	keyb = new(big.Int).Rand(rand.New(rand.NewSource(0)), 
-        bigFromString("340282366920938463463374607431768211456"))   // 1 << 128
-    gb := mathutil.ModPowBigInt(g, keyb, prime)                 // gb = pow(g, b, N)
-    kv := new(big.Int).Mod(new(big.Int).Mul(k, v), prime)       // kv = (k * v) % N
-    keyB = new(big.Int).Mod(new(big.Int).Add(kv, gb), prime)    // B = (kv + gb) % N
-    return
+func getServerSeed(v *big.Int) (keyB *big.Int, keyb *big.Int) {
+	prime, g, k := getPrime()
+	keyb = new(big.Int).Rand(rand.New(rand.NewSource(0)),
+		bigFromString("340282366920938463463374607431768211456")) // 1 << 128
+	gb := mathutil.ModPowBigInt(g, keyb, prime)              // gb = pow(g, b, N)
+	kv := new(big.Int).Mod(new(big.Int).Mul(k, v), prime)    // kv = (k * v) % N
+	keyB = new(big.Int).Mod(new(big.Int).Add(kv, gb), prime) // B = (kv + gb) % N
+	return
 }
 
 func getClientSession(user string, password string, salt []byte, keyA *big.Int, keyB *big.Int, keya *big.Int) []byte {
-    prime, g, k := getPrime()
-    u := getScramble(keyA, keyB)
-    x := getUserHash(salt, user, password)
-    gx := mathutil.ModPowBigInt(g, x, prime)            // gx = pow(g, x, N)
-    kgx := new(big.Int).Mod(new(big.Int).Mul(k, gx), prime) // kgx = (k * gx) % N
-    diff := new(big.Int).Mod(new(big.Int).Sub(keyB, kgx), prime) // diff = (B - kgx) % N
-    ux := new(big.Int).Mod(new(big.Int).Mul(u, x), prime) // ux = (u * x) % N
-    aux := new(big.Int).Add(new(big.Int).Mul(keya, ux), prime) // aux = (a + ux) % N
-    sessionSecret := mathutil.ModPowBigInt(diff, aux, prime) // (B - kg^x) ^ (a + ux)
+	prime, g, k := getPrime()
+	u := getScramble(keyA, keyB)
+	x := getUserHash(salt, user, password)
+	gx := mathutil.ModPowBigInt(g, x, prime)                     // gx = pow(g, x, N)
+	kgx := new(big.Int).Mod(new(big.Int).Mul(k, gx), prime)      // kgx = (k * gx) % N
+	diff := new(big.Int).Mod(new(big.Int).Sub(keyB, kgx), prime) // diff = (B - kgx) % N
+	ux := new(big.Int).Mod(new(big.Int).Mul(u, x), prime)        // ux = (u * x) % N
+	aux := new(big.Int).Add(new(big.Int).Mul(keya, ux), prime)   // aux = (a + ux) % N
+	sessionSecret := mathutil.ModPowBigInt(diff, aux, prime)     // (B - kg^x) ^ (a + ux)
 
-    return bigToSha1(sessionSecret)
+	return bigToSha1(sessionSecret)
 }
 
 func getServerSession(user string, password string, salt []byte, keyA *big.Int, keyB *big.Int, keyb *big.Int) []byte {
-    prime, _, _ := getPrime()
-    u := getScramble(keyA, keyB)
-    v := getVerifier(user, password, salt)
-    vu := mathutil.ModPowBigInt(v, u, prime)
-    avu := new(big.Int).Mod(new(big.Int).Mul(keyA, vu), prime)
-    sessionSecret := mathutil.ModPowBigInt(avu, keyb, prime)
-    return bigToSha1(sessionSecret)
+	prime, _, _ := getPrime()
+	u := getScramble(keyA, keyB)
+	v := getVerifier(user, password, salt)
+	vu := mathutil.ModPowBigInt(v, u, prime)
+	avu := new(big.Int).Mod(new(big.Int).Mul(keyA, vu), prime)
+	sessionSecret := mathutil.ModPowBigInt(avu, keyb, prime)
+	return bigToSha1(sessionSecret)
 }
 
 func getClientProof(user string, password string, salt []byte, keyA *big.Int, keyB *big.Int, keya *big.Int) (keyM []byte, keyK []byte) {
-    // M = H(H(N) xor H(g), H(I), s, A, B, K)
-    prime, g, _ := getPrime()
-    keyK = getClientSession(user, password, salt, keyA, keyB, keya)
+	// M = H(H(N) xor H(g), H(I), s, A, B, K)
+	prime, g, _ := getPrime()
+	keyK = getClientSession(user, password, salt, keyA, keyB, keya)
 
-    n1 := bytesToBig(bigToSha1(prime))
-    n2 := bytesToBig(bigToSha1(g))
-    n3 := mathutil.ModPowBigInt(n1, n2, prime)
-    n4 := getStringHash(user)
+	n1 := bytesToBig(bigToSha1(prime))
+	n2 := bytesToBig(bigToSha1(g))
+	n3 := mathutil.ModPowBigInt(n1, n2, prime)
+	n4 := getStringHash(user)
 	sha1 := sha1.New()
 	sha1.Write(n3.Bytes())
 	sha1.Write(n4.Bytes())
@@ -206,6 +204,5 @@ func getClientProof(user string, password string, salt []byte, keyA *big.Int, ke
 	sha1.Write(keyK)
 	keyM = sha1.Sum(nil)
 
-    return keyM, keyK
+	return keyM, keyK
 }
-
