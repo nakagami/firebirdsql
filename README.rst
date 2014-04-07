@@ -7,7 +7,7 @@ Firebird RDBMS http://firebirdsql.org SQL driver for Go
 Requirements
 -------------
 
-* Firebird 2.x or later (not 1.x)
+* Firebird 2.1 or later
 
 Installation
 -------------
