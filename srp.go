@@ -89,7 +89,7 @@ func bigToBytes(v *big.Int) []byte {
 
 func bytesToBig(v []byte) (r *big.Int) {
 	m := new(big.Int)
-	m.SetInt64(255)
+	m.SetInt64(256)
 	a := new(big.Int)
 	r = new(big.Int)
 	r.SetInt64(0)
