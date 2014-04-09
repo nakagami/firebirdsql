@@ -25,20 +25,21 @@ package firebirdsql
 
 import (
 	"testing"
-    "fmt"
 )
 
 func TestSrp(t *testing.T) {
-    user := "SYSDBA"
-    password := "masterkey"
+	user := "SYSDBA"
+	password := "masterkey"
 
-    keyA, keya := getClientSeed(user, password)
-    salt := getSalt()
-    v := getVerifier(user, password, salt)
-    keyB, keyb := getServerSeed(v)
-    serverKey := getServerSession(user, password, salt, keyA, keyB, keyb)
-    _, clientKey := getClientProof(user, password, salt, keyA, keyB, keya)
-    fmt.Println(clientKey)
-    fmt.Println(serverKey)
+	keyA, keya := getClientSeed(user, password)
+	salt := getSalt()
+	v := getVerifier(user, password, salt)
+	keyB, keyb := getServerSeed(v)
+	serverKey := getServerSession(user, password, salt, keyA, keyB, keyb)
+	_, clientKey := getClientProof(user, password, salt, keyA, keyB, keya)
+	for i, _ := range clientKey {
+		if clientKey[i] != serverKey[i] {
+			t.Fatalf("Error srp key exchange")
+		}
+	}
 }
-

@@ -29,6 +29,7 @@ import (
 	"github.com/cznic/mathutil"
 	"math/big"
 	"math/rand"
+	"time"
 )
 
 const (
@@ -65,7 +66,7 @@ func pad(v *big.Int) []byte {
 
 	for i, _ := range buf {
 		buf[i] = byte(m.And(m.SetInt64(255), n).Int64())
-		n = n.Div(n, m.SetInt64(255))
+		n = n.Div(n, m.SetInt64(256))
 	}
 
 	// reverse
@@ -135,7 +136,7 @@ func getUserHash(salt []byte, user string, password string) *big.Int {
 
 func getClientSeed(user string, password string) (keyA *big.Int, keya *big.Int) {
 	prime, g, _ := getPrime()
-	keya = new(big.Int).Rand(rand.New(rand.NewSource(0)),
+	keya = new(big.Int).Rand(rand.New(rand.NewSource(time.Now().UnixNano())),
 		bigFromString("340282366920938463463374607431768211456")) // 1 << 128
 	keyA = mathutil.ModPowBigInt(g, keya, prime)
 	return
@@ -157,7 +158,7 @@ func getVerifier(user string, password string, salt []byte) *big.Int {
 
 func getServerSeed(v *big.Int) (keyB *big.Int, keyb *big.Int) {
 	prime, g, k := getPrime()
-	keyb = new(big.Int).Rand(rand.New(rand.NewSource(0)),
+	keyb = new(big.Int).Rand(rand.New(rand.NewSource(time.Now().UnixNano())),
 		bigFromString("340282366920938463463374607431768211456")) // 1 << 128
 	gb := mathutil.ModPowBigInt(g, keyb, prime)              // gb = pow(g, b, N)
 	kv := new(big.Int).Mod(new(big.Int).Mul(k, v), prime)    // kv = (k * v) % N
@@ -173,7 +174,7 @@ func getClientSession(user string, password string, salt []byte, keyA *big.Int, 
 	kgx := new(big.Int).Mod(new(big.Int).Mul(k, gx), prime)      // kgx = (k * gx) % N
 	diff := new(big.Int).Mod(new(big.Int).Sub(keyB, kgx), prime) // diff = (B - kgx) % N
 	ux := new(big.Int).Mod(new(big.Int).Mul(u, x), prime)        // ux = (u * x) % N
-	aux := new(big.Int).Add(new(big.Int).Mul(keya, ux), prime)   // aux = (a + ux) % N
+	aux := new(big.Int).Mod(new(big.Int).Add(keya, ux), prime)   // aux = (a + ux) % N
 	sessionSecret := mathutil.ModPowBigInt(diff, aux, prime)     // (B - kg^x) ^ (a + ux)
 
 	return bigToSha1(sessionSecret)
