@@ -31,12 +31,12 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"strings"
 	"strconv"
+	"strings"
 )
 
 func debugPrint(s string) {
-//	    fmt.Println(s)
+	//	    fmt.Println(s)
 }
 
 func _INFO_SQL_SELECT_DESCRIBE_VARS() []byte {
