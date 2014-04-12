@@ -115,21 +115,18 @@ func (p *wireProtocol) appendBytes(bs []byte) {
 	}
 }
 
-func getClientPublicBytes(clientPublic *big.Int) []byte {
-	var bs []byte
-	b := bigToBytes(clientPublic)
-	b = bytes.NewBufferString(hex.EncodeToString(b)).Bytes()
+func getClientPublicBytes(clientPublic *big.Int) (bs []byte) {
+	b := bytes.NewBufferString(hex.EncodeToString(bigToBytes(clientPublic))).Bytes()
 	if len(b) > 254 {
 		bs = bytes.Join([][]byte{
-			[]byte{CNCT_specific_data, byte(255)}, b[:254],
-			[]byte{CNCT_specific_data, byte(len(b) - 254)}, b[254:],
+			[]byte{CNCT_specific_data, byte(255), 0}, b[:254],
+			[]byte{CNCT_specific_data, byte(len(b)-254) + 1, 1}, b[254:],
 		}, nil)
 	} else {
 		bs = bytes.Join([][]byte{
-			[]byte{CNCT_specific_data, byte(len(b))}, b,
+			[]byte{CNCT_specific_data, byte(len(b)) + 1, 0}, b,
 		}, nil)
 	}
-
 	return bs
 }
 
