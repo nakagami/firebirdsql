@@ -118,6 +118,7 @@ func (p *wireProtocol) appendBytes(bs []byte) {
 func getClientPublicBytes(clientPublic *big.Int) []byte {
 	var bs []byte
 	b := bigToBytes(clientPublic)
+	b = bytes.NewBufferString(hex.EncodeToString(b)).Bytes()
 	if len(b) > 254 {
 		bs = bytes.Join([][]byte{
 			[]byte{CNCT_specific_data, byte(255)}, b[:254],
@@ -129,7 +130,7 @@ func getClientPublicBytes(clientPublic *big.Int) []byte {
 		}, nil)
 	}
 
-	return bytes.NewBufferString(hex.EncodeToString(bs)).Bytes()
+	return bs
 }
 
 func (p *wireProtocol) uid(user string, passwd string, clientPublic *big.Int) []byte {
@@ -145,17 +146,16 @@ func (p *wireProtocol) uid(user string, passwd string, clientPublic *big.Int) []
 	pluginListNameBytes := bytes.NewBufferString("Srp,Legacy_Auth").Bytes()
 	pluginNameBytes := bytes.NewBufferString("Srp").Bytes()
 	userBytes := bytes.NewBufferString(user).Bytes()
-	passwdBytes := bytes.NewBufferString(passwd).Bytes()
 
 	return bytes.Join([][]byte{
 		[]byte{CNCT_login, byte(len(userBytes))}, userBytes,
-		[]byte{CNCT_passwd, byte(len(passwdBytes))}, passwdBytes,
-		[]byte{CNCT_plugin_list, byte(len(pluginListNameBytes))}, pluginListNameBytes,
 		[]byte{CNCT_plugin_name, byte(len(pluginNameBytes))}, pluginNameBytes,
+		[]byte{CNCT_plugin_list, byte(len(pluginListNameBytes))}, pluginListNameBytes,
+		getClientPublicBytes(clientPublic),
+		[]byte{CNCT_client_crypt, 1, 0, 0, 0},
 		[]byte{CNCT_user, byte(len(sysUserBytes))}, sysUserBytes,
 		[]byte{CNCT_host, byte(len(hostnameBytes))}, hostnameBytes,
 		[]byte{CNCT_user_verification, 0},
-		getClientPublicBytes(clientPublic),
 	}, nil)
 }
 
