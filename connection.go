@@ -87,7 +87,7 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 		return
 	}
 
-	wp.opConnect(dbName)
+	wp.opConnect(dbName, user, passwd)
 	err = wp.opAccept()
 	if err != nil {
 		return

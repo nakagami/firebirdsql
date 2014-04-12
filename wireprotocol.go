@@ -113,17 +113,17 @@ func (p *wireProtocol) appendBytes(bs []byte) {
 	}
 }
 
-func (p *wireProtocol) uid() []byte {
-	user := os.Getenv("USER")
-	if user == "" {
-		user = os.Getenv("USERNAME")
+func (p *wireProtocol) uid(user string, passwd string) []byte {
+	sysUser := os.Getenv("USER")
+	if sysUser == "" {
+		sysUser = os.Getenv("USERNAME")
 	}
 	hostname, _ := os.Hostname()
 
-	userBytes := bytes.NewBufferString(user).Bytes()
+	sysUserBytes := bytes.NewBufferString(sysUser).Bytes()
 	hostnameBytes := bytes.NewBufferString(hostname).Bytes()
 	return bytes.Join([][]byte{
-		[]byte{1, byte(len(userBytes))}, userBytes,
+		[]byte{1, byte(len(sysUserBytes))}, sysUserBytes,
 		[]byte{4, byte(len(hostnameBytes))}, hostnameBytes,
 		[]byte{6, 0},
 	}, nil)
@@ -331,7 +331,7 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
 	return stmt_type, xsqlda, err
 }
 
-func (p *wireProtocol) opConnect(dbName string) {
+func (p *wireProtocol) opConnect(dbName string, user string, passwd string) {
 	debugPrint("opConnect")
 	p.packInt(op_connect)
 	p.packInt(op_attach)
@@ -339,39 +339,12 @@ func (p *wireProtocol) opConnect(dbName string) {
 	p.packInt(1) // Arch type (Generic = 1)
 	p.packString(dbName)
 	p.packInt(1) // Protocol version understood count.
-	p.packBytes(p.uid())
+	p.packBytes(p.uid(user, passwd))
 	p.packInt(10) // PROTOCOL_VERSION10
 	p.packInt(1)  // Arch type (Generic = 1)
 	p.packInt(2)  // Min type
 	p.packInt(3)  // Max type
 	p.packInt(2)  // Preference weight
-	p.sendPackets()
-}
-
-func (p *wireProtocol) opCreate(dbName string, user string, passwd string) {
-	debugPrint("opCreate")
-	var page_size int32
-	page_size = 4096
-
-	encode := bytes.NewBufferString("UTF8").Bytes()
-	userBytes := bytes.NewBufferString(user).Bytes()
-	passwdBytes := bytes.NewBufferString(passwd).Bytes()
-	dpb := bytes.Join([][]byte{
-		[]byte{1},
-		[]byte{68, byte(len(encode))}, encode,
-		[]byte{48, byte(len(encode))}, encode,
-		[]byte{28, byte(len(userBytes))}, userBytes,
-		[]byte{29, byte(len(passwdBytes))}, passwdBytes,
-		[]byte{63, 4}, int32_to_bytes(3),
-		[]byte{24, 4}, bint32_to_bytes(1),
-		[]byte{54, 4}, bint32_to_bytes(1),
-		[]byte{4, 4}, int32_to_bytes(page_size),
-	}, nil)
-
-	p.packInt(op_create)
-	p.packInt(0) // Database Object ID
-	p.packString(dbName)
-	p.packBytes(dpb)
 	p.sendPackets()
 }
 
