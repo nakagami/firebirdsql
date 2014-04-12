@@ -27,6 +27,7 @@ import (
 	"bytes"
 	"container/list"
 	"database/sql/driver"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
@@ -115,17 +116,20 @@ func (p *wireProtocol) appendBytes(bs []byte) {
 }
 
 func getClientPublicBytes(clientPublic *big.Int) []byte {
+	var bs []byte
 	b := bigToBytes(clientPublic)
 	if len(b) > 254 {
-		return bytes.Join([][]byte{
+		bs = bytes.Join([][]byte{
 			[]byte{CNCT_specific_data, byte(255)}, b[:254],
 			[]byte{CNCT_specific_data, byte(len(b) - 254)}, b[254:],
 		}, nil)
 	} else {
-		return bytes.Join([][]byte{
+		bs = bytes.Join([][]byte{
 			[]byte{CNCT_specific_data, byte(len(b))}, b,
 		}, nil)
 	}
+
+	return bytes.NewBufferString(hex.EncodeToString(bs)).Bytes()
 }
 
 func (p *wireProtocol) uid(user string, passwd string, clientPublic *big.Int) []byte {
