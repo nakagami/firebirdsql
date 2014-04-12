@@ -25,6 +25,7 @@ package firebirdsql
 
 import (
 	"database/sql/driver"
+	"math/big"
 )
 
 type firebirdsqlConn struct {
@@ -35,6 +36,8 @@ type firebirdsqlConn struct {
 	user         string
 	passwd       string
 	isAutocommit bool
+	clientPublic *big.Int
+	clientSecret *big.Int
 }
 
 func (fc *firebirdsqlConn) Begin() (driver.Tx, error) {
@@ -86,8 +89,9 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	if err != nil {
 		return
 	}
+	clientPublic, clientSecret := getClientSeed()
 
-	wp.opConnect(dbName, user, passwd)
+	wp.opConnect(dbName, user, passwd, clientPublic)
 	err = wp.opAccept()
 	if err != nil {
 		return
@@ -106,6 +110,8 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	fc.passwd = passwd
 	fc.tx, err = newFirebirdsqlTx(wp)
 	fc.isAutocommit = true
+	fc.clientPublic = clientPublic
+	fc.clientSecret = clientSecret
 
 	return fc, err
 }

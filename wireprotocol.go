@@ -29,6 +29,7 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"math/big"
 	"net"
 	"os"
 	"strconv"
@@ -341,7 +342,7 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
 	return stmt_type, xsqlda, err
 }
 
-func (p *wireProtocol) opConnect(dbName string, user string, passwd string) {
+func (p *wireProtocol) opConnect(dbName string, user string, passwd string, clientPublic *big.Int) {
 	debugPrint("opConnect")
 
 	p.packInt(op_connect)
