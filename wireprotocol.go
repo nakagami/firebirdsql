@@ -114,6 +114,20 @@ func (p *wireProtocol) appendBytes(bs []byte) {
 	}
 }
 
+func getClientPublicBytes(clientPublic *big.Int) []byte {
+	b := bigToBytes(clientPublic)
+	if len(b) > 254 {
+		return bytes.Join([][]byte{
+			[]byte{CNCT_specific_data, byte(255)}, b[:254],
+			[]byte{CNCT_specific_data, byte(len(b) - 254)}, b[254:],
+		}, nil)
+	} else {
+		return bytes.Join([][]byte{
+			[]byte{CNCT_specific_data, byte(len(b))}, b,
+		}, nil)
+	}
+}
+
 func (p *wireProtocol) uid(user string, passwd string, clientPublic *big.Int) []byte {
 	sysUser := os.Getenv("USER")
 	if sysUser == "" {
@@ -137,6 +151,7 @@ func (p *wireProtocol) uid(user string, passwd string, clientPublic *big.Int) []
 		[]byte{CNCT_user, byte(len(sysUserBytes))}, sysUserBytes,
 		[]byte{CNCT_host, byte(len(hostnameBytes))}, hostnameBytes,
 		[]byte{CNCT_user_verification, 0},
+		getClientPublicBytes(clientPublic),
 	}, nil)
 }
 
