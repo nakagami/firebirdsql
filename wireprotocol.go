@@ -119,13 +119,23 @@ func (p *wireProtocol) uid(user string, passwd string) []byte {
 		sysUser = os.Getenv("USERNAME")
 	}
 	hostname, _ := os.Hostname()
+	user = strings.ToUpper(user)
 
 	sysUserBytes := bytes.NewBufferString(sysUser).Bytes()
 	hostnameBytes := bytes.NewBufferString(hostname).Bytes()
+	pluginListNameBytes := bytes.NewBufferString("Srp,Legacy_Auth").Bytes()
+	pluginNameBytes := bytes.NewBufferString("Srp").Bytes()
+	userBytes := bytes.NewBufferString(user).Bytes()
+	passwdBytes := bytes.NewBufferString(passwd).Bytes()
+
 	return bytes.Join([][]byte{
-		[]byte{1, byte(len(sysUserBytes))}, sysUserBytes,
-		[]byte{4, byte(len(hostnameBytes))}, hostnameBytes,
-		[]byte{6, 0},
+		[]byte{CNCT_login, byte(len(userBytes))}, userBytes,
+		[]byte{CNCT_passwd, byte(len(passwdBytes))}, passwdBytes,
+		[]byte{CNCT_plugin_list, byte(len(pluginListNameBytes))}, pluginListNameBytes,
+		[]byte{CNCT_plugin_name, byte(len(pluginNameBytes))}, pluginNameBytes,
+		[]byte{CNCT_user, byte(len(sysUserBytes))}, sysUserBytes,
+		[]byte{CNCT_host, byte(len(hostnameBytes))}, hostnameBytes,
+		[]byte{CNCT_user_verification, 0},
 	}, nil)
 }
 
@@ -333,6 +343,7 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
 
 func (p *wireProtocol) opConnect(dbName string, user string, passwd string) {
 	debugPrint("opConnect")
+
 	p.packInt(op_connect)
 	p.packInt(op_attach)
 	p.packInt(2) // CONNECT_VERSION2

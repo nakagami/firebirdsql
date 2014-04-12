@@ -134,7 +134,7 @@ func getUserHash(salt []byte, user string, password string) *big.Int {
 	return bytesToBig(hash2.Sum(nil))
 }
 
-func getClientSeed(user string, password string) (keyA *big.Int, keya *big.Int) {
+func getClientSeed() (keyA *big.Int, keya *big.Int) {
 	prime, g, _ := getPrime()
 	keya = new(big.Int).Rand(rand.New(rand.NewSource(time.Now().UnixNano())),
 		bigFromString("340282366920938463463374607431768211456")) // 1 << 128

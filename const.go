@@ -26,6 +26,17 @@ package firebirdsql
 const (
 	ISC_TIME_SECONDS_PRECISION = 10000
 
+	CNCT_user              = 1
+	CNCT_passwd            = 2
+	CNCT_host              = 4
+	CNCT_group             = 5
+	CNCT_user_verification = 6
+	CNCT_specific_data     = 7
+	CNCT_plugin_name       = 8
+	CNCT_login             = 9
+	CNCT_plugin_list       = 10
+	CNCT_client_crypt      = 11
+
 	isc_info_end            = 1
 	isc_info_truncated      = 2
 	isc_info_error          = 3

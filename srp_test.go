@@ -31,7 +31,7 @@ func TestSrp(t *testing.T) {
 	user := "SYSDBA"
 	password := "masterkey"
 
-	keyA, keya := getClientSeed(user, password)
+	keyA, keya := getClientSeed()
 	salt := getSalt()
 	v := getVerifier(user, password, salt)
 	keyB, keyb := getServerSeed(v)
