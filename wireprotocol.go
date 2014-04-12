@@ -114,7 +114,7 @@ func (p *wireProtocol) appendBytes(bs []byte) {
 	}
 }
 
-func (p *wireProtocol) uid(user string, passwd string) []byte {
+func (p *wireProtocol) uid(user string, passwd string, clientPublic *big.Int) []byte {
 	sysUser := os.Getenv("USER")
 	if sysUser == "" {
 		sysUser = os.Getenv("USERNAME")
@@ -351,7 +351,7 @@ func (p *wireProtocol) opConnect(dbName string, user string, passwd string, clie
 	p.packInt(1) // Arch type (Generic = 1)
 	p.packString(dbName)
 	p.packInt(1) // Protocol version understood count.
-	p.packBytes(p.uid(user, passwd))
+	p.packBytes(p.uid(user, passwd, clientPublic))
 	p.packInt(10) // PROTOCOL_VERSION10
 	p.packInt(1)  // Arch type (Generic = 1)
 	p.packInt(2)  // Min type
