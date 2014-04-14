@@ -376,6 +376,33 @@ func (p *wireProtocol) opConnect(dbName string, user string, passwd string, clie
 	p.sendPackets()
 }
 
+func (p *wireProtocol) opCreate(dbName string, user string, passwd string) {
+	debugPrint("opCreate")
+	var page_size int32
+	page_size = 4096
+
+	encode := bytes.NewBufferString("UTF8").Bytes()
+	userBytes := bytes.NewBufferString(user).Bytes()
+	passwdBytes := bytes.NewBufferString(passwd).Bytes()
+	dpb := bytes.Join([][]byte{
+		[]byte{1},
+		[]byte{68, byte(len(encode))}, encode,
+		[]byte{48, byte(len(encode))}, encode,
+		[]byte{28, byte(len(userBytes))}, userBytes,
+		[]byte{29, byte(len(passwdBytes))}, passwdBytes,
+		[]byte{63, 4}, int32_to_bytes(3),
+		[]byte{24, 4}, bint32_to_bytes(1),
+		[]byte{54, 4}, bint32_to_bytes(1),
+		[]byte{4, 4}, int32_to_bytes(page_size),
+	}, nil)
+
+	p.packInt(op_create)
+	p.packInt(0) // Database Object ID
+	p.packString(dbName)
+	p.packBytes(dpb)
+	p.sendPackets()
+}
+
 func (p *wireProtocol) opAccept() (err error) {
 	debugPrint("opAccept")
 	b, _ := p.recvPackets(4)
