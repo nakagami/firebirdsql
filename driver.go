@@ -34,6 +34,13 @@ func (d *firebirdsqlDriver) Open(dsn string) (driver.Conn, error) {
 	return newFirebirdsqlConn(dsn)
 }
 
+type firebirdsqlTestDriver struct{}
+
+func (d *firebirdsqlTestDriver) Open(dsn string) (driver.Conn, error) {
+	return createFirebirdsqlConn(dsn)
+}
+
 func init() {
 	sql.Register("firebirdsql", &firebirdsqlDriver{})
+	sql.Register("firebirdsql_test", &firebirdsqlTestDriver{})
 }

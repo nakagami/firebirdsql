@@ -115,3 +115,35 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 
 	return fc, err
 }
+
+func createFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
+	// Create Database
+	addr, dbName, user, passwd, err := parseDSN(dsn)
+	wp, err := newWireProtocol(addr)
+	if err != nil {
+		return
+	}
+
+	clientPublic, clientSecret := getClientSeed()
+
+	wp.opConnect(dbName, user, passwd, clientPublic)
+	err = wp.opAccept()
+	if err != nil {
+		return
+	}
+	wp.opCreate(dbName, user, passwd)
+	wp.dbHandle, _, _, err = wp.opResponse()
+
+	fc = new(firebirdsqlConn)
+	fc.wp = wp
+	fc.addr = addr
+	fc.dbName = dbName
+	fc.user = user
+	fc.passwd = passwd
+	fc.tx, err = newFirebirdsqlTx(wp)
+	fc.isAutocommit = true
+	fc.clientPublic = clientPublic
+	fc.clientSecret = clientSecret
+
+	return fc, err
+}

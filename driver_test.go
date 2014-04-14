@@ -30,7 +30,7 @@ import (
 )
 
 func TestBasic(t *testing.T) {
-	conn, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
+	conn, err := sql.Open("firebirdsql_test", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
