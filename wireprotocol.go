@@ -68,6 +68,10 @@ type wireProtocol struct {
 	conn     net.Conn
 	dbHandle int32
 	addr     string
+
+	acceptVersion      int32
+	acceptArchitecture int32
+	acceptType         int32
 }
 
 func newWireProtocol(addr string) (*wireProtocol, error) {
@@ -406,23 +410,31 @@ func (p *wireProtocol) opCreate(dbName string, user string, passwd string) {
 func (p *wireProtocol) opAccept() (err error) {
 	debugPrint("opAccept")
 	b, _ := p.recvPackets(4)
-	for bytes_to_bint32(b) == op_dummy {
+	opcode := bytes_to_bint32(b)
+
+	for opcode == op_dummy {
 		b, _ = p.recvPackets(4)
 	}
 
-	if bytes_to_bint32(b) == op_reject {
+	if opcode == op_reject {
 		err = errors.New("opAccept() connection is rejected")
 		return
 	}
+	if opcode == op_response {
+		p._parse_op_response() // error occured
+		err = errors.New("opAccept:Internal Error")
+		return
+	}
 
-	if bytes_to_bint32(b) != op_accept {
+	b, _ = p.recvPackets(12)
+	p.acceptVersion = bytes_to_bint32(b[0:4])
+	p.acceptArchitecture = bytes_to_bint32(b[4:8])
+	p.acceptType = bytes_to_bint32(b[8:12])
+
+	if opcode != op_accept {
 		err = errors.New("opAccept() protocol error")
 		return
 	}
-	b, _ = p.recvPackets(12)
-	// assert up.unpack_int() == 10
-	// assert  up.unpack_int() == 1
-	// assert up.unpack_int() == 3
 	return
 }
 
