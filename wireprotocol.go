@@ -461,6 +461,7 @@ func (p *wireProtocol) opAccept() (err error) {
 	if opcode == op_cond_accept || opcode == op_accept_data {
 		var clientProof, authKey []byte
 		var readLength, ln int
+
 		b, _ := p.recvPackets(4)
 		ln = int(bytes_to_bint32(b))
 		data, _ := p.recvPackets(ln)
@@ -468,6 +469,34 @@ func (p *wireProtocol) opAccept() (err error) {
 		if readLength%4 != 0 {
 			p.recvPackets(4 - readLength%4) // padding
 			readLength += 4 - readLength%4
+		}
+
+		b, _ = p.recvPackets(4)
+		ln = int(bytes_to_bint32(b))
+		pluginName, _ := p.recvPackets(ln)
+		readLength = int(4 + ln)
+		if readLength%4 != 0 {
+			p.recvPackets(4 - readLength%4) // padding
+			readLength += 4 - readLength%4
+		}
+		p.pluginName = bytes_to_str(pluginName)
+
+		b, _ = p.recvPackets(4)
+		isAuthenticated := bytes_to_bint32(b)
+		readLength += 4
+
+		b, _ = p.recvPackets(4)
+		ln = int(bytes_to_bint32(b))
+		_, _ := p.recvPackets(ln) // keys
+		readLength = int(4 + ln)
+		if readLength%4 != 0 {
+			p.recvPackets(4 - readLength%4) // padding
+			readLength += 4 - readLength%4
+		}
+
+		if p.pluginName == "Legacy_Auth" && isAuthenticated == 0 {
+			err = errors.New("opAccept() Unauthorized")
+			return
 		}
 
 	} else {
