@@ -433,6 +433,7 @@ func (p *wireProtocol) opCreate(dbName string, user string, passwd string) {
 
 func (p *wireProtocol) opAccept() (err error) {
 	debugPrint("opAccept")
+
 	b, _ := p.recvPackets(4)
 	opcode := bytes_to_bint32(b)
 
@@ -455,10 +456,15 @@ func (p *wireProtocol) opAccept() (err error) {
 	p.acceptArchitecture = bytes_to_bint32(b[4:8])
 	p.acceptType = bytes_to_bint32(b[8:12])
 
-	if opcode != op_accept {
-		err = errors.New("opAccept() protocol error")
-		return
+	if opcode == op_cond_accept || opcode == op_accept_data {
+		//        var clientProof, authKey [] byte
+	} else {
+		if opcode != op_accept {
+			err = errors.New("opAccept() protocol error")
+			return
+		}
 	}
+
 	return
 }
 

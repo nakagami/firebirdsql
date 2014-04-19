@@ -382,4 +382,17 @@ const (
 	op_service_info       = 84
 	op_service_start      = 85
 	op_rollback_retaining = 86
+	// FB3
+	op_update_account_info  = 87
+	op_authenticate_user    = 88
+	op_partial              = 89
+	op_trusted_auth         = 90
+	op_cancel               = 91
+	op_cont_auth            = 92
+	op_ping                 = 93
+	op_accept_data          = 94
+	op_abort_aux_connection = 95
+	op_crypt                = 96
+	op_crypt_key_callback   = 97
+	op_cond_accept          = 98
 )
