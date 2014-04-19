@@ -60,12 +60,35 @@ func _INFO_SQL_SELECT_DESCRIBE_VARS() []byte {
 	}
 }
 
+type wireChannel struct {
+	conn net.Conn
+}
+
+func newWireChannel(conn net.Conn) (wireChannel, error) {
+	var err error
+	c := new(wireChannel)
+	c.conn = conn
+
+	return *c, err
+}
+
+func (c *wireChannel) Read(buf []byte) (n int, err error) {
+	return c.conn.Read(buf)
+}
+
+func (c *wireChannel) Write(buf []byte) (n int, err error) {
+	return c.conn.Write(buf)
+}
+func (c *wireChannel) Close() error {
+	return c.conn.Close()
+}
+
 type wireProtocol struct {
 	buf        []byte
 	buffer_len int
 	bufCount   int
 
-	conn     net.Conn
+	conn     wireChannel
 	dbHandle int32
 	addr     string
 
@@ -77,14 +100,15 @@ type wireProtocol struct {
 func newWireProtocol(addr string) (*wireProtocol, error) {
 	p := new(wireProtocol)
 	p.buffer_len = 1024
-	var err error
 	p.buf = make([]byte, p.buffer_len)
 
 	p.addr = addr
-	p.conn, err = net.Dial("tcp", p.addr)
+	conn, err := net.Dial("tcp", p.addr)
 	if err != nil {
 		return nil, err
 	}
+
+	p.conn, err = newWireChannel(conn)
 
 	return p, err
 }
