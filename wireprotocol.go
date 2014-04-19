@@ -95,6 +95,8 @@ type wireProtocol struct {
 	acceptVersion      int32
 	acceptArchitecture int32
 	acceptType         int32
+
+	pluginName string
 }
 
 func newWireProtocol(addr string) (*wireProtocol, error) {
@@ -457,7 +459,17 @@ func (p *wireProtocol) opAccept() (err error) {
 	p.acceptType = bytes_to_bint32(b[8:12])
 
 	if opcode == op_cond_accept || opcode == op_accept_data {
-		//        var clientProof, authKey [] byte
+		var clientProof, authKey []byte
+		var readLength, ln int
+		b, _ := p.recvPackets(4)
+		ln = int(bytes_to_bint32(b))
+		data, _ := p.recvPackets(ln)
+		readLength = int(4 + ln)
+		if readLength%4 != 0 {
+			p.recvPackets(4 - readLength%4) // padding
+			readLength += 4 - readLength%4
+		}
+
 	} else {
 		if opcode != op_accept {
 			err = errors.New("opAccept() protocol error")
