@@ -34,7 +34,7 @@ type firebirdsqlConn struct {
 	addr         string
 	dbName       string
 	user         string
-	passwd       string
+	password     string
 	isAutocommit bool
 	clientPublic *big.Int
 	clientSecret *big.Int
@@ -84,19 +84,19 @@ func (fc *firebirdsqlConn) Query(query string, args []driver.Value) (rows driver
 }
 
 func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
-	addr, dbName, user, passwd, err := parseDSN(dsn)
+	addr, dbName, user, password, err := parseDSN(dsn)
 	wp, err := newWireProtocol(addr)
 	if err != nil {
 		return
 	}
 	clientPublic, clientSecret := getClientSeed()
 
-	wp.opConnect(dbName, user, passwd, clientPublic)
-	err = wp.opAccept()
+	wp.opConnect(dbName, user, password, clientPublic)
+	err = wp.opAccept(user, password, clientPublic, clientSecret)
 	if err != nil {
 		return
 	}
-	wp.opAttach(dbName, user, passwd)
+	wp.opAttach(dbName, user, password)
 	wp.dbHandle, _, _, err = wp.opResponse()
 	if err != nil {
 		return
@@ -107,7 +107,7 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	fc.addr = addr
 	fc.dbName = dbName
 	fc.user = user
-	fc.passwd = passwd
+	fc.password = password
 	fc.tx, err = newFirebirdsqlTx(wp)
 	fc.isAutocommit = true
 	fc.clientPublic = clientPublic
@@ -118,7 +118,7 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 
 func createFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	// Create Database
-	addr, dbName, user, passwd, err := parseDSN(dsn)
+	addr, dbName, user, password, err := parseDSN(dsn)
 	wp, err := newWireProtocol(addr)
 	if err != nil {
 		return
@@ -126,12 +126,12 @@ func createFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 
 	clientPublic, clientSecret := getClientSeed()
 
-	wp.opConnect(dbName, user, passwd, clientPublic)
-	err = wp.opAccept()
+	wp.opConnect(dbName, user, password, clientPublic)
+	err = wp.opAccept(user, password, clientPublic, clientSecret)
 	if err != nil {
 		return
 	}
-	wp.opCreate(dbName, user, passwd)
+	wp.opCreate(dbName, user, password)
 	wp.dbHandle, _, _, err = wp.opResponse()
 
 	fc = new(firebirdsqlConn)
@@ -139,7 +139,7 @@ func createFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	fc.addr = addr
 	fc.dbName = dbName
 	fc.user = user
-	fc.passwd = passwd
+	fc.password = password
 	fc.tx, err = newFirebirdsqlTx(wp)
 	fc.isAutocommit = true
 	fc.clientPublic = clientPublic

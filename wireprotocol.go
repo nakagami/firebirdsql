@@ -97,6 +97,8 @@ type wireProtocol struct {
 	acceptType         int32
 
 	pluginName string
+	user       string
+	password   string
 }
 
 func newWireProtocol(addr string) (*wireProtocol, error) {
@@ -160,7 +162,7 @@ func getClientPublicBytes(clientPublic *big.Int) (bs []byte) {
 	return bs
 }
 
-func (p *wireProtocol) uid(user string, passwd string, clientPublic *big.Int) []byte {
+func (p *wireProtocol) uid(user string, password string, clientPublic *big.Int) []byte {
 	sysUser := os.Getenv("USER")
 	if sysUser == "" {
 		sysUser = os.Getenv("USERNAME")
@@ -388,7 +390,7 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
 	return stmt_type, xsqlda, err
 }
 
-func (p *wireProtocol) opConnect(dbName string, user string, passwd string, clientPublic *big.Int) {
+func (p *wireProtocol) opConnect(dbName string, user string, password string, clientPublic *big.Int) {
 	debugPrint("opConnect")
 
 	p.packInt(op_connect)
@@ -397,7 +399,7 @@ func (p *wireProtocol) opConnect(dbName string, user string, passwd string, clie
 	p.packInt(1) // Arch type (Generic = 1)
 	p.packString(dbName)
 	p.packInt(1) // Protocol version understood count.
-	p.packBytes(p.uid(user, passwd, clientPublic))
+	p.packBytes(p.uid(user, password, clientPublic))
 	p.packInt(10) // PROTOCOL_VERSION10
 	p.packInt(1)  // Arch type (Generic = 1)
 	p.packInt(2)  // Min type
@@ -406,20 +408,20 @@ func (p *wireProtocol) opConnect(dbName string, user string, passwd string, clie
 	p.sendPackets()
 }
 
-func (p *wireProtocol) opCreate(dbName string, user string, passwd string) {
+func (p *wireProtocol) opCreate(dbName string, user string, password string) {
 	debugPrint("opCreate")
 	var page_size int32
 	page_size = 4096
 
 	encode := bytes.NewBufferString("UTF8").Bytes()
 	userBytes := bytes.NewBufferString(user).Bytes()
-	passwdBytes := bytes.NewBufferString(passwd).Bytes()
+	passwordBytes := bytes.NewBufferString(password).Bytes()
 	dpb := bytes.Join([][]byte{
 		[]byte{1},
 		[]byte{68, byte(len(encode))}, encode,
 		[]byte{48, byte(len(encode))}, encode,
 		[]byte{28, byte(len(userBytes))}, userBytes,
-		[]byte{29, byte(len(passwdBytes))}, passwdBytes,
+		[]byte{29, byte(len(passwordBytes))}, passwordBytes,
 		[]byte{63, 4}, int32_to_bytes(3),
 		[]byte{24, 4}, bint32_to_bytes(1),
 		[]byte{54, 4}, bint32_to_bytes(1),
@@ -433,7 +435,7 @@ func (p *wireProtocol) opCreate(dbName string, user string, passwd string) {
 	p.sendPackets()
 }
 
-func (p *wireProtocol) opAccept() (err error) {
+func (p *wireProtocol) opAccept(user string, password string, clientPublic *big.Int, clientSecret *big.Int) (err error) {
 	debugPrint("opAccept")
 
 	b, _ := p.recvPackets(4)
@@ -487,7 +489,7 @@ func (p *wireProtocol) opAccept() (err error) {
 
 		b, _ = p.recvPackets(4)
 		ln = int(bytes_to_bint32(b))
-		_, _ := p.recvPackets(ln) // keys
+		_, _ = p.recvPackets(ln) // keys
 		readLength = int(4 + ln)
 		if readLength%4 != 0 {
 			p.recvPackets(4 - readLength%4) // padding
@@ -497,6 +499,16 @@ func (p *wireProtocol) opAccept() (err error) {
 		if p.pluginName == "Legacy_Auth" && isAuthenticated == 0 {
 			err = errors.New("opAccept() Unauthorized")
 			return
+		}
+
+		if p.pluginName == "Srp" {
+			ln = int(bytes_to_bint32(data[:2]))
+			serverSalt := data[2 : ln+2]
+			serverPublic := bigFromHexString(bytes_to_str(data[4+ln:]))
+			clientProof, authKey = getClientProof(user, password, serverSalt, clientPublic, serverPublic, clientSecret)
+
+			// Send op_cont_auth
+
 		}
 
 	} else {
@@ -509,17 +521,17 @@ func (p *wireProtocol) opAccept() (err error) {
 	return
 }
 
-func (p *wireProtocol) opAttach(dbName string, user string, passwd string) {
+func (p *wireProtocol) opAttach(dbName string, user string, password string) {
 	debugPrint("opAttach")
 	encode := bytes.NewBufferString("UTF8").Bytes()
 	userBytes := bytes.NewBufferString(user).Bytes()
-	passwdBytes := bytes.NewBufferString(passwd).Bytes()
+	passwordBytes := bytes.NewBufferString(password).Bytes()
 
 	dbp := bytes.Join([][]byte{
 		[]byte{1},
 		[]byte{48, byte(len(encode))}, encode,
 		[]byte{28, byte(len(userBytes))}, userBytes,
-		[]byte{29, byte(len(passwdBytes))}, passwdBytes,
+		[]byte{29, byte(len(passwordBytes))}, passwordBytes,
 	}, nil)
 	p.packInt(op_attach)
 	p.packInt(0) // Database Object ID
