@@ -37,6 +37,11 @@ import (
 	"strings"
 )
 
+const (
+	PLUGIN_NAME = "Srp"
+	PLUGIN_LIST = "Srp,Legacy_Auth"
+)
+
 func debugPrint(s string) {
 	//	    fmt.Println(s)
 }
@@ -70,6 +75,11 @@ func newWireChannel(conn net.Conn) (wireChannel, error) {
 	c.conn = conn
 
 	return *c, err
+}
+
+func (c *wireChannel) setAuthKey(buf []byte) (err error) {
+	// TODO:
+	return
 }
 
 func (c *wireChannel) Read(buf []byte) (n int, err error) {
@@ -172,8 +182,8 @@ func (p *wireProtocol) uid(user string, password string, clientPublic *big.Int) 
 
 	sysUserBytes := bytes.NewBufferString(sysUser).Bytes()
 	hostnameBytes := bytes.NewBufferString(hostname).Bytes()
-	pluginListNameBytes := bytes.NewBufferString("Srp,Legacy_Auth").Bytes()
-	pluginNameBytes := bytes.NewBufferString("Srp").Bytes()
+	pluginListNameBytes := bytes.NewBufferString(PLUGIN_LIST).Bytes()
+	pluginNameBytes := bytes.NewBufferString(PLUGIN_NAME).Bytes()
 	userBytes := bytes.NewBufferString(user).Bytes()
 
 	return bytes.Join([][]byte{
@@ -461,7 +471,6 @@ func (p *wireProtocol) opAccept(user string, password string, clientPublic *big.
 	p.acceptType = bytes_to_bint32(b[8:12])
 
 	if opcode == op_cond_accept || opcode == op_accept_data {
-		var clientProof, authKey []byte
 		var readLength, ln int
 
 		b, _ := p.recvPackets(4)
@@ -505,9 +514,31 @@ func (p *wireProtocol) opAccept(user string, password string, clientPublic *big.
 			ln = int(bytes_to_bint32(data[:2]))
 			serverSalt := data[2 : ln+2]
 			serverPublic := bigFromHexString(bytes_to_str(data[4+ln:]))
-			clientProof, authKey = getClientProof(user, password, serverSalt, clientPublic, serverPublic, clientSecret)
+			clientProof, authKey := getClientProof(user, password, serverSalt, clientPublic, serverPublic, clientSecret)
 
 			// Send op_cont_auth
+			p.packInt(op_cont_auth)
+			p.packString(hex.EncodeToString(clientProof))
+			p.packString(PLUGIN_NAME)
+			p.packString(PLUGIN_LIST)
+			p.packString("")
+			p.sendPackets()
+			_, _, _, err = p.opResponse()
+			if err != nil {
+				return
+			}
+
+			// Send op_crypt
+			p.packInt(op_crypt)
+			p.packString("Arc4")
+			p.packString("Symmetric")
+			p.sendPackets()
+			p.conn.setAuthKey(authKey)
+
+			_, _, _, err = p.opResponse()
+			if err != nil {
+				return
+			}
 
 		}
 
