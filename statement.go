@@ -61,13 +61,17 @@ func (stmt *firebirdsqlStmt) Exec(args []driver.Value) (result driver.Result, er
 
 	var rowcount int64
 	if len(buf) >= 32 {
-		rowcount = int64(bytes_to_int32(buf[20:24]) + bytes_to_int32(buf[27:31]) + bytes_to_int32(buf[6:10]) + bytes_to_int32(buf[13:17]))
+		if stmt.stmtType == isc_info_sql_stmt_select {
+			rowcount = int64(bytes_to_int32(buf[20:24]))
+		} else {
+			rowcount = int64(bytes_to_int32(buf[27:31]) + bytes_to_int32(buf[6:10]) + bytes_to_int32(buf[13:17]))
+		}
 	} else {
 		rowcount = 0
 	}
 
 	result = &firebirdsqlResult{
-		affectedRows: int64(rowcount),
+		affectedRows: rowcount,
 	}
 	return
 }
