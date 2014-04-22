@@ -71,7 +71,10 @@ func (fc *firebirdsqlConn) Exec(query string, args []driver.Value) (result drive
 		fc.tx, err = newFirebirdsqlTx(fc.wp)
 	}
 	stmt.Close()
-	return
+
+	return &firebirdsqlResult{
+		affectedRows: int64(0),
+	}, nil
 }
 
 func (fc *firebirdsqlConn) Query(query string, args []driver.Value) (rows driver.Rows, err error) {
