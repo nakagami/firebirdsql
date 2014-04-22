@@ -27,17 +27,6 @@ import (
 	"database/sql/driver"
 )
 
-type _result struct {
-}
-
-func (r *_result) LastInsertId() (int64, error) {
-	return 0, nil
-}
-
-func (r *_result) RowsAffected() (int64, error) {
-	return 0, nil
-}
-
 type firebirdsqlStmt struct {
 	wp         *wireProtocol
 	stmtHandle int32
@@ -61,8 +50,25 @@ func (stmt *firebirdsqlStmt) NumInput() int {
 func (stmt *firebirdsqlStmt) Exec(args []driver.Value) (result driver.Result, err error) {
 	stmt.wp.opExecute(stmt.stmtHandle, stmt.tx.transHandle, args)
 	_, _, _, err = stmt.wp.opResponse()
+	if err != nil {
+		return
+	}
+	stmt.wp.opInfoSql(stmt.stmtHandle, []byte{isc_info_sql_records})
+	_, _, buf, err := stmt.wp.opResponse()
+	if err != nil {
+		return
+	}
 
-	result = new(_result)
+	var rowcount int64
+	if len(buf) >= 32 {
+		rowcount = int64(bytes_to_int32(buf[20:24]) + bytes_to_int32(buf[27:31]) + bytes_to_int32(buf[6:10]) + bytes_to_int32(buf[13:17]))
+	} else {
+		rowcount = 0
+	}
+
+	result = &firebirdsqlResult{
+		affectedRows: int64(rowcount),
+	}
 	return
 }
 
