@@ -69,13 +69,13 @@ func (stmt *firebirdsqlStmt) Exec(args []driver.Value) (result driver.Result, er
 func (stmt *firebirdsqlStmt) Query(args []driver.Value) (rows driver.Rows, err error) {
 	if stmt.stmtType == isc_info_sql_stmt_exec_procedure {
 		stmt.wp.opExecute2(stmt.stmtHandle, stmt.tx.transHandle, args, stmt.blr)
-		stmt.wp.opSqlResponse(stmt.xsqlda)
-		// TODO: store result to rows
+		result, _ := stmt.wp.opSqlResponse(stmt.xsqlda)
+		rows = newFirebirdsqlRows(stmt, result)
 		_, _, _, err = stmt.wp.opResponse()
 	} else {
 		stmt.wp.opExecute(stmt.stmtHandle, stmt.tx.transHandle, args)
 		_, _, _, err = stmt.wp.opResponse()
-		rows = newFirebirdsqlRows(stmt)
+		rows = newFirebirdsqlRows(stmt, nil)
 	}
 	return
 }

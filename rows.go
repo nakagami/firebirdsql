@@ -33,11 +33,13 @@ type firebirdsqlRows struct {
 	stmt            *firebirdsqlStmt
 	currentChunkRow *list.Element
 	moreData        bool
+	result          []driver.Value
 }
 
-func newFirebirdsqlRows(stmt *firebirdsqlStmt) *firebirdsqlRows {
+func newFirebirdsqlRows(stmt *firebirdsqlStmt, result []driver.Value) *firebirdsqlRows {
 	rows := new(firebirdsqlRows)
 	rows.stmt = stmt
+	rows.result = result
 	if stmt.stmtType == isc_info_sql_stmt_select {
 		rows.moreData = true
 	}
@@ -58,6 +60,12 @@ func (rows *firebirdsqlRows) Close() (er error) {
 }
 
 func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
+	if rows.result != nil {
+		for i, v := range rows.result {
+			dest[i] = v
+		}
+		rows.result = nil
+	}
 	if rows.currentChunkRow == nil && rows.moreData == false {
 		// No data
 		err = io.EOF
