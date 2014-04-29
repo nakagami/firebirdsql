@@ -113,6 +113,50 @@ func TestBasic(t *testing.T) {
 	defer conn.Close()
 }
 
+func TestIssue2(t *testing.T) {
+	conn, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
+
+	conn.Exec(`
+        CREATE TABLE test_issue2
+         (f1 integer NOT NULL,
+          f2 integer,
+          f3 integer NOT NULL,
+          f4 integer NOT NULL,
+          f5 integer NOT NULL,
+          f6 integer NOT NULL,
+          f7 varchar(255) NOT NULL,
+          f8 varchar(255) NOT NULL,
+          f9 varchar(255) NOT NULL,
+          f10 varchar(255) NOT NULL,
+          f11 varchar(255) NOT NULL,
+          f12 varchar(255) NOT NULL,
+          f13 varchar(255) NOT NULL,
+          f14 varchar(255) NOT NULL,
+          f15 integer,
+          f16 integer,
+          f17 integer,
+          f18 integer,
+          f19 integer,
+          f20 integer,
+          f21 integer,
+          f22 varchar(1),
+          f23 varchar(255),
+          f24 integer,
+          f25 varchar(64),
+          f26 integer)`)
+	conn.Exec(`
+        INSERT INTO test_issue2 VALUES
+        (1, 2, 3, 4, 5, 6, '7', '8', '9', '10', '11', '12', '13', '14',
+          15, 16, 17, 18, 19, 20, 21, 'A', '23', 24, '25', '26')`)
+
+	rows, err := conn.Query("SELECT * FROM test_issue2")
+	if err != nil {
+		t.Fatalf("Error Query: %v", err)
+	}
+	for rows.Next() {
+	}
+}
+
 func TestError(t *testing.T) {
 	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
 	if err != nil {
