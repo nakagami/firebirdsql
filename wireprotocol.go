@@ -382,7 +382,7 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
 				p.opInfoSql(stmtHandle,
 					bytes.Join([][]byte{
 						[]byte{isc_info_sql_sqlda_start, 2},
-						int16_to_bytes(int16(next_index)), {2},
+						int16_to_bytes(int16(next_index)),
 						_INFO_SQL_SELECT_DESCRIBE_VARS(),
 					}, nil))
 
