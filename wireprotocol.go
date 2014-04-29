@@ -872,7 +872,5 @@ func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) ([]driver.Value, error) {
 		}
 	}
 
-	b, err = p.recvPackets(32) // ??? 32 bytes skip
-
 	return r, err
 }
