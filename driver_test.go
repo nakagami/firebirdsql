@@ -52,7 +52,7 @@ func TestBasic(t *testing.T) {
         CREATE TABLE foo (
             a INTEGER NOT NULL,
             b VARCHAR(30) NOT NULL UNIQUE,
-            c VARCHAR(1024),
+            c VARCHAR(1024) DEFAULT 'abc',
             d DECIMAL(16,3) DEFAULT -0.123,
             e DATE DEFAULT '1967-08-11',
             f TIMESTAMP DEFAULT '1967-08-11 23:45:01',
@@ -110,6 +110,16 @@ func TestBasic(t *testing.T) {
 	}
 	if n != 1 {
 		t.Fatalf("Error bad record count: %v", n)
+	}
+
+	rows, err = conn.Query("insert into foo(a, b) values (4, '4') returning c")
+	if err != nil {
+		t.Fatalf("Error Insert returning : %v", err)
+	}
+	rows.Next()
+	rows.Scan(&c)
+	if c != "abc" {
+		t.Fatalf("Error insert returning: %v", c)
 	}
 
 }
