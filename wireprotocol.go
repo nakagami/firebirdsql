@@ -48,7 +48,6 @@ func debugPrint(s string) {
 
 func _INFO_SQL_SELECT_DESCRIBE_VARS() []byte {
 	return []byte{
-		isc_info_sql_stmt_type,
 		isc_info_sql_select,
 		isc_info_sql_describe_vars,
 		isc_info_sql_sqlda_seq,
@@ -651,12 +650,17 @@ func (p *wireProtocol) opFreeStatement(stmtHandle int32, mode int32) {
 
 func (p *wireProtocol) opPrepareStatement(stmtHandle int32, transHandle int32, query string) {
 	debugPrint(fmt.Sprintf("opPrepareStatement():%d,%d,%v", transHandle, stmtHandle, query))
+
+	bs := bytes.Join([][]byte{
+		[]byte{isc_info_sql_stmt_type},
+		_INFO_SQL_SELECT_DESCRIBE_VARS(),
+	}, nil)
 	p.packInt(op_prepare_statement)
 	p.packInt(transHandle)
 	p.packInt(stmtHandle)
 	p.packInt(3) // dialect = 3
 	p.packString(query)
-	p.packBytes(_INFO_SQL_SELECT_DESCRIBE_VARS())
+	p.packBytes(bs)
 	p.packInt(int32(p.buffer_len))
 	p.sendPackets()
 }
