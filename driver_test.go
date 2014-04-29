@@ -31,6 +31,8 @@ import (
 
 func TestBasic(t *testing.T) {
 	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
+	defer conn.Close()
+
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
@@ -110,7 +112,6 @@ func TestBasic(t *testing.T) {
 		t.Fatalf("Error bad record count: %v", n)
 	}
 
-	defer conn.Close()
 }
 
 func TestIssue2(t *testing.T) {
@@ -144,6 +145,8 @@ func TestIssue2(t *testing.T) {
           f24 integer,
           f25 varchar(64),
           f26 integer)`)
+	defer conn.Close()
+
 	conn.Exec(`
         INSERT INTO test_issue2 VALUES
         (1, 2, 3, 4, 5, 6, '7', '8', '9', '10', '11', '12', '13', '14',
