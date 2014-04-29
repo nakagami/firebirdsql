@@ -160,6 +160,27 @@ func TestIssue2(t *testing.T) {
 	}
 }
 
+func TestIssue3(t *testing.T) {
+	conn, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
+	too_many := 401
+
+	conn.Exec("CREATE TABLE test_issue3 (f1 integer NOT NULL)")
+	defer conn.Close()
+	stmt, _ := conn.Prepare("INSERT INTO test_issue3 values (?)")
+	for i := 1; i < too_many; i++ {
+		stmt.Exec(i)
+	}
+
+	rows, _ := conn.Query("SELECT * FROM test_issue3")
+	i := 0
+	for rows.Next() {
+		i++
+	}
+	if i != too_many {
+		t.Fatalf("Can't get all %v records. only %v", too_many, i)
+	}
+}
+
 func TestError(t *testing.T) {
 	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
 	if err != nil {
