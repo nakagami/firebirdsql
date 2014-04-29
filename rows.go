@@ -61,14 +61,16 @@ func (rows *firebirdsqlRows) Close() (er error) {
 
 func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 	if rows.stmt.stmtType == isc_info_sql_stmt_exec_procedure {
-		if rows.result == nil {
+		if rows.result != nil {
+			for i, v := range rows.result {
+				dest[i] = v
+			}
+			rows.result = nil
+		} else {
 			err = io.EOF
-			return
 		}
-		for i, v := range rows.result {
-			dest[i] = v
-		}
-		rows.result = nil
+
+		return
 	}
 
 	if rows.currentChunkRow != nil {
