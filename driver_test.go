@@ -140,7 +140,7 @@ func TestReturning(t *testing.T) {
 func TestIssue2(t *testing.T) {
 	conn, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
 
-	conn.Exec(`
+	_, err := conn.Exec(`
         CREATE TABLE test_issue2
          (f1 integer NOT NULL,
           f2 integer,
@@ -169,11 +169,17 @@ func TestIssue2(t *testing.T) {
           f25 varchar(64),
           f26 integer)`)
 	defer conn.Close()
+	if err != nil {
+		t.Fatalf("Error Create Table: %v", err)
+	}
 
-	conn.Exec(`
+	_, err = conn.Exec(`
         INSERT INTO test_issue2 VALUES
         (1, 2, 3, 4, 5, 6, '7', '8', '9', '10', '11', '12', '13', '14',
           15, 16, 17, 18, 19, 20, 21, 'A', '23', 24, '25', '26')`)
+	if err != nil {
+		t.Fatalf("Error Insert: %v", err)
+	}
 
 	rows, err := conn.Query("SELECT * FROM test_issue2")
 	if err != nil {
