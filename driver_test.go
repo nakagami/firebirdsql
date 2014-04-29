@@ -167,14 +167,19 @@ func TestIssue3(t *testing.T) {
 	conn.Exec("CREATE TABLE test_issue3 (f1 integer NOT NULL)")
 	defer conn.Close()
 	stmt, _ := conn.Prepare("INSERT INTO test_issue3 values (?)")
-	for i := 1; i < too_many; i++ {
-		stmt.Exec(i)
+	for i := 0; i < too_many; i++ {
+		stmt.Exec(i + 1)
 	}
 
-	rows, _ := conn.Query("SELECT * FROM test_issue3")
+	rows, _ := conn.Query("SELECT * FROM test_issue3 ORDER BY f1")
 	i := 0
+	var n int
 	for rows.Next() {
+		rows.Scan(&n)
 		i++
+		if i != n {
+			t.Fatalf("Error %v != %v", n, i)
+		}
 	}
 	if i != too_many {
 		t.Fatalf("Can't get all %v records. only %v", too_many, i)
