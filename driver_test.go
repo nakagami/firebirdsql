@@ -30,7 +30,7 @@ import (
 )
 
 func TestBasic(t *testing.T) {
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
+	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_basic.fdb")
 	defer conn.Close()
 
 	if err != nil {
@@ -114,7 +114,7 @@ func TestBasic(t *testing.T) {
 }
 
 func TestReturning(t *testing.T) {
-	conn, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
+	conn, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_returning.fdb")
 	defer conn.Close()
 
 	conn.Exec(`
@@ -138,7 +138,7 @@ func TestReturning(t *testing.T) {
 }
 
 func TestIssue2(t *testing.T) {
-	conn, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
+	conn, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_issue2.fdb")
 
 	_, err := conn.Exec(`
         CREATE TABLE test_issue2
@@ -190,7 +190,7 @@ func TestIssue2(t *testing.T) {
 }
 
 func TestIssue3(t *testing.T) {
-	conn, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
+	conn, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_issue3.fdb")
 	too_many := 401
 
 	conn.Exec("CREATE TABLE test_issue3 (f1 integer NOT NULL)")
@@ -216,7 +216,7 @@ func TestIssue3(t *testing.T) {
 }
 
 func TestError(t *testing.T) {
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
+	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_error.fdb")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
@@ -228,7 +228,7 @@ func TestError(t *testing.T) {
 
 /*
 func TestFB3(t *testing.T) {
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
+	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_fb3.fdb")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
