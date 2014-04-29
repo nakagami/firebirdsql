@@ -117,17 +117,22 @@ func TestReturning(t *testing.T) {
 	conn, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
 	defer conn.Close()
 
-	conn.Exec("CREATE TABLE test_returning (f1 integer NOT NULL, f2 integer default 2)")
+	conn.Exec(`
+        CREATE TABLE test_returning (
+            f1 integer NOT NULL,
+            f2 integer default 2,
+            f3 varchar(20) default 'abc')`)
 
-	rows, err := conn.Query("INSERT INTO test_returning (f1) values (1) returning f2")
+	rows, err := conn.Query("INSERT INTO test_returning (f1) values (1) returning f2, f3")
 	if err != nil {
 		t.Fatalf("Error Insert returning : %v", err)
 	}
-	rows.Next()
 	var f2 int
-	rows.Scan(&f2)
-	if f2 != 2 {
-		t.Fatalf("Error insert returning: %v", f2)
+	var f3 string
+	rows.Next()
+	rows.Scan(&f2, &f3)
+	if f2 != 2 || f3 != "abc" {
+		t.Fatalf("Bad value insert returning: %v,%v", f2, f3)
 	}
 
 }
