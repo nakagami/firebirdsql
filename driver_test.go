@@ -111,15 +111,23 @@ func TestBasic(t *testing.T) {
 	if n != 1 {
 		t.Fatalf("Error bad record count: %v", n)
 	}
+}
 
-	rows, err = conn.Query("insert into foo(a, b) values (4, '4') returning c")
+func TestReturning(t *testing.T) {
+	conn, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test.fdb")
+	defer conn.Close()
+
+	conn.Exec("CREATE TABLE test_returning (f1 integer NOT NULL, f2 integer default 2)")
+
+	rows, err := conn.Query("INSERT INTO test_returning (f1) values (1) returning f2")
 	if err != nil {
 		t.Fatalf("Error Insert returning : %v", err)
 	}
 	rows.Next()
-	rows.Scan(&c)
-	if c != "abc" {
-		t.Fatalf("Error insert returning: %v", c)
+	var f2 int
+	rows.Scan(&f2)
+	if f2 != 2 {
+		t.Fatalf("Error insert returning: %v", f2)
 	}
 
 }
