@@ -60,24 +60,26 @@ func (rows *firebirdsqlRows) Close() (er error) {
 }
 
 func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
-	if rows.result != nil {
+	if rows.stmt.stmtType == isc_info_sql_stmt_exec_procedure {
+		if rows.result == nil {
+			err = io.EOF
+			return
+		}
 		for i, v := range rows.result {
 			dest[i] = v
 		}
 		rows.result = nil
 	}
-	if rows.currentChunkRow == nil && rows.moreData == false {
-		// No data
-		err = io.EOF
-		return
-	} else if rows.currentChunkRow == nil && rows.moreData == true {
+
+	if rows.currentChunkRow != nil {
+		rows.currentChunkRow = rows.currentChunkRow.Next()
+	}
+	if rows.currentChunkRow == nil && rows.moreData == true {
 		// Get one chunk
 		var chunk *list.List
 		rows.stmt.wp.opFetch(rows.stmt.stmtHandle, rows.stmt.blr)
 		chunk, rows.moreData, err = rows.stmt.wp.opFetchResponse(rows.stmt.stmtHandle, rows.stmt.xsqlda)
 		rows.currentChunkRow = chunk.Front()
-	} else {
-		rows.currentChunkRow = rows.currentChunkRow.Next()
 	}
 
 	if rows.currentChunkRow == nil {
