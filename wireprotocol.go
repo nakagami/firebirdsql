@@ -190,7 +190,7 @@ func (p *wireProtocol) uid(user string, password string, clientPublic *big.Int) 
 		[]byte{CNCT_plugin_name, byte(len(pluginNameBytes))}, pluginNameBytes,
 		[]byte{CNCT_plugin_list, byte(len(pluginListNameBytes))}, pluginListNameBytes,
 		getClientPublicBytes(clientPublic),
-		[]byte{CNCT_client_crypt, 1, 0, 0, 0},
+		[]byte{CNCT_client_crypt, 4, 1, 0, 0, 0},
 		[]byte{CNCT_user, byte(len(sysUserBytes))}, sysUserBytes,
 		[]byte{CNCT_host, byte(len(hostnameBytes))}, hostnameBytes,
 		[]byte{CNCT_user_verification, 0},
@@ -401,19 +401,20 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
 
 func (p *wireProtocol) opConnect(dbName string, user string, password string, clientPublic *big.Int) {
 	debugPrint("opConnect")
-
+	moreProtocol, _ := hex.DecodeString("ffff800b00000001000000000000000400000004ffff800c00000001000000000000000400000006ffff800d00000001000000000000000400000008")
 	p.packInt(op_connect)
 	p.packInt(op_attach)
-	p.packInt(2) // CONNECT_VERSION2
-	p.packInt(1) // Arch type (Generic = 1)
+	p.packInt(3)  // CONNECT_VERSION3
+	p.packInt(36) // Arch type
 	p.packString(dbName)
-	p.packInt(1) // Protocol version understood count.
+	p.packInt(4) // Protocol version understood count.
 	p.packBytes(p.uid(user, password, clientPublic))
 	p.packInt(10) // PROTOCOL_VERSION10
 	p.packInt(1)  // Arch type (Generic = 1)
-	p.packInt(2)  // Min type
-	p.packInt(3)  // Max type
+	p.packInt(0)  // Min type
+	p.packInt(5)  // Max type
 	p.packInt(2)  // Preference weight
+	p.packBytes(moreProtocol)
 	p.sendPackets()
 }
 
