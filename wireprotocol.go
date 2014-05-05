@@ -414,7 +414,7 @@ func (p *wireProtocol) opConnect(dbName string, user string, password string, cl
 	p.packInt(0)  // Min type
 	p.packInt(5)  // Max type
 	p.packInt(2)  // Preference weight
-	p.packBytes(moreProtocol)
+	p.appendBytes(moreProtocol)
 	p.sendPackets()
 }
 
