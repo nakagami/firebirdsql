@@ -26,6 +26,7 @@ package firebirdsql
 import (
 	"bytes"
 	"container/list"
+	"crypto/rc4"
 	"database/sql/driver"
 	"encoding/hex"
 	"errors"
@@ -65,7 +66,9 @@ func _INFO_SQL_SELECT_DESCRIBE_VARS() []byte {
 }
 
 type wireChannel struct {
-	conn net.Conn
+	conn      net.Conn
+	rc4reader *rc4.Cipher
+	rc4writer *rc4.Cipher
 }
 
 func newWireChannel(conn net.Conn) (wireChannel, error) {
@@ -76,17 +79,29 @@ func newWireChannel(conn net.Conn) (wireChannel, error) {
 	return *c, err
 }
 
-func (c *wireChannel) setAuthKey(buf []byte) (err error) {
-	// TODO:
+func (c *wireChannel) setAuthKey(key []byte) (err error) {
+	c.rc4reader, err = rc4.NewCipher(key)
+	c.rc4writer, err = rc4.NewCipher(key)
 	return
 }
 
 func (c *wireChannel) Read(buf []byte) (n int, err error) {
+	if c.rc4reader != nil {
+		src := make([]byte, len(buf))
+		c.conn.Read(src)
+		c.rc4reader.XORKeyStream(buf, src)
+	}
 	return c.conn.Read(buf)
 }
 
 func (c *wireChannel) Write(buf []byte) (n int, err error) {
-	return c.conn.Write(buf)
+	if c.rc4writer != nil {
+		dst := make([]byte, len(buf))
+		c.rc4writer.XORKeyStream(dst, buf)
+		return c.conn.Write(dst)
+	} else {
+		return c.conn.Write(buf)
+	}
 }
 func (c *wireChannel) Close() error {
 	return c.conn.Close()
