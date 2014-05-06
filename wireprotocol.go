@@ -511,7 +511,7 @@ func (p *wireProtocol) opAccept(user string, password string, clientPublic *big.
 		}
 
 		if p.pluginName == "Srp" {
-			ln = int(bytes_to_bint32(data[:2]))
+			ln = int(bytes_to_int16(data[:2]))
 			serverSalt := data[2 : ln+2]
 			serverPublic := bigFromHexString(bytes_to_str(data[4+ln:]))
 			clientProof, authKey := getClientProof(user, password, serverSalt, clientPublic, serverPublic, clientSecret)
