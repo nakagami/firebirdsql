@@ -76,12 +76,16 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 	if rows.currentChunkRow != nil {
 		rows.currentChunkRow = rows.currentChunkRow.Next()
 	}
+
 	if rows.currentChunkRow == nil && rows.moreData == true {
 		// Get one chunk
 		var chunk *list.List
 		rows.stmt.wp.opFetch(rows.stmt.stmtHandle, rows.stmt.blr)
 		chunk, rows.moreData, err = rows.stmt.wp.opFetchResponse(rows.stmt.stmtHandle, rows.stmt.xsqlda)
-		rows.currentChunkRow = chunk.Front()
+
+		if err == nil {
+			rows.currentChunkRow = chunk.Front()
+		}
 	}
 
 	if rows.currentChunkRow == nil {
