@@ -463,20 +463,18 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string) {
 func (p *wireProtocol) opAccept(user string, password string, clientPublic *big.Int, clientSecret *big.Int) (err error) {
 	debugPrint("opAccept")
 
-	b, _ := p.recvPackets(4)
+	b, err := p.recvPackets(4)
 	opcode := bytes_to_bint32(b)
 
 	for opcode == op_dummy {
-		b, _ = p.recvPackets(4)
+		b, err = p.recvPackets(4)
 	}
 
 	if opcode == op_reject {
-		err = errors.New("opAccept() connection is rejected")
 		return
 	}
 	if opcode == op_response {
-		p._parse_op_response() // error occured
-		err = errors.New("opAccept:Internal Error")
+		_, _, _, err = p._parse_op_response() // error occured
 		return
 	}
 
