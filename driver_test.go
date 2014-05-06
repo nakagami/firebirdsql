@@ -114,7 +114,7 @@ func TestBasic(t *testing.T) {
 }
 
 func TestReturning(t *testing.T) {
-	conn, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_returning.fdb")
+	conn, _ := sql.Open("firebirdsql_createdb", "SYSDBA:masterkey@localhost:3050/tmp/go_test_returning.fdb")
 	defer conn.Close()
 
 	conn.Exec(`

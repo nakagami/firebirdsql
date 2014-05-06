@@ -88,8 +88,9 @@ func (c *wireChannel) setAuthKey(key []byte) (err error) {
 func (c *wireChannel) Read(buf []byte) (n int, err error) {
 	if c.rc4reader != nil {
 		src := make([]byte, len(buf))
-		c.conn.Read(src)
+		n, err = c.conn.Read(src)
 		c.rc4reader.XORKeyStream(buf, src)
+        return
 	}
 	return c.conn.Read(buf)
 }
@@ -192,13 +193,12 @@ func (p *wireProtocol) uid(user string, password string, clientPublic *big.Int) 
 		sysUser = os.Getenv("USERNAME")
 	}
 	hostname, _ := os.Hostname()
-	user = strings.ToUpper(user)
 
 	sysUserBytes := bytes.NewBufferString(sysUser).Bytes()
 	hostnameBytes := bytes.NewBufferString(hostname).Bytes()
 	pluginListNameBytes := bytes.NewBufferString(PLUGIN_LIST).Bytes()
 	pluginNameBytes := bytes.NewBufferString(PLUGIN_NAME).Bytes()
-	userBytes := bytes.NewBufferString(user).Bytes()
+	userBytes := bytes.NewBufferString(strings.ToUpper(user)).Bytes()
 
 	return bytes.Join([][]byte{
 		[]byte{CNCT_login, byte(len(userBytes))}, userBytes,
@@ -423,7 +423,7 @@ func (p *wireProtocol) opConnect(dbName string, user string, password string, cl
 	p.packInt(36) // Arch type
 	p.packString(dbName)
 	p.packInt(4) // Protocol version understood count.
-	p.packBytes(p.uid(user, password, clientPublic))
+	p.packBytes(p.uid(strings.ToUpper(user), password, clientPublic))
 	p.packInt(10) // PROTOCOL_VERSION10
 	p.packInt(1)  // Arch type (Generic = 1)
 	p.packInt(0)  // Min type
@@ -439,7 +439,7 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string) {
 	page_size = 4096
 
 	encode := bytes.NewBufferString("UTF8").Bytes()
-	userBytes := bytes.NewBufferString(user).Bytes()
+	userBytes := bytes.NewBufferString(strings.ToUpper(user)).Bytes()
 	passwordBytes := bytes.NewBufferString(password).Bytes()
 	dpb := bytes.Join([][]byte{
 		[]byte{1},
@@ -529,7 +529,7 @@ func (p *wireProtocol) opAccept(user string, password string, clientPublic *big.
 			ln = int(bytes_to_int16(data[:2]))
 			serverSalt := data[2 : ln+2]
 			serverPublic := bigFromHexString(bytes_to_str(data[4+ln:]))
-			clientProof, authKey := getClientProof(user, password, serverSalt, clientPublic, serverPublic, clientSecret)
+			clientProof, authKey := getClientProof(strings.ToUpper(user), password, serverSalt, clientPublic, serverPublic, clientSecret)
 
 			// Send op_cont_auth
 			p.packInt(op_cont_auth)
@@ -570,7 +570,7 @@ func (p *wireProtocol) opAccept(user string, password string, clientPublic *big.
 func (p *wireProtocol) opAttach(dbName string, user string, password string) {
 	debugPrint("opAttach")
 	encode := bytes.NewBufferString("UTF8").Bytes()
-	userBytes := bytes.NewBufferString(user).Bytes()
+	userBytes := bytes.NewBufferString(strings.ToUpper(user)).Bytes()
 	passwordBytes := bytes.NewBufferString(password).Bytes()
 
 	dbp := bytes.Join([][]byte{
