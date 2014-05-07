@@ -122,17 +122,19 @@ func TestReturning(t *testing.T) {
             f1 integer NOT NULL,
             f2 integer default 2,
             f3 varchar(20) default 'abc')`)
+	for i := 0; i < 2; i++ {
 
-	rows, err := conn.Query("INSERT INTO test_returning (f1) values (1) returning f2, f3")
-	if err != nil {
-		t.Fatalf("Error Insert returning : %v", err)
-	}
-	var f2 int
-	var f3 string
-	rows.Next()
-	rows.Scan(&f2, &f3)
-	if f2 != 2 || f3 != "abc" {
-		t.Fatalf("Bad value insert returning: %v,%v", f2, f3)
+		rows, err := conn.Query("INSERT INTO test_returning (f1) values (1) returning f2, f3")
+		if err != nil {
+			t.Fatalf("Error Insert returning : %v", err)
+		}
+		var f2 int
+		var f3 string
+		rows.Next()
+		rows.Scan(&f2, &f3)
+		if f2 != 2 || f3 != "abc" {
+			t.Fatalf("Bad value insert returning: %v,%v", f2, f3)
+		}
 	}
 
 }
