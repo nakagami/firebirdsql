@@ -122,6 +122,10 @@ func TestReturning(t *testing.T) {
             f1 integer NOT NULL,
             f2 integer default 2,
             f3 varchar(20) default 'abc')`)
+	conn.Close()
+
+	conn, _ = sql.Open("firebirdsql", "SYSDBA:masterkey@localhost:3050/tmp/go_test_returning.fdb")
+
 	for i := 0; i < 2; i++ {
 
 		rows, err := conn.Query("INSERT INTO test_returning (f1) values (1) returning f2, f3")
