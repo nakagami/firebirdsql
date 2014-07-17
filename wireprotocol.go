@@ -36,6 +36,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	//"unsafe"
 )
 
 const (
@@ -44,8 +45,8 @@ const (
 	BUFFER_LEN  = 1024
 )
 
-func debugPrint(s string) {
-	//	    fmt.Println(s)
+func debugPrint(p * wireProtocol, s string) {
+		//    fmt.Printf("[%x] %s\n", uintptr(unsafe.Pointer(p)), s)
 }
 
 func _INFO_SQL_SELECT_DESCRIBE_VARS() []byte {
@@ -206,17 +207,34 @@ func (p *wireProtocol) uid(user string, password string, clientPublic *big.Int) 
 	}, nil)
 }
 
-func (p *wireProtocol) sendPackets() (n int, err error) {
-	debugPrint(fmt.Sprintf("\tsendPackets():%v", p.buf))
-	n, err = p.conn.Write(p.buf)
+func (p *wireProtocol) sendPackets() (written int, err error) {
+	debugPrint(p, fmt.Sprintf("\tsendPackets():%v", p.buf))
+	n := 0
+	for written < len(p.buf) {
+		n, err = p.conn.Write(p.buf[written:])
+		if err != nil {
+			break
+		}
+		written += n
+	}
 	p.buf = make([]byte, 0, BUFFER_LEN)
 	return
 }
 
 func (p *wireProtocol) recvPackets(n int) ([]byte, error) {
 	buf := make([]byte, n)
-	_, err := p.conn.Read(buf)
-	debugPrint(fmt.Sprintf("\trecvPackets():%v:%v", buf, err))
+	var err error
+	read := 0
+	totalRead := 0
+	for totalRead < n {
+		read, err = p.conn.Read(buf[totalRead:n])
+		if err != nil {
+			debugPrint(p, fmt.Sprintf("\trecvPackets():%v:%v", buf, err))
+			return buf, err
+		}
+		totalRead += read
+	}
+	debugPrint(p, fmt.Sprintf("\trecvPackets():%v:%v", buf, err))
 	return buf, err
 }
 
@@ -409,7 +427,7 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
 }
 
 func (p *wireProtocol) opConnect(dbName string, user string, password string, clientPublic *big.Int) {
-	debugPrint("opConnect")
+	debugPrint(p, "opConnect")
 	moreProtocol, _ := hex.DecodeString("ffff800b00000001000000000000000400000004ffff800c00000001000000000000000400000006ffff800d00000001000000000000000400000008")
 	p.packInt(op_connect)
 	p.packInt(op_attach)
@@ -428,7 +446,7 @@ func (p *wireProtocol) opConnect(dbName string, user string, password string, cl
 }
 
 func (p *wireProtocol) opCreate(dbName string, user string, password string) {
-	debugPrint("opCreate")
+	debugPrint(p, "opCreate")
 	var page_size int32
 	page_size = 4096
 
@@ -455,7 +473,7 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string) {
 }
 
 func (p *wireProtocol) opAccept(user string, password string, clientPublic *big.Int, clientSecret *big.Int) (err error) {
-	debugPrint("opAccept")
+	debugPrint(p, "opAccept")
 
 	b, err := p.recvPackets(4)
 	opcode := bytes_to_bint32(b)
@@ -560,7 +578,7 @@ func (p *wireProtocol) opAccept(user string, password string, clientPublic *big.
 }
 
 func (p *wireProtocol) opAttach(dbName string, user string, password string) {
-	debugPrint("opAttach")
+	debugPrint(p, "opAttach")
 	encode := bytes.NewBufferString("UTF8").Bytes()
 	userBytes := bytes.NewBufferString(strings.ToUpper(user)).Bytes()
 	passwordBytes := bytes.NewBufferString(password).Bytes()
@@ -579,14 +597,14 @@ func (p *wireProtocol) opAttach(dbName string, user string, password string) {
 }
 
 func (p *wireProtocol) opDropDatabase() {
-	debugPrint("opDropDatabase")
+	debugPrint(p, "opDropDatabase")
 	p.packInt(op_drop_database)
 	p.packInt(p.dbHandle)
 	p.sendPackets()
 }
 
 func (p *wireProtocol) opTransaction(tpb []byte) {
-	debugPrint("opTransaction")
+	debugPrint(p, "opTransaction")
 	p.packInt(op_transaction)
 	p.packInt(p.dbHandle)
 	p.packBytes(tpb)
@@ -594,42 +612,42 @@ func (p *wireProtocol) opTransaction(tpb []byte) {
 }
 
 func (p *wireProtocol) opCommit(transHandle int32) {
-	debugPrint("opCommit")
+	debugPrint(p, "opCommit")
 	p.packInt(op_commit)
 	p.packInt(transHandle)
 	p.sendPackets()
 }
 
 func (p *wireProtocol) opCommitRetaining(transHandle int32) {
-	debugPrint("opCommitRetaining")
+	debugPrint(p, "opCommitRetaining")
 	p.packInt(op_commit_retaining)
 	p.packInt(transHandle)
 	p.sendPackets()
 }
 
 func (p *wireProtocol) opRollback(transHandle int32) {
-	debugPrint("opRollback")
+	debugPrint(p, "opRollback")
 	p.packInt(op_rollback)
 	p.packInt(transHandle)
 	p.sendPackets()
 }
 
 func (p *wireProtocol) opRollbackRetaining(transHandle int32) {
-	debugPrint("opRollbackRetaining")
+	debugPrint(p, "opRollbackRetaining")
 	p.packInt(op_rollback_retaining)
 	p.packInt(transHandle)
 	p.sendPackets()
 }
 
 func (p *wireProtocol) opAllocateStatement() {
-	debugPrint("opAllocateStatement")
+	debugPrint(p, "opAllocateStatement")
 	p.packInt(op_allocate_statement)
 	p.packInt(p.dbHandle)
 	p.sendPackets()
 }
 
 func (p *wireProtocol) opInfoTransaction(transHandle int32, b []byte) {
-	debugPrint("opInfoTransaction")
+	debugPrint(p, "opInfoTransaction")
 	p.packInt(op_info_transaction)
 	p.packInt(transHandle)
 	p.packInt(0)
@@ -639,7 +657,7 @@ func (p *wireProtocol) opInfoTransaction(transHandle int32, b []byte) {
 }
 
 func (p *wireProtocol) opInfoDatabase(bs []byte) {
-	debugPrint("opInfoDatabase")
+	debugPrint(p, "opInfoDatabase")
 	p.packInt(op_info_database)
 	p.packInt(p.dbHandle)
 	p.packInt(0)
@@ -649,7 +667,7 @@ func (p *wireProtocol) opInfoDatabase(bs []byte) {
 }
 
 func (p *wireProtocol) opFreeStatement(stmtHandle int32, mode int32) {
-	debugPrint(fmt.Sprintf("opFreeStatement:<%v>", stmtHandle))
+	debugPrint(p, fmt.Sprintf("opFreeStatement:<%v>", stmtHandle))
 	p.packInt(op_free_statement)
 	p.packInt(stmtHandle)
 	p.packInt(mode)
@@ -657,7 +675,7 @@ func (p *wireProtocol) opFreeStatement(stmtHandle int32, mode int32) {
 }
 
 func (p *wireProtocol) opPrepareStatement(stmtHandle int32, transHandle int32, query string) {
-	debugPrint(fmt.Sprintf("opPrepareStatement():%d,%d,%v", transHandle, stmtHandle, query))
+	debugPrint(p, fmt.Sprintf("opPrepareStatement():%d,%d,%v", transHandle, stmtHandle, query))
 
 	bs := bytes.Join([][]byte{
 		[]byte{isc_info_sql_stmt_type},
@@ -674,7 +692,7 @@ func (p *wireProtocol) opPrepareStatement(stmtHandle int32, transHandle int32, q
 }
 
 func (p *wireProtocol) opInfoSql(stmtHandle int32, vars []byte) {
-	debugPrint("opInfoSql")
+	debugPrint(p, "opInfoSql")
 	p.packInt(op_info_sql)
 	p.packInt(stmtHandle)
 	p.packInt(0)
@@ -684,7 +702,7 @@ func (p *wireProtocol) opInfoSql(stmtHandle int32, vars []byte) {
 }
 
 func (p *wireProtocol) opExecute(stmtHandle int32, transHandle int32, params []driver.Value) {
-	debugPrint(fmt.Sprintf("opExecute():%d,%d,%v", transHandle, stmtHandle, params))
+	debugPrint(p, fmt.Sprintf("opExecute():%d,%d,%v", transHandle, stmtHandle, params))
 	p.packInt(op_execute)
 	p.packInt(stmtHandle)
 	p.packInt(transHandle)
@@ -705,7 +723,7 @@ func (p *wireProtocol) opExecute(stmtHandle int32, transHandle int32, params []d
 }
 
 func (p *wireProtocol) opExecute2(stmtHandle int32, transHandle int32, params []driver.Value, outputBlr []byte) {
-	debugPrint("opExecute2")
+	debugPrint(p, "opExecute2")
 	p.packInt(op_execute2)
 	p.packInt(stmtHandle)
 	p.packInt(transHandle)
@@ -728,7 +746,7 @@ func (p *wireProtocol) opExecute2(stmtHandle int32, transHandle int32, params []
 }
 
 func (p *wireProtocol) opFetch(stmtHandle int32, blr []byte) {
-	debugPrint("opFetch")
+	debugPrint(p, "opFetch")
 	p.packInt(op_fetch)
 	p.packInt(stmtHandle)
 	p.packBytes(blr)
@@ -738,7 +756,7 @@ func (p *wireProtocol) opFetch(stmtHandle int32, blr []byte) {
 }
 
 func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*list.List, bool, error) {
-	debugPrint("opFetchResponse")
+	debugPrint(p, "opFetchResponse")
 	b, err := p.recvPackets(4)
 	for bytes_to_bint32(b) == op_dummy {
 		b, _ = p.recvPackets(4)
@@ -783,14 +801,14 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*lis
 }
 
 func (p *wireProtocol) opDetach() {
-	debugPrint("opDetatch")
+	debugPrint(p, "opDetatch")
 	p.packInt(op_detach)
 	p.packInt(p.dbHandle)
 	p.sendPackets()
 }
 
 func (p *wireProtocol) opOpenBlob(blobId int32, transHandle int32) {
-	debugPrint("opOpenBlob")
+	debugPrint(p, "opOpenBlob")
 	p.packInt(op_open_blob)
 	p.packInt(transHandle)
 	p.packInt(blobId)
@@ -798,7 +816,7 @@ func (p *wireProtocol) opOpenBlob(blobId int32, transHandle int32) {
 }
 
 func (p *wireProtocol) opCreateBlob2(transHandle int32) {
-	debugPrint("opCreateBlob2")
+	debugPrint(p, "opCreateBlob2")
 	p.packInt(op_create_blob2)
 	p.packInt(0)
 	p.packInt(transHandle)
@@ -808,7 +826,7 @@ func (p *wireProtocol) opCreateBlob2(transHandle int32) {
 }
 
 func (p *wireProtocol) opGetSegment(blobHandle int32) {
-	debugPrint("opGetSegment")
+	debugPrint(p, "opGetSegment")
 	p.packInt(op_get_segment)
 	p.packInt(blobHandle)
 	p.packInt(int32(BUFFER_LEN))
@@ -817,7 +835,7 @@ func (p *wireProtocol) opGetSegment(blobHandle int32) {
 }
 
 func (p *wireProtocol) opBatchSegments(blobHandle int32, seg_data []byte) {
-	debugPrint("opBatchSegments")
+	debugPrint(p, "opBatchSegments")
 	ln := len(seg_data)
 	p.packInt(op_batch_segments)
 	p.packInt(blobHandle)
@@ -832,7 +850,7 @@ func (p *wireProtocol) opBatchSegments(blobHandle int32, seg_data []byte) {
 }
 
 func (p *wireProtocol) opCloseBlob(blobHandle int32) {
-	debugPrint("opCloseBlob")
+	debugPrint(p, "opCloseBlob")
 	p.packInt(op_close_blob)
 	p.packInt(blobHandle)
 	p.sendPackets()
@@ -851,7 +869,7 @@ func (p *wireProtocol) opResponse() (int32, int32, []byte, error) {
 }
 
 func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) ([]driver.Value, error) {
-	debugPrint("opSqlResponse")
+	debugPrint(p, "opSqlResponse")
 	b, err := p.recvPackets(4)
 	for bytes_to_bint32(b) == op_dummy {
 		b, err = p.recvPackets(4)
