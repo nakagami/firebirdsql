@@ -25,6 +25,7 @@ package firebirdsql
 
 import (
 	"database/sql"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -219,6 +220,15 @@ func TestIssue3(t *testing.T) {
 	if i != too_many {
 		t.Fatalf("Can't get all %v records. only %v", too_many, i)
 	}
+}
+
+func TestIssue7(t *testing.T) {
+	conn, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_issue7.fdb")
+
+	conn.Exec("CREATE TABLE test_issue7 (f1 varchar(2048))")
+	defer conn.Close()
+	stmt, _ := conn.Prepare("INSERT INTO test_issue7 values (?)")
+	stmt.Exec(fmt.Sprintf("%2000d", 1))
 }
 
 func TestError(t *testing.T) {
