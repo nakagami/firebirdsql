@@ -41,6 +41,7 @@ import (
 const (
 	PLUGIN_NAME = "Srp"
 	PLUGIN_LIST = "Srp,Legacy_Auth"
+	BUFFER_LEN  = 1024
 )
 
 func debugPrint(s string) {
@@ -90,7 +91,7 @@ func (c *wireChannel) Read(buf []byte) (n int, err error) {
 		src := make([]byte, len(buf))
 		n, err = c.conn.Read(src)
 		c.rc4reader.XORKeyStream(buf, src)
-        return
+		return
 	}
 	return c.conn.Read(buf)
 }
@@ -109,9 +110,7 @@ func (c *wireChannel) Close() error {
 }
 
 type wireProtocol struct {
-	buf        []byte
-	buffer_len int
-	bufCount   int
+	buf []byte
 
 	conn     wireChannel
 	dbHandle int32
@@ -128,8 +127,7 @@ type wireProtocol struct {
 
 func newWireProtocol(addr string) (*wireProtocol, error) {
 	p := new(wireProtocol)
-	p.buffer_len = 1024
-	p.buf = make([]byte, p.buffer_len)
+	p.buf = make([]byte, 0, BUFFER_LEN)
 
 	p.addr = addr
 	conn, err := net.Dial("tcp", p.addr)
@@ -144,31 +142,27 @@ func newWireProtocol(addr string) (*wireProtocol, error) {
 
 func (p *wireProtocol) packInt(i int32) {
 	// pack big endian int32
-	p.buf[p.bufCount+0] = byte(i >> 24 & 0xFF)
-	p.buf[p.bufCount+1] = byte(i >> 16 & 0xFF)
-	p.buf[p.bufCount+2] = byte(i >> 8 & 0xFF)
-	p.buf[p.bufCount+3] = byte(i & 0xFF)
-	p.bufCount += 4
+	p.buf = append(p.buf, byte(i>>24&0xFF))
+	p.buf = append(p.buf, byte(i>>16&0xFF))
+	p.buf = append(p.buf, byte(i>>8&0xFF))
+	p.buf = append(p.buf, byte(i&0xFF))
 }
 
 func (p *wireProtocol) packBytes(b []byte) {
 	for _, b := range xdrBytes(b) {
-		p.buf[p.bufCount] = b
-		p.bufCount++
+		p.buf = append(p.buf, b)
 	}
 }
 
 func (p *wireProtocol) packString(s string) {
 	for _, b := range xdrString(s) {
-		p.buf[p.bufCount] = b
-		p.bufCount++
+		p.buf = append(p.buf, b)
 	}
 }
 
 func (p *wireProtocol) appendBytes(bs []byte) {
 	for _, b := range bs {
-		p.buf[p.bufCount] = b
-		p.bufCount++
+		p.buf = append(p.buf, b)
 	}
 }
 
@@ -213,9 +207,9 @@ func (p *wireProtocol) uid(user string, password string, clientPublic *big.Int) 
 }
 
 func (p *wireProtocol) sendPackets() (n int, err error) {
-	debugPrint(fmt.Sprintf("\tsendPackets():%v", p.buf[:p.bufCount]))
-	n, err = p.conn.Write(p.buf[:p.bufCount])
-	p.bufCount = 0
+	debugPrint(fmt.Sprintf("\tsendPackets():%v", p.buf))
+	n, err = p.conn.Write(p.buf)
+	p.buf = make([]byte, 0, BUFFER_LEN)
 	return
 }
 
@@ -640,7 +634,7 @@ func (p *wireProtocol) opInfoTransaction(transHandle int32, b []byte) {
 	p.packInt(transHandle)
 	p.packInt(0)
 	p.packBytes(b)
-	p.packInt(int32(p.buffer_len))
+	p.packInt(int32(BUFFER_LEN))
 	p.sendPackets()
 }
 
@@ -650,7 +644,7 @@ func (p *wireProtocol) opInfoDatabase(bs []byte) {
 	p.packInt(p.dbHandle)
 	p.packInt(0)
 	p.packBytes(bs)
-	p.packInt(int32(p.buffer_len))
+	p.packInt(int32(BUFFER_LEN))
 	p.sendPackets()
 }
 
@@ -675,7 +669,7 @@ func (p *wireProtocol) opPrepareStatement(stmtHandle int32, transHandle int32, q
 	p.packInt(3) // dialect = 3
 	p.packString(query)
 	p.packBytes(bs)
-	p.packInt(int32(p.buffer_len))
+	p.packInt(int32(BUFFER_LEN))
 	p.sendPackets()
 }
 
@@ -685,7 +679,7 @@ func (p *wireProtocol) opInfoSql(stmtHandle int32, vars []byte) {
 	p.packInt(stmtHandle)
 	p.packInt(0)
 	p.packBytes(vars)
-	p.packInt(int32(p.buffer_len))
+	p.packInt(int32(BUFFER_LEN))
 	p.sendPackets()
 }
 
@@ -817,7 +811,7 @@ func (p *wireProtocol) opGetSegment(blobHandle int32) {
 	debugPrint("opGetSegment")
 	p.packInt(op_get_segment)
 	p.packInt(blobHandle)
-	p.packInt(int32(p.buffer_len))
+	p.packInt(int32(BUFFER_LEN))
 	p.packInt(0)
 	p.sendPackets()
 }
