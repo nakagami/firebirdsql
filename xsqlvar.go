@@ -174,7 +174,7 @@ func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
 			v = bytes.NewBuffer(raw_value).String()
 		}
 	case SQL_TYPE_SHORT:
-		i16 := bytes_to_bint16(raw_value)
+		i16 := int16(bytes_to_bint32(raw_value))
 		if x.sqlscale > 0 {
 			v = int64(i16) * int64(math.Pow10(x.sqlscale))
 		} else if x.sqlscale < 0 {
