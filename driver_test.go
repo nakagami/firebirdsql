@@ -231,6 +231,20 @@ func TestIssue7(t *testing.T) {
 	stmt.Exec(fmt.Sprintf("%2000d", 1))
 }
 
+func TestIssue9(t *testing.T) {
+	conn, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_issue9.fdb")
+
+	conn.Exec("CREATE TABLE test_issue9 (f1 smallint)")
+	defer conn.Close()
+	conn.Exec("INSERT INTO test_issue9 (f1) values (1)")
+	var n int
+	err := conn.QueryRow("SELECT f1 from test_issue9").Scan(&n)
+	if err != nil || n != 1 {
+        fmt.Println(err)
+		t.Fatalf("Invalid short value:%v:%v", err, n)
+	}
+}
+
 func TestError(t *testing.T) {
 	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_error.fdb")
 	if err != nil {
