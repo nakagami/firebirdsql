@@ -34,10 +34,10 @@ Example
    func main() {
        var n int
        conn, _ := sql.Open("firebirdsql", "user:password@servername/foo/bar.fdb")
+       defer conn.Close()
        conn.QueryRow("SELECT Count(*) FROM rdb$relations").Scan(&n)
        fmt.Println("Relations count=", n)
 
-       defer conn.Close()
    }
 
 
