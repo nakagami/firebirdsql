@@ -45,8 +45,8 @@ const (
 	BUFFER_LEN  = 1024
 )
 
-func debugPrint(p * wireProtocol, s string) {
-		//    fmt.Printf("[%x] %s\n", uintptr(unsafe.Pointer(p)), s)
+func debugPrint(p *wireProtocol, s string) {
+	//    fmt.Printf("[%x] %s\n", uintptr(unsafe.Pointer(p)), s)
 }
 
 func _INFO_SQL_SELECT_DESCRIBE_VARS() []byte {
@@ -124,6 +124,9 @@ type wireProtocol struct {
 	pluginName string
 	user       string
 	password   string
+
+	acceptType        bool
+	lazyResponseCount int
 }
 
 func newWireProtocol(addr string) (*wireProtocol, error) {

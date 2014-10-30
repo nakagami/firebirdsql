@@ -240,7 +240,7 @@ func TestIssue9(t *testing.T) {
 	var n int
 	err := conn.QueryRow("SELECT f1 from test_issue9").Scan(&n)
 	if err != nil || n != 1 {
-        fmt.Println(err)
+		fmt.Println(err)
 		t.Fatalf("Invalid short value:%v:%v", err, n)
 	}
 }
