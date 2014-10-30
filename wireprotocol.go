@@ -858,6 +858,10 @@ func (p *wireProtocol) opCloseBlob(blobHandle int32) {
 }
 
 func (p *wireProtocol) opResponse() (int32, int32, []byte, error) {
+	for p.lazyResponseCount != 0 {
+		p.lazyResponseCount--
+		_, _, _, _ = p.opResponse()
+	}
 	b, _ := p.recvPackets(4)
 	for bytes_to_bint32(b) == op_dummy {
 		b, _ = p.recvPackets(4)
