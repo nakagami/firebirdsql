@@ -103,6 +103,7 @@ func newFirebirdsqlStmt(fc *firebirdsqlConn, query string) (stmt *firebirdsqlStm
 
 	if fc.wp.acceptType == ptype_lazy_send {
 		fc.wp.lazyResponseCount++
+		stmt.stmtHandle = -1
 	} else {
 		stmt.stmtHandle, _, _, err = fc.wp.opResponse()
 	}

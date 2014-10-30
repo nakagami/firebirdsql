@@ -429,8 +429,7 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
 
 func (p *wireProtocol) opConnect(dbName string, user string, password string, clientPublic *big.Int) {
 	debugPrint(p, "opConnect")
-	moreProtocol, _ := hex.DecodeString("ffff800b00000001000000000000000400000004ffff800c00000001000000000000000400000006ffff800d00000001000000000000000400000008")
-	//	moreProtocol, _ := hex.DecodeString("ffff800b00000001000000000000000500000004ffff800c00000001000000000000000500000006ffff800d00000001000000000000000500000008")
+	moreProtocol, _ := hex.DecodeString("ffff800b00000001000000000000000500000004ffff800c00000001000000000000000500000006ffff800d00000001000000000000000500000008")
 	p.packInt(op_connect)
 	p.packInt(op_attach)
 	p.packInt(3)  // CONNECT_VERSION3
