@@ -94,12 +94,25 @@ func newFirebirdsqlStmt(fc *firebirdsqlConn, query string) (stmt *firebirdsqlStm
 	stmt = new(firebirdsqlStmt)
 	stmt.wp = fc.wp
 	stmt.tx = fc.tx
+
 	fc.wp.opAllocateStatement()
-	stmt.stmtHandle, _, _, err = fc.wp.opResponse()
-	if err != nil {
-		return
+
+	if fc.wp.acceptType != ptype_lazy_send {
+		stmt.stmtHandle, _, _, err = fc.wp.opResponse()
+		if err != nil {
+			return
+		}
+	} else {
+		fc.wp.lazyResponseCount++
 	}
+
 	fc.wp.opPrepareStatement(stmt.stmtHandle, stmt.tx.transHandle, query)
+
+	if fc.wp.acceptType == ptype_lazy_send {
+		stmt.stmtHandle, _, _, _ = fc.wp.opResponse()
+		fc.wp.lazyResponseCount--
+	}
+
 	_, _, buf, err := fc.wp.opResponse()
 	if err != nil {
 		return
