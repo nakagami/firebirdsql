@@ -120,13 +120,11 @@ type wireProtocol struct {
 	acceptVersion      int32
 	acceptArchitecture int32
 	acceptType         int32
+	lazyResponseCount  int
 
 	pluginName string
 	user       string
 	password   string
-
-	acceptType        bool
-	lazyResponseCount int
 }
 
 func newWireProtocol(addr string) (*wireProtocol, error) {
