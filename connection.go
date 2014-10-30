@@ -29,15 +29,17 @@ import (
 )
 
 type firebirdsqlConn struct {
-	wp           *wireProtocol
-	tx           *firebirdsqlTx
-	addr         string
-	dbName       string
-	user         string
-	password     string
-	isAutocommit bool
-	clientPublic *big.Int
-	clientSecret *big.Int
+	wp                  *wireProtocol
+	tx                  *firebirdsqlTx
+	addr                string
+	dbName              string
+	user                string
+	password            string
+	isAutocommit        bool
+	clientPublic        *big.Int
+	clientSecret        *big.Int
+	acceptType          bool
+	lazy_response_count int
 }
 
 func (fc *firebirdsqlConn) Begin() (driver.Tx, error) {
