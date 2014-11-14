@@ -39,6 +39,7 @@ func TestDSNParse(t *testing.T) {
 		{"user:password@localhost:3000/dbname", "localhost:3000", "dbname", "user", "password"},
 		{"user:password@localhost/dbname", "localhost:3050", "dbname", "user", "password"},
 		{"user:password@localhost/dir/dbname", "localhost:3050", "/dir/dbname", "user", "password"},
+		{"user:password@localhost/c:\\fbdata\\database.fdb", "localhost:3050", "c:\\fbdata\\database.fdb", "user", "password"},
 	}
 
 	for _, d := range testDSNs {
