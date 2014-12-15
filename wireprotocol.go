@@ -117,7 +117,7 @@ type wireProtocol struct {
 	dbHandle int32
 	addr     string
 
-	acceptVersion      int32
+	protocolVersion    int32
 	acceptArchitecture int32
 	acceptType         int32
 	lazyResponseCount  int
@@ -492,7 +492,7 @@ func (p *wireProtocol) opAccept(user string, password string, clientPublic *big.
 	}
 
 	b, _ = p.recvPackets(12)
-	p.acceptVersion = bytes_to_bint32(b[0:4])
+	p.protocolVersion = bytes_to_bint32(b[0:4])
 	p.acceptArchitecture = bytes_to_bint32(b[4:8])
 	p.acceptType = bytes_to_bint32(b[8:12])
 
