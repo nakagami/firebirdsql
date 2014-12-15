@@ -156,7 +156,6 @@ func flattenBytes(l *list.List) []byte {
 func _int32ToBlr(i32 int32) ([]byte, []byte) {
 	v := bytes.Join([][]byte{
 		bint32_to_bytes(i32),
-		[]byte{0, 0, 0, 0},
 	}, nil)
 	blr := []byte{8, 0}
 
@@ -171,7 +170,6 @@ func _strToBlr(s string) ([]byte, []byte) {
 	v = bytes.Join([][]byte{
 		v,
 		padding,
-		[]byte{0, 0, 0, 0},
 	}, nil)
 	blr := []byte{14, byte(nbytes & 255), byte(nbytes >> 8)}
 	return blr, v
@@ -195,7 +193,6 @@ func _convert_time(t time.Time) []byte {
 func _dateToBlr(t time.Time) ([]byte, []byte) {
 	v := bytes.Join([][]byte{
 		_convert_date(t),
-		[]byte{0, 0, 0, 0},
 	}, nil)
 	blr := []byte{12}
 	return blr, v
@@ -204,7 +201,6 @@ func _dateToBlr(t time.Time) ([]byte, []byte) {
 func _timeToBlr(t time.Time) ([]byte, []byte) {
 	v := bytes.Join([][]byte{
 		_convert_time(t),
-		[]byte{0, 0, 0, 0},
 	}, nil)
 	blr := []byte{13}
 	return blr, v
@@ -214,14 +210,13 @@ func _timestampToBlr(t time.Time) ([]byte, []byte) {
 	v := bytes.Join([][]byte{
 		_convert_date(t),
 		_convert_time(t),
-		[]byte{0, 0, 0, 0},
 	}, nil)
 
 	blr := []byte{35}
 	return blr, v
 }
 
-func paramsToBlr(params []driver.Value) ([]byte, []byte) {
+func paramsToBlr(params []driver.Value, protocolVersion int32) ([]byte, []byte) {
 	// Convert parameter array to BLR and values format.
 	var v, blr []byte
 
@@ -229,6 +224,11 @@ func paramsToBlr(params []driver.Value) ([]byte, []byte) {
 	blrList := list.New()
 	valuesList := list.New()
 	blrList.PushBack([]byte{5, 2, 4, 0, byte(ln & 255), byte(ln >> 8)})
+
+	if protocolVersion >= PROTOCOL_VERSION13 {
+		/* TODO: fill null indicator bits */
+		valuesList.PushBack([]byte{0, 0, 0, 0})
+	}
 
 	for _, p := range params {
 		switch f := p.(type) {
@@ -250,19 +250,26 @@ func paramsToBlr(params []driver.Value) ([]byte, []byte) {
 			}
 		case bool:
 			if f {
-				v = []byte{1, 0, 0, 0, 0, 0, 0, 0}
+				v = []byte{1, 0, 0, 0}
 			} else {
-				v = []byte{0, 0, 0, 0, 0, 0, 0, 0}
+				v = []byte{0, 0, 0, 0}
 			}
 			blr = []byte{23}
 		case nil:
-			v = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 0x32, 0x8c}
-			blr = []byte{9, 0}
+			v = []byte{}
+			blr = []byte{14, 0, 0}
 		default:
 			// can't convert directory
 			blr, v = _strToBlr(fmt.Sprintf("%v", f))
 		}
 		valuesList.PushBack(v)
+		if protocolVersion < PROTOCOL_VERSION13 {
+			if p == nil {
+				valuesList.PushBack([]byte{0xff, 0xff, 0xff, 0xff})
+			} else {
+				valuesList.PushBack([]byte{0, 0, 0, 0})
+			}
+		}
 		blrList.PushBack(blr)
 		blrList.PushBack([]byte{7, 0})
 	}

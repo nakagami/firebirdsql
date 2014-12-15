@@ -31,6 +31,9 @@ const (
 	ptype_out_of_band = 4 // Batch sends w/ out of band notification
 	ptype_lazy_send   = 5 // Deferred packets delivery
 
+	// Protocol Version
+	PROTOCOL_VERSION13 = 13
+
 	CNCT_user              = 1
 	CNCT_passwd            = 2
 	CNCT_host              = 4
