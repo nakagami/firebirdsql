@@ -492,7 +492,7 @@ func (p *wireProtocol) opAccept(user string, password string, clientPublic *big.
 	}
 
 	b, _ = p.recvPackets(12)
-	p.protocolVersion = bytes_to_int32(b[0:4])
+	p.protocolVersion = int32(b[3])
 	p.acceptArchitecture = bytes_to_bint32(b[4:8])
 	p.acceptType = bytes_to_bint32(b[8:12])
 
