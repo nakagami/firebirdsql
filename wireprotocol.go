@@ -791,9 +791,11 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*lis
 				ln = x.ioLength()
 			}
 			raw_value, _ := p.recvPacketsAlignment(ln)
-			b, err = p.recvPackets(4)
-			if bytes_to_bint32(b) == 0 { // Not NULL
-				r[i], err = x.value(raw_value)
+			if p.protocolVersion < PROTOCOL_VERSION13 {
+				b, err = p.recvPackets(4)
+				if bytes_to_bint32(b) == 0 { // Not NULL
+					r[i], err = x.value(raw_value)
+				}
 			}
 		}
 		rows.PushBack(r)
