@@ -492,7 +492,7 @@ func (p *wireProtocol) opAccept(user string, password string, clientPublic *big.
 	}
 
 	b, _ = p.recvPackets(12)
-	p.protocolVersion = bytes_to_bint32(b[0:4])
+	p.protocolVersion = bytes_to_int32(b[0:4])
 	p.acceptArchitecture = bytes_to_bint32(b[4:8])
 	p.acceptType = bytes_to_bint32(b[8:12])
 
@@ -774,6 +774,12 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*lis
 	status := bytes_to_bint32(b[:4])
 	count := int(bytes_to_bint32(b[4:8]))
 	rows := list.New()
+	if p.protocolVersion >= PROTOCOL_VERSION13 {
+		/* TODO: null indicator */
+		b, _ = p.recvPackets(4)
+		fmt.Println("null indicator", b)
+	}
+
 	for count > 0 {
 		r := make([]driver.Value, len(xsqlda))
 		for i, x := range xsqlda {
