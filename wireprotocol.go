@@ -46,7 +46,7 @@ const (
 )
 
 func debugPrint(p *wireProtocol, s string) {
-	//  fmt.Printf("[%x] %s\n", uintptr(unsafe.Pointer(p)), s)
+	//fmt.Printf("[%x] %s\n", uintptr(unsafe.Pointer(p)), s)
 }
 
 func _INFO_SQL_SELECT_DESCRIBE_VARS() []byte {
@@ -792,7 +792,7 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*lis
 					r[i], err = x.value(raw_value)
 				}
 			}
-		} else {    // PROTOCOL_VERSION13
+		} else { // PROTOCOL_VERSION13
 			b, _ = p.recvPackets(4)
 			// TODO:null indicator
 
@@ -908,16 +908,32 @@ func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) ([]driver.Value, error) {
 
 	r := make([]driver.Value, len(xsqlda))
 	var ln int
-	for i, x := range xsqlda {
-		if x.ioLength() < 0 {
+
+	if p.protocolVersion < PROTOCOL_VERSION13 {
+		for i, x := range xsqlda {
+			if x.ioLength() < 0 {
+				b, err = p.recvPackets(4)
+				ln = int(bytes_to_bint32(b))
+			} else {
+				ln = x.ioLength()
+			}
+			raw_value, _ := p.recvPacketsAlignment(ln)
 			b, err = p.recvPackets(4)
-			ln = int(bytes_to_bint32(b))
-		} else {
-			ln = x.ioLength()
+			if bytes_to_bint32(b) == 0 { // Not NULL
+				r[i], err = x.value(raw_value)
+			}
 		}
-		raw_value, _ := p.recvPacketsAlignment(ln)
-		b, err = p.recvPackets(4)
-		if bytes_to_bint32(b) == 0 { // Not NULL
+	} else { // PROTOCOL_VERSION13
+		b, _ = p.recvPackets(4)
+		// TODO:null indicator
+		for i, x := range xsqlda {
+			if x.ioLength() < 0 {
+				b, err = p.recvPackets(4)
+				ln = int(bytes_to_bint32(b))
+			} else {
+				ln = x.ioLength()
+			}
+			raw_value, _ := p.recvPacketsAlignment(ln)
 			r[i], err = x.value(raw_value)
 		}
 	}
