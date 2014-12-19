@@ -774,28 +774,38 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*lis
 	status := bytes_to_bint32(b[:4])
 	count := int(bytes_to_bint32(b[4:8]))
 	rows := list.New()
-	if p.protocolVersion >= PROTOCOL_VERSION13 {
-		/* TODO: null indicator */
-		b, _ = p.recvPackets(4)
-		fmt.Println("null indicator", b)
-	}
 
 	for count > 0 {
 		r := make([]driver.Value, len(xsqlda))
-		for i, x := range xsqlda {
-			var ln int
-			if x.ioLength() < 0 {
-				b, err = p.recvPackets(4)
-				ln = int(bytes_to_bint32(b))
-			} else {
-				ln = x.ioLength()
-			}
-			raw_value, _ := p.recvPacketsAlignment(ln)
-			if p.protocolVersion < PROTOCOL_VERSION13 {
+		if p.protocolVersion < PROTOCOL_VERSION13 {
+			for i, x := range xsqlda {
+				var ln int
+				if x.ioLength() < 0 {
+					b, err = p.recvPackets(4)
+					ln = int(bytes_to_bint32(b))
+				} else {
+					ln = x.ioLength()
+				}
+				raw_value, _ := p.recvPacketsAlignment(ln)
 				b, err = p.recvPackets(4)
 				if bytes_to_bint32(b) == 0 { // Not NULL
 					r[i], err = x.value(raw_value)
 				}
+			}
+		} else {    // PROTOCOL_VERSION13
+			b, _ = p.recvPackets(4)
+			// TODO:null indicator
+
+			for i, x := range xsqlda {
+				var ln int
+				if x.ioLength() < 0 {
+					b, err = p.recvPackets(4)
+					ln = int(bytes_to_bint32(b))
+				} else {
+					ln = x.ioLength()
+				}
+				raw_value, _ := p.recvPacketsAlignment(ln)
+				r[i], err = x.value(raw_value)
 			}
 		}
 		rows.PushBack(r)
