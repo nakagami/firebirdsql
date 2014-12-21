@@ -226,8 +226,23 @@ func paramsToBlr(params []driver.Value, protocolVersion int32) ([]byte, []byte) 
 	blrList.PushBack([]byte{5, 2, 4, 0, byte(ln & 255), byte(ln >> 8)})
 
 	if protocolVersion >= PROTOCOL_VERSION13 {
-		/* TODO: fill null indicator bits */
-		valuesList.PushBack([]byte{0, 0, 0, 0})
+		null_indicator := 0
+		for i := len(params) - 1; i > 0; i-- {
+			if params[i] == nil {
+				null_indicator &= (1 << uint(i))
+			}
+		}
+		n := len(params) / 8
+		if len(params)%8 != 0 {
+			n++
+		}
+		if n%4 != 0 { // padding
+			n += 4 - n%4
+		}
+		for i := 0; i < n; i++ {
+			valuesList.PushBack([]byte{byte(null_indicator & 255)})
+			null_indicator >>= 8
+		}
 	}
 
 	for _, p := range params {
