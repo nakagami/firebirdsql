@@ -793,10 +793,21 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*lis
 				}
 			}
 		} else { // PROTOCOL_VERSION13
-			b, _ = p.recvPackets(4)
-			// TODO:null indicator
+			n := len(xsqlda) / 8
+			if len(xsqlda)%8 != 0 {
+				n++
+			}
+			null_indicator := 0
+			b, _ := p.recvPacketsAlignment(n)
+			for n = len(b) - 1; n > 0; n-- {
+				null_indicator <<= 8
+				null_indicator += int(b[n])
+			}
 
 			for i, x := range xsqlda {
+				if (null_indicator & (1 << 1)) != 0 {
+					continue
+				}
 				var ln int
 				if x.ioLength() < 0 {
 					b, err = p.recvPackets(4)
