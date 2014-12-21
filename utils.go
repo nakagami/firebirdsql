@@ -29,6 +29,7 @@ import (
 	"database/sql/driver"
 	"encoding/binary"
 	"fmt"
+	"math/big"
 	"strings"
 	"time"
 )
@@ -219,6 +220,7 @@ func _timestampToBlr(t time.Time) ([]byte, []byte) {
 func paramsToBlr(params []driver.Value, protocolVersion int32) ([]byte, []byte) {
 	// Convert parameter array to BLR and values format.
 	var v, blr []byte
+	bi256 := big.NewInt(256)
 
 	ln := len(params) * 2
 	blrList := list.New()
@@ -226,10 +228,10 @@ func paramsToBlr(params []driver.Value, protocolVersion int32) ([]byte, []byte) 
 	blrList.PushBack([]byte{5, 2, 4, 0, byte(ln & 255), byte(ln >> 8)})
 
 	if protocolVersion >= PROTOCOL_VERSION13 {
-		null_indicator := 0
+		null_indicator := new(big.Int)
 		for i := len(params) - 1; i > 0; i-- {
 			if params[i] == nil {
-				null_indicator &= (1 << uint(i))
+				null_indicator.SetBit(null_indicator, i, 1)
 			}
 		}
 		n := len(params) / 8
@@ -240,8 +242,8 @@ func paramsToBlr(params []driver.Value, protocolVersion int32) ([]byte, []byte) 
 			n += 4 - n%4
 		}
 		for i := 0; i < n; i++ {
-			valuesList.PushBack([]byte{byte(null_indicator & 255)})
-			null_indicator >>= 8
+			valuesList.PushBack([]byte{byte(null_indicator.Mod(null_indicator, bi256).Int64())})
+			null_indicator = null_indicator.Div(null_indicator, bi256)
 		}
 	}
 
