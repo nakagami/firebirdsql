@@ -245,6 +245,19 @@ func TestIssue9(t *testing.T) {
 	}
 }
 
+func TestIssue10(t *testing.T) {
+	conn, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_issue10.fdb")
+
+	conn.Exec("CREATE TABLE test_issue10 (f1 BLOB SUB_TYPE 1)")
+	defer conn.Close()
+	conn.Exec("INSERT INTO test_issue10 (f1) values ('ABC')")
+    var blob sql.RawBytes
+	err := conn.QueryRow("SELECT f1 from test_issue10").Scan(&blob)
+	if err != nil || blob[0] != 65 {
+		t.Fatalf("Invalid short value:%v:%v", err, blob)
+	}
+}
+
 func TestError(t *testing.T) {
 	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_error.fdb")
 	if err != nil {
