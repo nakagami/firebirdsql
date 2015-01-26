@@ -427,6 +427,34 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
 	return stmt_type, xsqlda, err
 }
 
+func (p *wireProtocol) getBlobSegments(blobId []byte, transHandle int32) ([]byte, error) {
+	blob := []byte{}
+	p.opOpenBlob(blobId, transHandle)
+	blobHandle, _, _, err := p.opResponse()
+	if err != nil {
+		return nil, err
+	}
+
+	var rbuf []byte
+	var more_data int32
+	more_data = 1
+	for more_data == 1 {
+		p.opGetSegment(blobHandle)
+		more_data, _, rbuf, err = p.opResponse()
+		buf := rbuf
+		for len(buf) > 0 {
+			ln := int(bytes_to_int16(rbuf[0:2]))
+			blob = append(blob, buf[2:ln+2]...)
+			buf = buf[ln+2:]
+		}
+	}
+
+	p.opCloseBlob(blobHandle)
+	_, _, _, err = p.opResponse()
+
+	return blob, err
+}
+
 func (p *wireProtocol) opConnect(dbName string, user string, password string, clientPublic *big.Int) {
 	debugPrint(p, "opConnect")
 	moreProtocol, _ := hex.DecodeString("ffff800b00000001000000000000000500000004ffff800c00000001000000000000000500000006ffff800d00000001000000000000000500000008")
@@ -756,7 +784,7 @@ func (p *wireProtocol) opFetch(stmtHandle int32, blr []byte) {
 	p.sendPackets()
 }
 
-func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*list.List, bool, error) {
+func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsqlda []xSQLVAR) (*list.List, bool, error) {
 	debugPrint(p, "opFetchResponse")
 	b, err := p.recvPackets(4)
 	for bytes_to_bint32(b) == op_dummy {
@@ -821,6 +849,7 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, xsqlda []xSQLVAR) (*lis
 				r[i], err = x.value(raw_value)
 			}
 		}
+
 		rows.PushBack(r)
 
 		b, err = p.recvPackets(12)
@@ -839,11 +868,11 @@ func (p *wireProtocol) opDetach() {
 	p.sendPackets()
 }
 
-func (p *wireProtocol) opOpenBlob(blobId int32, transHandle int32) {
+func (p *wireProtocol) opOpenBlob(blobId []byte, transHandle int32) {
 	debugPrint(p, "opOpenBlob")
 	p.packInt(op_open_blob)
 	p.packInt(transHandle)
-	p.packInt(blobId)
+	p.appendBytes(blobId)
 	p.sendPackets()
 }
 

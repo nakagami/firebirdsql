@@ -251,9 +251,9 @@ func TestIssue10(t *testing.T) {
 	conn.Exec("CREATE TABLE test_issue10 (f1 BLOB SUB_TYPE 1)")
 	defer conn.Close()
 	conn.Exec("INSERT INTO test_issue10 (f1) values ('ABC')")
-    var blob []byte
+	var blob []byte
 	err := conn.QueryRow("SELECT f1 from test_issue10").Scan(&blob)
-	if err != nil || blob == nil || blob[0] != 65 {
+	if err != nil || blob == nil || len(blob) != 3 || blob[0] != 65 {
 		t.Fatalf("Invalid blob value:%v:%v", err, blob)
 	}
 }

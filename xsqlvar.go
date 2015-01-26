@@ -218,6 +218,8 @@ func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
 		v = f64
 	case SQL_TYPE_BOOLEAN:
 		v = raw_value[0] != 0
+	case SQL_TYPE_BLOB:
+		v = raw_value
 	}
 	return
 }

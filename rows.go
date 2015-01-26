@@ -81,7 +81,7 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 		// Get one chunk
 		var chunk *list.List
 		rows.stmt.wp.opFetch(rows.stmt.stmtHandle, rows.stmt.blr)
-		chunk, rows.moreData, err = rows.stmt.wp.opFetchResponse(rows.stmt.stmtHandle, rows.stmt.xsqlda)
+		chunk, rows.moreData, err = rows.stmt.wp.opFetchResponse(rows.stmt.stmtHandle, rows.stmt.tx.transHandle, rows.stmt.xsqlda)
 
 		if err == nil {
 			rows.currentChunkRow = chunk.Front()
@@ -94,7 +94,12 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 	}
 	row, _ := rows.currentChunkRow.Value.([]driver.Value)
 	for i, v := range row {
-		dest[i] = v
+		if rows.stmt.xsqlda[i].sqltype == SQL_TYPE_BLOB {
+			blobId := v.([]byte)
+			dest[i], err = rows.stmt.wp.getBlobSegments(blobId, rows.stmt.tx.transHandle)
+		} else {
+			dest[i] = v
+		}
 	}
 
 	return
