@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
+	"bytes"
 	"container/list"
 	"database/sql/driver"
 	"io"
@@ -96,7 +97,14 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 	for i, v := range row {
 		if rows.stmt.xsqlda[i].sqltype == SQL_TYPE_BLOB {
 			blobId := v.([]byte)
-			dest[i], err = rows.stmt.wp.getBlobSegments(blobId, rows.stmt.tx.transHandle)
+			var blob []byte
+			blob, err = rows.stmt.wp.getBlobSegments(blobId, rows.stmt.tx.transHandle)
+			if rows.stmt.xsqlda[i].sqlsubtype == 1 {
+				dest[i] = bytes.NewBuffer(blob).String()
+			} else {
+				dest[i] = blob
+			}
+
 		} else {
 			dest[i] = v
 		}

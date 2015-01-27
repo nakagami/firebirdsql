@@ -26,6 +26,7 @@ package firebirdsql
 import (
 	"database/sql"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -248,13 +249,14 @@ func TestIssue9(t *testing.T) {
 func TestIssue10(t *testing.T) {
 	conn, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_issue10.fdb")
 
-	conn.Exec("CREATE TABLE test_issue10 (f1 BLOB SUB_TYPE 1)")
+	conn.Exec("CREATE TABLE test_issue10 (f1 BLOB SUB_TYPE 0, f2 BLOB SUB_TYPE 1)")
 	defer conn.Close()
-	conn.Exec("INSERT INTO test_issue10 (f1) values ('ABC')")
-	var blob []byte
-	err := conn.QueryRow("SELECT f1 from test_issue10").Scan(&blob)
-	if err != nil || blob == nil || len(blob) != 3 || blob[0] != 65 {
-		t.Fatalf("Invalid blob value:%v:%v", err, blob)
+	conn.Exec("INSERT INTO test_issue10 (f1, f2) values ('ABC', 'ABC')")
+	var s string
+	var b []byte
+	err := conn.QueryRow("SELECT f1, f2 from test_issue10").Scan(&s, &b)
+	if err != nil || s != "ABC" || reflect.DeepEqual(b, []byte{65, 67, 68}) {
+		t.Fatalf("Invalid blob value:%v:%v,%v", err, s, b)
 	}
 }
 
