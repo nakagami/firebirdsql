@@ -443,7 +443,7 @@ func (p *wireProtocol) getBlobSegments(blobId []byte, transHandle int32) ([]byte
 		more_data, _, rbuf, err = p.opResponse()
 		buf := rbuf
 		for len(buf) > 0 {
-			ln := int(bytes_to_int16(rbuf[0:2]))
+			ln := int(bytes_to_int16(buf[0:2]))
 			blob = append(blob, buf[2:ln+2]...)
 			buf = buf[ln+2:]
 		}
