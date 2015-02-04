@@ -84,7 +84,7 @@ func (fc *firebirdsqlConn) Query(query string, args []driver.Value) (rows driver
 }
 
 func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
-	addr, dbName, user, password, err := parseDSN(dsn)
+	addr, dbName, user, password, role, err := parseDSN(dsn)
 	wp, err := newWireProtocol(addr)
 	if err != nil {
 		return
@@ -96,7 +96,7 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	if err != nil {
 		return
 	}
-	wp.opAttach(dbName, user, password)
+	wp.opAttach(dbName, user, password, role)
 	wp.dbHandle, _, _, err = wp.opResponse()
 	if err != nil {
 		return
@@ -118,7 +118,7 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 
 func createFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	// Create Database
-	addr, dbName, user, password, err := parseDSN(dsn)
+	addr, dbName, user, password, role, err := parseDSN(dsn)
 	wp, err := newWireProtocol(addr)
 	if err != nil {
 		return
@@ -131,7 +131,7 @@ func createFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	if err != nil {
 		return
 	}
-	wp.opCreate(dbName, user, password)
+	wp.opCreate(dbName, user, password, role)
 	wp.dbHandle, _, _, err = wp.opResponse()
 
 	fc = new(firebirdsqlConn)
