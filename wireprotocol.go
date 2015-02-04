@@ -474,7 +474,7 @@ func (p *wireProtocol) opConnect(dbName string, user string, password string, cl
 	p.sendPackets()
 }
 
-func (p *wireProtocol) opCreate(dbName string, user string, password string) {
+func (p *wireProtocol) opCreate(dbName string, user string, password string, role string) {
 	debugPrint(p, "opCreate")
 	var page_size int32
 	page_size = 4096
@@ -482,12 +482,14 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string) {
 	encode := bytes.NewBufferString("UTF8").Bytes()
 	userBytes := bytes.NewBufferString(strings.ToUpper(user)).Bytes()
 	passwordBytes := bytes.NewBufferString(password).Bytes()
+	roleBytes := []byte(role)
 	dpb := bytes.Join([][]byte{
 		[]byte{1},
 		[]byte{68, byte(len(encode))}, encode,
 		[]byte{48, byte(len(encode))}, encode,
 		[]byte{28, byte(len(userBytes))}, userBytes,
 		[]byte{29, byte(len(passwordBytes))}, passwordBytes,
+		[]byte{60, byte(len(roleBytes))}, roleBytes,
 		[]byte{63, 4}, int32_to_bytes(3),
 		[]byte{24, 4}, bint32_to_bytes(1),
 		[]byte{54, 4}, bint32_to_bytes(1),
@@ -606,17 +608,18 @@ func (p *wireProtocol) opAccept(user string, password string, clientPublic *big.
 	return
 }
 
-func (p *wireProtocol) opAttach(dbName string, user string, password string) {
+func (p *wireProtocol) opAttach(dbName string, user string, password string, role string) {
 	debugPrint(p, "opAttach")
 	encode := bytes.NewBufferString("UTF8").Bytes()
 	userBytes := bytes.NewBufferString(strings.ToUpper(user)).Bytes()
 	passwordBytes := bytes.NewBufferString(password).Bytes()
-
+	roleBytes := []byte(role)
 	dbp := bytes.Join([][]byte{
 		[]byte{1},
 		[]byte{48, byte(len(encode))}, encode,
 		[]byte{28, byte(len(userBytes))}, userBytes,
 		[]byte{29, byte(len(passwordBytes))}, passwordBytes,
+		[]byte{60, byte(len(roleBytes))}, roleBytes,
 	}, nil)
 	p.packInt(op_attach)
 	p.packInt(0) // Database Object ID

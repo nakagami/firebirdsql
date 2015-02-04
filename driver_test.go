@@ -271,6 +271,45 @@ func TestError(t *testing.T) {
 	}
 }
 
+func TestRole(t *testing.T) {
+	conn1, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_role.fdb")
+	if err != nil {
+		t.Fatalf("Error creating: %v", err)
+	}
+	conn1.Exec("CREATE TABLE test_role (f1 integer)")
+	conn1.Exec("INSERT INTO test_role (f1) values (1)")
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	conn1.Exec("CREATE ROLE DRIVERROLE")
+	if err != nil {
+		t.Fatalf("Error creating role: %v", err)
+	}
+	conn1.Exec("GRANT DRIVERROLE TO DRIVERTEST")
+	if err != nil {
+		t.Fatalf("Error creating role: %v", err)
+	}
+	conn1.Exec("GRANT SELECT ON test_role TO DRIVERROLE")
+	if err != nil {
+		t.Fatalf("Error granting right to role: %v", err)
+	}
+	conn1.Close()
+
+	conn2, err := sql.Open("firebirdsql", "drivertest:driverpw:driverrole@localhost:3050/tmp/go_test_role.fdb")
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+
+	rows, err := conn2.Query("SELECT f1 FROM test_role")
+	defer conn2.Close()
+	if err != nil {
+		t.Fatalf("Error Query: %v", err)
+	}
+
+	for rows.Next() {
+	}
+}
+
 /*
 func TestFB3(t *testing.T) {
 	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_fb3.fdb")

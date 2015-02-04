@@ -309,9 +309,10 @@ func split1(src string, delm string) (string, string) {
 	return src, ""
 }
 
-func parseDSN(dsn string) (addr string, dbName string, user string, passwd string, err error) {
+func parseDSN(dsn string) (addr string, dbName string, user string, passwd string, role string, err error) {
 	s1, s2 := split1(dsn, "@")
 	user, passwd = split1(s1, ":")
+	passwd, role = split1(passwd, ":")
 	addr, dbName = split1(s2, "/")
 	if !strings.ContainsRune(addr, ':') {
 		addr += ":3050"
