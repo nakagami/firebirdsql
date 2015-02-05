@@ -76,7 +76,7 @@ func TestBasic(t *testing.T) {
 	}
 
 	// 3 records insert
-	conn.Exec("insert into foo(a, b, c,h) values (1, 'a', 'b','This is a memo')")
+	conn.Exec("insert into foo(a, b, c, h) values (1, 'a', 'b','This is a memo')")
 	conn.Exec("insert into foo(a, b, c, e, g, i, j) values (2, 'A', 'B', '1999-01-25', '00:00:01', 0.1, 0.1)")
 	conn.Exec("insert into foo(a, b, c, e, g, i, j) values (3, 'X', 'Y', '2001-07-05', '00:01:02', 0.2, 0.2)")
 
@@ -88,18 +88,19 @@ func TestBasic(t *testing.T) {
 		t.Fatalf("Error bad record count: %v", n)
 	}
 
-	rows, err := conn.Query("select a, b, c, d, e, f, g, i, j from foo")
+	rows, err := conn.Query("select a, b, c, d, e, f, g, h, i, j from foo")
 	var a int
 	var b, c string
 	var d float64
 	var e time.Time
 	var f time.Time
 	var g time.Time
+	var h []byte
 	var i float64
 	var j float32
 
 	for rows.Next() {
-		rows.Scan(&a, &b, &c, &d, &e, &f, &g, &i, &j)
+		rows.Scan(&a, &b, &c, &d, &e, &f, &g, &h, &i, &j)
 	}
 
 	stmt, _ := conn.Prepare("select count(*) from foo where a=? and b=? and d=? and e=? and f=? and g=?")
