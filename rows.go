@@ -95,7 +95,7 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 	}
 	row, _ := rows.currentChunkRow.Value.([]driver.Value)
 	for i, v := range row {
-		if rows.stmt.xsqlda[i].sqltype == SQL_TYPE_BLOB {
+		if rows.stmt.xsqlda[i].sqltype == SQL_TYPE_BLOB && v != nil {
 			blobId := v.([]byte)
 			var blob []byte
 			blob, err = rows.stmt.wp.getBlobSegments(blobId, rows.stmt.tx.transHandle)
