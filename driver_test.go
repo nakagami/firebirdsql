@@ -311,6 +311,53 @@ func TestRole(t *testing.T) {
 	}
 }
 
+func TestInsertTimestamp(t *testing.T) {
+	const (
+		sqlSchema = "CREATE TABLE TEST (VAL1 TIMESTAMP, VAL2 TIMESTAMP, VAL3 TIMESTAMP, VAL4 TIMESTAMP);"
+		sqlInsert = "INSERT INTO TEST (VAL1, VAL2, VAL3, VAL4) VALUES (?, ?, ?, '2015/2/9 19:25:50.7405');"
+		sqlSelect = "SELECT * FROM TEST;"
+	)
+
+	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_timestamp.fdb")
+	if err != nil {
+		t.Fatalf("Error creating: %v", err)
+	}
+	defer conn.Close()
+
+	_, err = conn.Exec(sqlSchema)
+	if err != nil {
+		t.Fatalf("Error creating schema: %v", err)
+	}
+
+	dt1 := time.Date(2015, 2, 9, 19, 25, 50, 740500000, time.UTC)
+	dt2 := "2015/2/9 19:25:50.7405"
+	dt3 := "2015-2-9 19:25:50.7405"
+
+	if _, err = conn.Exec(sqlInsert, dt1, dt2, dt3); err != nil {
+		t.Fatalf("Error executing insert: %s", err)
+	}
+
+	var rt1, rt2, rt3, rt4 time.Time
+
+	err = conn.QueryRow(sqlSelect).Scan(&rt1, &rt2, &rt3, &rt4)
+	if err != nil {
+		t.Fatalf("Unexpected error in select: %s", err)
+	}
+
+	if rt1 != dt1 {
+		t.Errorf("Expected <%v>, got <%v>", dt1, rt1)
+	}
+	if rt2 != dt1 {
+		t.Errorf("Expected <%v>, got <%v>", dt1, rt2)
+	}
+	if rt3 != dt1 {
+		t.Errorf("Expected <%v>, got <%v>", dt1, rt3)
+	}
+	if rt4 != dt1 {
+		t.Errorf("Expected <%v>, got <%v>", dt1, rt4)
+	}
+}
+
 /*
 func TestFB3(t *testing.T) {
 	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_fb3.fdb")
