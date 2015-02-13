@@ -4,6 +4,9 @@ firebirdsql (Go firebird sql driver)
 
 Firebird RDBMS http://firebirdsql.org SQL driver for Go
 
+.. image:: https://travis-ci.org/nakagami/firebirdsql.svg?branch=master
+    :target: https://travis-ci.org/nakagami/firebirdsql
+
 Requirements
 -------------
 
