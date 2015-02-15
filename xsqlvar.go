@@ -140,7 +140,7 @@ func (x *xSQLVAR) _parseTime(raw_value []byte) (int, int, int, int) {
 	h := m / 60
 	m = m % 60
 	s = s % 60
-	return h, m, s, (n % 10000) * 100
+	return h, m, s, (n % 10000) * 100000
 }
 
 func (x *xSQLVAR) parseDate(raw_value []byte) time.Time {

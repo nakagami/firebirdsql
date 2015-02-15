@@ -187,7 +187,7 @@ func _convert_date(t time.Time) []byte {
 }
 
 func _convert_time(t time.Time) []byte {
-	v := (t.Hour()*3600+t.Minute()*60+t.Second())*10000 + t.Nanosecond()
+	v := (t.Hour()*3600+t.Minute()*60+t.Second())*10000 + t.Nanosecond()/100000
 	return bint32_to_bytes(int32(v))
 }
 
