@@ -831,14 +831,14 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsql
 			}
 			null_indicator := new(big.Int)
 			b, _ := p.recvPacketsAlignment(n)
-			for n = len(b) - 1; n > 0; n-- {
+			for n = len(b); n > 0; n-- {
 				null_indicator = null_indicator.Mul(null_indicator, bi256)
-				bi := big.NewInt(int64(b[n]))
+				bi := big.NewInt(int64(b[n-1]))
 				null_indicator = null_indicator.Add(null_indicator, bi)
 			}
 
 			for i, x := range xsqlda {
-				if null_indicator.Bit(1<<1) != 0 {
+				if null_indicator.Bit(i) != 0 {
 					continue
 				}
 				var ln int
