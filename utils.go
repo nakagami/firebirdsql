@@ -275,6 +275,8 @@ func paramsToBlr(params []driver.Value, protocolVersion int32) ([]byte, []byte) 
 		case nil:
 			v = []byte{}
 			blr = []byte{14, 0, 0}
+		case []byte:
+			blr, v = _strToBlr(string(f))
 		default:
 			// can't convert directory
 			blr, v = _strToBlr(fmt.Sprintf("%v", f))
