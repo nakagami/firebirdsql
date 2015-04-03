@@ -253,11 +253,44 @@ func TestIssue10(t *testing.T) {
 	conn.Exec("CREATE TABLE test_issue10 (f1 BLOB SUB_TYPE 0, f2 BLOB SUB_TYPE 1)")
 	defer conn.Close()
 	conn.Exec("INSERT INTO test_issue10 (f1, f2) values ('ABC', 'ABC')")
+
 	var s string
 	var b []byte
 	err := conn.QueryRow("SELECT f1, f2 from test_issue10").Scan(&s, &b)
-	if err != nil || s != "ABC" || reflect.DeepEqual(b, []byte{65, 67, 68}) {
-		t.Fatalf("Invalid blob value:%v:%v,%v", err, s, b)
+	if err != nil {
+		t.Fatalf("Error in query: %v", err)
+	}
+	if s != "ABC" {
+		t.Fatalf("Text blob: expected <%s>, got <%s>", "ABC", s)
+	}
+	b0 := []byte("ABC")
+	if !reflect.DeepEqual(b, b0) {
+		t.Fatalf("Binary blob: expected <%v>, got <%v>", b0, b)
+	}
+}
+
+func TestInsertBlobsWithParams(t *testing.T) {
+	conn, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_insert_blobs_with_params.fdb")
+	conn.Exec("CREATE TABLE test_blobs (f1 BLOB SUB_TYPE 0, f2 BLOB SUB_TYPE 1)")
+	defer conn.Close()
+
+	s0 := "Test Text"
+	b0 := []byte{0, 1, 2, 3, 4}
+	if _, err := conn.Exec("INSERT INTO test_blobs (f1, f2) values (?, ?)", s0, b0); err != nil {
+		t.Fatalf("Error inserting blobs with params: %v", err)
+	}
+
+	var s string
+	var b []byte
+	err := conn.QueryRow("SELECT f1, f2 from test_blobs").Scan(&s, &b)
+	if err != nil {
+		t.Fatalf("Error in query: %v", err)
+	}
+	if s != s0 {
+		t.Fatalf("Text blob: expected <%s>, got <%s>", s0, s)
+	}
+	if !reflect.DeepEqual(b, b0) {
+		t.Fatalf("Binary blob: expected <%v>, got <%v> (%s)", b0, b, string(b))
 	}
 }
 
