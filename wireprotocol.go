@@ -438,7 +438,7 @@ func (p *wireProtocol) getBlobSegments(blobId []byte, transHandle int32) ([]byte
 	var rbuf []byte
 	var more_data int32
 	more_data = 1
-	for more_data == 1 {
+	for more_data != 2 {
 		p.opGetSegment(blobHandle)
 		more_data, _, rbuf, err = p.opResponse()
 		buf := rbuf
