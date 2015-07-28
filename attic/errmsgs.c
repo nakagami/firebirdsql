@@ -26,13 +26,16 @@
 
 // wget https://raw.githubusercontent.com/FirebirdSQL/core/master/src/include/gen/msgs.h
 // perl -pi -e 's/\\\"/\\\\\\"/g' msgs.h
+// cc errmsgs.c
+// ./a.out
+
 
 #include "msgs.h"   
 
 int main(int argc, char *argv[])
 {
     int i;
-    FILE *fp = fopen("errmsgs.go", "w");
+    FILE *fp = fopen("../errmsgs.go", "w");
 
     fprintf(fp, "\
 /****************************************************************************\n\
