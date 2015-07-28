@@ -457,20 +457,22 @@ func (p *wireProtocol) getBlobSegments(blobId []byte, transHandle int32) ([]byte
 
 func (p *wireProtocol) opConnect(dbName string, user string, password string, clientPublic *big.Int) {
 	debugPrint(p, "opConnect")
-	moreProtocol, _ := hex.DecodeString("ffff800b00000001000000000000000500000004ffff800c00000001000000000000000500000006ffff800d00000001000000000000000500000008")
+	protocols := []string{
+		// PROTOCOL_VERSION, Arch type (Generic=1), min, max, weight
+		"0000000a00000001000000000000000500000002", // 10, 1, 0, 5, 2
+		"ffff800b00000001000000000000000500000004", // 11, 1, 0, 5, 4
+		"ffff800c00000001000000000000000500000006", // 12, 1, 0, 5, 6
+		"ffff800d00000001000000000000000500000008", // 13, 1, 0, 5, 8
+	}
 	p.packInt(op_connect)
 	p.packInt(op_attach)
-	p.packInt(3)  // CONNECT_VERSION3
-	p.packInt(36) // Arch type
+	p.packInt(3) // CONNECT_VERSION3
+	p.packInt(1) // Arch type(GENERIC)
 	p.packString(dbName)
-	p.packInt(4) // Protocol version understood count.
+	p.packInt(int32(len(protocols)))
 	p.packBytes(p.uid(strings.ToUpper(user), password, clientPublic))
-	p.packInt(10) // PROTOCOL_VERSION10
-	p.packInt(1)  // Arch type (Generic = 1)
-	p.packInt(0)  // Min type
-	p.packInt(5)  // Max type
-	p.packInt(2)  // Preference weight
-	p.appendBytes(moreProtocol)
+	buf, _ := hex.DecodeString(strings.Join(protocols, ""))
+	p.appendBytes(buf)
 	p.sendPackets()
 }
 
