@@ -31,12 +31,28 @@ type firebirdsqlTx struct {
 func (tx *firebirdsqlTx) Commit() (err error) {
 	tx.wp.opCommit(tx.transHandle)
 	_, _, _, err = tx.wp.opResponse()
+	tx.wp.opTransaction([]byte{
+		byte(isc_tpb_version3),
+		byte(isc_tpb_write),
+		byte(isc_tpb_wait),
+		byte(isc_tpb_read_committed),
+		byte(isc_tpb_no_rec_version),
+	})
+	tx.transHandle, _, _, err = tx.wp.opResponse()
 	return
 }
 
 func (tx *firebirdsqlTx) Rollback() (err error) {
 	tx.wp.opRollback(tx.transHandle)
 	_, _, _, err = tx.wp.opResponse()
+	tx.wp.opTransaction([]byte{
+		byte(isc_tpb_version3),
+		byte(isc_tpb_write),
+		byte(isc_tpb_wait),
+		byte(isc_tpb_read_committed),
+		byte(isc_tpb_no_rec_version),
+	})
+	tx.transHandle, _, _, err = tx.wp.opResponse()
 	return
 }
 

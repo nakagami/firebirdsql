@@ -152,3 +152,36 @@ func TestIssue10(t *testing.T) {
 		t.Fatalf("Binary blob: expected <%v>, got <%v>", b0, b)
 	}
 }
+
+func TestIssue23(t *testing.T) {
+	conn, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_issue23.fdb")
+	conn.Exec("CREATE TABLE test_issue23 (f1 varchar(2048))")
+	defer conn.Close()
+
+	tx, err := conn.Begin()
+	if err != nil {
+		t.Fatalf("Begin: %v", err)
+	}
+
+	sqlStr := "INSERT INTO test_issue23 (f1) VALUES (?)"
+	if _, err := tx.Exec(sqlStr, "test"); err != nil {
+		tx.Rollback()
+		if err != nil {
+			t.Fatalf("Rollback: %v", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		if err != nil {
+			t.Fatalf("Commit: %v", err)
+		}
+	}
+
+	var name string
+	sqlStr = "SELECT f1 FROM test_issue23"
+	if err = conn.QueryRow(sqlStr).Scan(&name); err != nil {
+		if err != nil {
+			t.Fatalf("QueryRow: %v", err)
+		}
+	}
+}
