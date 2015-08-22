@@ -77,6 +77,7 @@ func (stmt *firebirdsqlStmt) Exec(args []driver.Value) (result driver.Result, er
 	result = &firebirdsqlResult{
 		affectedRows: rowcount,
 	}
+	err = stmt.tx.Commit()
 	return
 }
 
