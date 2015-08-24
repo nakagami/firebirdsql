@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
 	"reflect"
@@ -150,6 +151,34 @@ func TestIssue10(t *testing.T) {
 	b0 := []byte("ABC")
 	if !reflect.DeepEqual(b, b0) {
 		t.Fatalf("Binary blob: expected <%v>, got <%v>", b0, b)
+	}
+}
+
+func blobOfSize(size int) []byte {
+	var buf bytes.Buffer
+	for i := 0; i < size; i++ {
+		buf.WriteRune('A')
+	}
+	return buf.Bytes()
+}
+
+func TestIssue18(t *testing.T) {
+	conn, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_issue_18.fdb")
+	conn.Exec("CREATE TABLE test_blobs (f1 BLOB SUB_TYPE 1)")
+	defer conn.Close()
+
+	b0 := blobOfSize(65536)
+	if _, err := conn.Exec("INSERT INTO test_blobs (f1) values (?)", b0); err != nil {
+		t.Fatalf("Error inserting blobs with params: %v", err)
+	}
+
+	var b []byte
+	err := conn.QueryRow("SELECT f1 from test_blobs").Scan(&b)
+	if err != nil {
+		t.Fatalf("Error in query: %v", err)
+	}
+	if !reflect.DeepEqual(b, b0) {
+		t.Fatalf("Binary blob: expected <%v>, got <%v> (%s)", b0, b, string(b))
 	}
 }
 
