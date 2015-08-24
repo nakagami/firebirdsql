@@ -797,8 +797,11 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsql
 	}
 
 	if bytes_to_bint32(b) == op_response {
-		p._parse_op_response() // error occured
-		return nil, false, errors.New("opFetchResponse:Internal Error")
+		for p.lazyResponseCount > 0 {
+			p.lazyResponseCount--
+		}
+		p._parse_op_response()
+		b, _ = p.recvPackets(4)
 	}
 	if bytes_to_bint32(b) != op_fetch_response {
 		return nil, false, errors.New("opFetchResponse:Internal Error")
