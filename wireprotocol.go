@@ -1076,7 +1076,8 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 	for _, param := range params {
 		switch f := param.(type) {
 		case string:
-			blr, v = _strToBlr(f, p, transHandle)
+			b := str_to_bytes(f)
+			blr, v = _bytesToBlr(b)
 		case int:
 			blr, v = _int32ToBlr(int32(f))
 		case int16:
@@ -1102,10 +1103,11 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 			v = []byte{}
 			blr = []byte{14, 0, 0}
 		case []byte:
-			blr, v = _bytesToBlr(f, p, transHandle)
+			blr, v = _bytesToBlr(f)
 		default:
 			// can't convert directory
-			blr, v = _strToBlr(fmt.Sprintf("%v", f), p, transHandle)
+			b := str_to_bytes(fmt.Sprintf("%v", f))
+			blr, v = _bytesToBlr(b)
 		}
 		valuesList.PushBack(v)
 		if protocolVersion < PROTOCOL_VERSION13 {

@@ -160,7 +160,7 @@ func _int32ToBlr(i32 int32) ([]byte, []byte) {
 	return blr, v
 }
 
-func _bytesToBlr(v []byte, p *wireProtocol, transHandle int32) ([]byte, []byte) {
+func _bytesToBlr(v []byte) ([]byte, []byte) {
 	nbytes := len(v)
 	pad_length := ((4 - nbytes) & 3)
 	padding := make([]byte, pad_length)
@@ -170,11 +170,6 @@ func _bytesToBlr(v []byte, p *wireProtocol, transHandle int32) ([]byte, []byte) 
 	}, nil)
 	blr := []byte{14, byte(nbytes & 255), byte(nbytes >> 8)}
 	return blr, v
-}
-
-func _strToBlr(s string, p *wireProtocol, transHandle int32) ([]byte, []byte) {
-	v := str_to_bytes(s)
-    return _bytesToBlr(v, p, transHandle)
 }
 
 func _convert_date(t time.Time) []byte {
