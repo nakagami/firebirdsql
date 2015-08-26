@@ -36,14 +36,16 @@ import (
 	"os"
 	"strconv"
 	"strings"
-    "time"
+	"time"
 	//"unsafe"
 )
 
 const (
-	PLUGIN_NAME = "Srp"
-	PLUGIN_LIST = "Srp,Legacy_Auth"
-	BUFFER_LEN  = 1024
+	PLUGIN_NAME       = "Srp"
+	PLUGIN_LIST       = "Srp,Legacy_Auth"
+	BUFFER_LEN        = 1024
+	MAX_CHAR_LENGTH   = 32767
+	BLOB_SEGMENT_SIZE = 32000
 )
 
 func debugPrint(p *wireProtocol, s string) {
@@ -904,6 +906,17 @@ func (p *wireProtocol) opGetSegment(blobHandle int32) {
 	p.sendPackets()
 }
 
+func (p *wireProtocol) opPutSegment(blobHandle int32, seg_data []byte) {
+	debugPrint(p, "opPutSegment")
+	ln := len(seg_data)
+	p.packInt(op_put_segment)
+	p.packInt(blobHandle)
+	p.packInt(int32(ln))
+	p.packInt(int32(ln))
+	p.packBytes(seg_data)
+	p.sendPackets()
+}
+
 func (p *wireProtocol) opBatchSegments(blobHandle int32, seg_data []byte) {
 	debugPrint(p, "opBatchSegments")
 	ln := len(seg_data)
@@ -1004,6 +1017,32 @@ func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) ([]driver.Value, error) {
 	return r, err
 }
 
+func (p *wireProtocol) createBlob(value []byte, transHandle int32) (int32, error) {
+	p.opCreateBlob2(transHandle)
+	blobHandle, blobId, _, err := p.opResponse()
+	if err != nil {
+		return blobId, err
+	}
+
+	i := 0
+	for i < len(value) {
+		p.opPutSegment(blobHandle, value[i:i+BLOB_SEGMENT_SIZE])
+		_, _, _, err := p.opResponse()
+		if err != nil {
+			break
+		}
+		i += BLOB_SEGMENT_SIZE
+	}
+	if err != nil {
+		return blobId, err
+	}
+
+	p.opCloseBlob(blobHandle)
+	_, _, _, err = p.opResponse()
+
+	return blobId, err
+}
+
 func (p *wireProtocol) paramsToBlr(params []driver.Value, protocolVersion int32) ([]byte, []byte) {
 	// Convert parameter array to BLR and values format.
 	var v, blr []byte
@@ -1086,4 +1125,3 @@ func (p *wireProtocol) paramsToBlr(params []driver.Value, protocolVersion int32)
 
 	return blr, v
 }
-

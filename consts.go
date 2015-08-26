@@ -362,6 +362,7 @@ const (
 	op_rollback           = 31
 	op_open_blob          = 35
 	op_get_segment        = 36
+	op_put_segment        = 37
 	op_close_blob         = 39
 	op_info_database      = 40
 	op_info_transaction   = 42
