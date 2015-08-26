@@ -26,10 +26,7 @@ package firebirdsql
 import (
 	"bytes"
 	"container/list"
-	"database/sql/driver"
 	"encoding/binary"
-	"fmt"
-	"math/big"
 	"strings"
 	"time"
 )
@@ -214,89 +211,6 @@ func _timestampToBlr(t time.Time) ([]byte, []byte) {
 	}, nil)
 
 	blr := []byte{35}
-	return blr, v
-}
-
-func paramsToBlr(params []driver.Value, protocolVersion int32) ([]byte, []byte) {
-	// Convert parameter array to BLR and values format.
-	var v, blr []byte
-	bi256 := big.NewInt(256)
-
-	ln := len(params) * 2
-	blrList := list.New()
-	valuesList := list.New()
-	blrList.PushBack([]byte{5, 2, 4, 0, byte(ln & 255), byte(ln >> 8)})
-
-	if protocolVersion >= PROTOCOL_VERSION13 {
-		null_indicator := new(big.Int)
-		for i := len(params) - 1; i > 0; i-- {
-			if params[i] == nil {
-				null_indicator.SetBit(null_indicator, i, 1)
-			}
-		}
-		n := len(params) / 8
-		if len(params)%8 != 0 {
-			n++
-		}
-		if n%4 != 0 { // padding
-			n += 4 - n%4
-		}
-		for i := 0; i < n; i++ {
-			valuesList.PushBack([]byte{byte(null_indicator.Mod(null_indicator, bi256).Int64())})
-			null_indicator = null_indicator.Div(null_indicator, bi256)
-		}
-	}
-
-	for _, p := range params {
-		switch f := p.(type) {
-		case string:
-			blr, v = _strToBlr(f)
-		case int:
-			blr, v = _int32ToBlr(int32(f))
-		case int16:
-			blr, v = _int32ToBlr(int32(f))
-		case int32:
-			blr, v = _int32ToBlr(f)
-		case int64:
-			blr, v = _int32ToBlr(int32(f))
-		case time.Time:
-			if f.Year() == 0 {
-				blr, v = _timeToBlr(f)
-			} else {
-				blr, v = _timestampToBlr(f)
-			}
-		case bool:
-			if f {
-				v = []byte{1, 0, 0, 0}
-			} else {
-				v = []byte{0, 0, 0, 0}
-			}
-			blr = []byte{23}
-		case nil:
-			v = []byte{}
-			blr = []byte{14, 0, 0}
-		case []byte:
-			blr, v = _strToBlr(string(f))
-		default:
-			// can't convert directory
-			blr, v = _strToBlr(fmt.Sprintf("%v", f))
-		}
-		valuesList.PushBack(v)
-		if protocolVersion < PROTOCOL_VERSION13 {
-			if p == nil {
-				valuesList.PushBack([]byte{0xff, 0xff, 0xff, 0xff})
-			} else {
-				valuesList.PushBack([]byte{0, 0, 0, 0})
-			}
-		}
-		blrList.PushBack(blr)
-		blrList.PushBack([]byte{7, 0})
-	}
-	blrList.PushBack([]byte{255, 76}) // [blr_end, blr_eoc]
-
-	blr = flattenBytes(blrList)
-	v = flattenBytes(valuesList)
-
 	return blr, v
 }
 
