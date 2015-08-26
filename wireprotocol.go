@@ -1102,7 +1102,7 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 			v = []byte{}
 			blr = []byte{14, 0, 0}
 		case []byte:
-			blr, v = _strToBlr(string(f), p, transHandle)
+			blr, v = _bytesToBlr(f, p, transHandle)
 		default:
 			// can't convert directory
 			blr, v = _strToBlr(fmt.Sprintf("%v", f), p, transHandle)
