@@ -160,7 +160,7 @@ func _int32ToBlr(i32 int32) ([]byte, []byte) {
 	return blr, v
 }
 
-func _strToBlr(s string) ([]byte, []byte) {
+func _strToBlr(s string, p *wireProtocol, transHandle int32) ([]byte, []byte) {
 	v := str_to_bytes(s)
 	nbytes := len(v)
 	pad_length := ((4 - nbytes) & 3)

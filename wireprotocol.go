@@ -750,7 +750,7 @@ func (p *wireProtocol) opExecute(stmtHandle int32, transHandle int32, params []d
 		p.packInt(0)
 		p.sendPackets()
 	} else {
-		blr, values := p.paramsToBlr(params, p.protocolVersion)
+		blr, values := p.paramsToBlr(transHandle, params, p.protocolVersion)
 		p.packBytes(blr)
 		p.packInt(0)
 		p.packInt(1)
@@ -770,7 +770,7 @@ func (p *wireProtocol) opExecute2(stmtHandle int32, transHandle int32, params []
 		p.packInt(0)
 		p.packInt(0)
 	} else {
-		blr, values := p.paramsToBlr(params, p.protocolVersion)
+		blr, values := p.paramsToBlr(transHandle, params, p.protocolVersion)
 		p.packBytes(blr)
 		p.packInt(0)
 		p.packInt(1)
@@ -1043,7 +1043,7 @@ func (p *wireProtocol) createBlob(value []byte, transHandle int32) (int32, error
 	return blobId, err
 }
 
-func (p *wireProtocol) paramsToBlr(params []driver.Value, protocolVersion int32) ([]byte, []byte) {
+func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, protocolVersion int32) ([]byte, []byte) {
 	// Convert parameter array to BLR and values format.
 	var v, blr []byte
 	bi256 := big.NewInt(256)
@@ -1073,10 +1073,10 @@ func (p *wireProtocol) paramsToBlr(params []driver.Value, protocolVersion int32)
 		}
 	}
 
-	for _, p := range params {
-		switch f := p.(type) {
+	for _, param := range params {
+		switch f := param.(type) {
 		case string:
-			blr, v = _strToBlr(f)
+			blr, v = _strToBlr(f, p, transHandle)
 		case int:
 			blr, v = _int32ToBlr(int32(f))
 		case int16:
@@ -1102,14 +1102,14 @@ func (p *wireProtocol) paramsToBlr(params []driver.Value, protocolVersion int32)
 			v = []byte{}
 			blr = []byte{14, 0, 0}
 		case []byte:
-			blr, v = _strToBlr(string(f))
+			blr, v = _strToBlr(string(f), p, transHandle)
 		default:
 			// can't convert directory
-			blr, v = _strToBlr(fmt.Sprintf("%v", f))
+			blr, v = _strToBlr(fmt.Sprintf("%v", f), p, transHandle)
 		}
 		valuesList.PushBack(v)
 		if protocolVersion < PROTOCOL_VERSION13 {
-			if p == nil {
+			if param == nil {
 				valuesList.PushBack([]byte{0xff, 0xff, 0xff, 0xff})
 			} else {
 				valuesList.PushBack([]byte{0, 0, 0, 0})
