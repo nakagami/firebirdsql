@@ -1077,7 +1077,13 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 		switch f := param.(type) {
 		case string:
 			b := str_to_bytes(f)
-			blr, v = _bytesToBlr(b)
+			if len(b) < MAX_CHAR_LENGTH {
+				blr, v = _bytesToBlr(b)
+			} else {
+				blobHandle, _ := p.createBlob(b, transHandle)
+				blr = []byte{9, 0}
+				v = int32_to_bytes(blobHandle)
+			}
 		case int:
 			blr, v = _int32ToBlr(int32(f))
 		case int16:
@@ -1103,11 +1109,23 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 			v = []byte{}
 			blr = []byte{14, 0, 0}
 		case []byte:
-			blr, v = _bytesToBlr(f)
+			if len(f) < MAX_CHAR_LENGTH {
+				blr, v = _bytesToBlr(f)
+			} else {
+				blobHandle, _ := p.createBlob(v, transHandle)
+				blr = []byte{9, 0}
+				v = int32_to_bytes(blobHandle)
+			}
 		default:
 			// can't convert directory
 			b := str_to_bytes(fmt.Sprintf("%v", f))
-			blr, v = _bytesToBlr(b)
+			if len(b) < MAX_CHAR_LENGTH {
+				blr, v = _bytesToBlr(b)
+			} else {
+				blobHandle, _ := p.createBlob(b, transHandle)
+				blr = []byte{9, 0}
+				v = int32_to_bytes(blobHandle)
+			}
 		}
 		valuesList.PushBack(v)
 		if protocolVersion < PROTOCOL_VERSION13 {
