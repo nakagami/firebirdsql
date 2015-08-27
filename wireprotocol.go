@@ -759,7 +759,7 @@ func (p *wireProtocol) opInfoSql(stmtHandle int32, vars []byte) {
 }
 
 func (p *wireProtocol) opExecute(stmtHandle int32, transHandle int32, params []driver.Value) {
-//	debugPrint(p, fmt.Sprintf("opExecute():%d,%d,%v", transHandle, stmtHandle, params))
+	//	debugPrint(p, fmt.Sprintf("opExecute():%d,%d,%v", transHandle, stmtHandle, params))
 	debugPrint(p, fmt.Sprintf("opExecute():%d,%d", transHandle, stmtHandle))
 	p.packInt(op_execute)
 	p.packInt(stmtHandle)
@@ -820,10 +820,8 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsql
 		b, _ = p.recvPackets(4)
 	}
 
-	if bytes_to_bint32(b) == op_response {
-		for p.lazyResponseCount > 0 {
-			p.lazyResponseCount--
-		}
+	for bytes_to_bint32(b) == op_response {
+		p.lazyResponseCount--
 		p._parse_op_response()
 		b, _ = p.recvPackets(4)
 	}
