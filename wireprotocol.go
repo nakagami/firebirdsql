@@ -759,7 +759,8 @@ func (p *wireProtocol) opInfoSql(stmtHandle int32, vars []byte) {
 }
 
 func (p *wireProtocol) opExecute(stmtHandle int32, transHandle int32, params []driver.Value) {
-	debugPrint(p, fmt.Sprintf("opExecute():%d,%d,%v", transHandle, stmtHandle, params))
+//	debugPrint(p, fmt.Sprintf("opExecute():%d,%d,%v", transHandle, stmtHandle, params))
+	debugPrint(p, fmt.Sprintf("opExecute():%d,%d", transHandle, stmtHandle))
 	p.packInt(op_execute)
 	p.packInt(stmtHandle)
 	p.packInt(transHandle)
