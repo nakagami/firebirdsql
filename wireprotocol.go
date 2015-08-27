@@ -443,10 +443,12 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
 }
 
 func (p *wireProtocol) getBlobSegments(blobId []byte, transHandle int32) ([]byte, error) {
+	suspendBuf := p.suspendBuffer()
 	blob := []byte{}
 	p.opOpenBlob(blobId, transHandle)
 	blobHandle, _, _, err := p.opResponse()
 	if err != nil {
+		p.resumeBuffer(suspendBuf)
 		return nil, err
 	}
 
@@ -467,6 +469,7 @@ func (p *wireProtocol) getBlobSegments(blobId []byte, transHandle int32) ([]byte
 	p.opCloseBlob(blobHandle)
 	_, _, _, err = p.opResponse()
 
+	p.resumeBuffer(suspendBuf)
 	return blob, err
 }
 
