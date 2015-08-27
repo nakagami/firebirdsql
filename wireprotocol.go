@@ -1047,7 +1047,11 @@ func (p *wireProtocol) createBlob(value []byte, transHandle int32) ([]byte, erro
 
 	i := 0
 	for i < len(value) {
-		p.opPutSegment(blobHandle, value[i:i+BLOB_SEGMENT_SIZE])
+		end := i + BLOB_SEGMENT_SIZE
+		if end > len(value) {
+			end = len(value)
+		}
+		p.opPutSegment(blobHandle, value[i:end])
 		_, _, _, err := p.opResponse()
 		if err != nil {
 			break
