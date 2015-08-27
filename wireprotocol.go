@@ -225,6 +225,18 @@ func (p *wireProtocol) sendPackets() (written int, err error) {
 	return
 }
 
+func (p *wireProtocol) suspendBuffer() []byte {
+	debugPrint(p, fmt.Sprintf("\tsuspendBuffer():%v", p.buf))
+	buf := p.buf
+	p.buf = make([]byte, 0, BUFFER_LEN)
+	return buf
+}
+
+func (p *wireProtocol) resumeBuffer(buf []byte) {
+	debugPrint(p, fmt.Sprintf("\tresumeBuffer():%v", buf))
+	p.buf = buf
+}
+
 func (p *wireProtocol) recvPackets(n int) ([]byte, error) {
 	buf := make([]byte, n)
 	var err error
@@ -298,10 +310,10 @@ func (p *wireProtocol) _parse_status_vector() (*list.List, int, string, error) {
 	return gds_codes, sql_code, message, err
 }
 
-func (p *wireProtocol) _parse_op_response() (int32, int32, []byte, error) {
+func (p *wireProtocol) _parse_op_response() (int32, []byte, []byte, error) {
 	b, err := p.recvPackets(16)
 	h := bytes_to_bint32(b[0:4])            // Object handle
-	oid := bytes_to_bint32(b[4:12])         // Object ID
+	oid := b[4:12]                          // Object ID
 	buf_len := int(bytes_to_bint32(b[12:])) // buffer length
 	buf, err := p.recvPacketsAlignment(buf_len)
 
@@ -939,7 +951,7 @@ func (p *wireProtocol) opCloseBlob(blobHandle int32) {
 	p.sendPackets()
 }
 
-func (p *wireProtocol) opResponse() (int32, int32, []byte, error) {
+func (p *wireProtocol) opResponse() (int32, []byte, []byte, error) {
 	debugPrint(p, "opResponse")
 	for p.lazyResponseCount > 0 {
 		p.lazyResponseCount--
@@ -951,7 +963,7 @@ func (p *wireProtocol) opResponse() (int32, int32, []byte, error) {
 	}
 
 	if bytes_to_bint32(b) != op_response {
-		return 0, 0, nil, errors.New("Error op_response")
+		return 0, nil, nil, errors.New("Error op_response")
 	}
 	return p._parse_op_response()
 }
@@ -1017,10 +1029,12 @@ func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) ([]driver.Value, error) {
 	return r, err
 }
 
-func (p *wireProtocol) createBlob(value []byte, transHandle int32) (int32, error) {
+func (p *wireProtocol) createBlob(value []byte, transHandle int32) ([]byte, error) {
+	buf := p.suspendBuffer()
 	p.opCreateBlob2(transHandle)
 	blobHandle, blobId, _, err := p.opResponse()
 	if err != nil {
+		p.resumeBuffer(buf)
 		return blobId, err
 	}
 
@@ -1034,12 +1048,14 @@ func (p *wireProtocol) createBlob(value []byte, transHandle int32) (int32, error
 		i += BLOB_SEGMENT_SIZE
 	}
 	if err != nil {
+		p.resumeBuffer(buf)
 		return blobId, err
 	}
 
 	p.opCloseBlob(blobHandle)
 	_, _, _, err = p.opResponse()
 
+	p.resumeBuffer(buf)
 	return blobId, err
 }
 
@@ -1080,9 +1096,8 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 			if len(b) < MAX_CHAR_LENGTH {
 				blr, v = _bytesToBlr(b)
 			} else {
-				blobHandle, _ := p.createBlob(b, transHandle)
+				v, _ = p.createBlob(b, transHandle)
 				blr = []byte{9, 0}
-				v = int32_to_bytes(blobHandle)
 			}
 		case int:
 			blr, v = _int32ToBlr(int32(f))
@@ -1112,9 +1127,8 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 			if len(f) < MAX_CHAR_LENGTH {
 				blr, v = _bytesToBlr(f)
 			} else {
-				blobHandle, _ := p.createBlob(v, transHandle)
+				v, _ = p.createBlob(v, transHandle)
 				blr = []byte{9, 0}
-				v = int32_to_bytes(blobHandle)
 			}
 		default:
 			// can't convert directory
@@ -1122,9 +1136,8 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 			if len(b) < MAX_CHAR_LENGTH {
 				blr, v = _bytesToBlr(b)
 			} else {
-				blobHandle, _ := p.createBlob(b, transHandle)
+				v, _ = p.createBlob(b, transHandle)
 				blr = []byte{9, 0}
-				v = int32_to_bytes(blobHandle)
 			}
 		}
 		valuesList.PushBack(v)
