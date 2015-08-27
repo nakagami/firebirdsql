@@ -104,10 +104,11 @@ func (c *wireChannel) Write(buf []byte) (n int, err error) {
 	if c.rc4writer != nil {
 		dst := make([]byte, len(buf))
 		c.rc4writer.XORKeyStream(dst, buf)
-		return c.conn.Write(dst)
+		n, err = c.conn.Write(dst)
 	} else {
-		return c.conn.Write(buf)
+		n, err = c.conn.Write(buf)
 	}
+	return
 }
 func (c *wireChannel) Close() error {
 	return c.conn.Close()
@@ -970,7 +971,7 @@ func (p *wireProtocol) opResponse() (int32, []byte, []byte, error) {
 	}
 
 	if bytes_to_bint32(b) != op_response {
-		return 0, nil, nil, errors.New(fmt.Sprintf("Error op_response:%d",bytes_to_bint32(b)))
+		return 0, nil, nil, errors.New(fmt.Sprintf("Error op_response:%d", bytes_to_bint32(b)))
 	}
 	return p._parse_op_response()
 }
