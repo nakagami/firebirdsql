@@ -932,7 +932,7 @@ func (p *wireProtocol) opPutSegment(blobHandle int32, seg_data []byte) {
 	p.packInt(blobHandle)
 	p.packInt(int32(ln))
 	p.packInt(int32(ln))
-	p.packBytes(seg_data)
+	p.appendBytes(seg_data)
 	p.sendPackets()
 }
 
