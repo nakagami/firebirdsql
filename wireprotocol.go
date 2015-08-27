@@ -467,7 +467,11 @@ func (p *wireProtocol) getBlobSegments(blobId []byte, transHandle int32) ([]byte
 	}
 
 	p.opCloseBlob(blobHandle)
-	_, _, _, err = p.opResponse()
+	if p.acceptType != ptype_lazy_send {
+		_, _, _, err = p.opResponse()
+	} else {
+		p.lazyResponseCount++
+	}
 
 	p.resumeBuffer(suspendBuf)
 	return blob, err
@@ -966,7 +970,7 @@ func (p *wireProtocol) opResponse() (int32, []byte, []byte, error) {
 	}
 
 	if bytes_to_bint32(b) != op_response {
-		return 0, nil, nil, errors.New("Error op_response")
+		return 0, nil, nil, errors.New(fmt.Sprintf("Error op_response:%d",bytes_to_bint32(b)))
 	}
 	return p._parse_op_response()
 }
