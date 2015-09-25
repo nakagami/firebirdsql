@@ -556,21 +556,11 @@ func (p *wireProtocol) opAccept(user string, password string, clientPublic *big.
 
 		b, _ := p.recvPackets(4)
 		ln = int(bytes_to_bint32(b))
-		data, _ := p.recvPackets(ln)
-		readLength = int(4 + ln)
-		if readLength%4 != 0 {
-			p.recvPackets(4 - readLength%4) // padding
-			readLength += 4 - readLength%4
-		}
+		data, _ := p.recvPacketsAlignment(ln)
 
 		b, _ = p.recvPackets(4)
 		ln = int(bytes_to_bint32(b))
-		pluginName, _ := p.recvPackets(ln)
-		readLength = int(4 + ln)
-		if readLength%4 != 0 {
-			p.recvPackets(4 - readLength%4) // padding
-			readLength += 4 - readLength%4
-		}
+		pluginName, _ := p.recvPacketsAlignment(ln)
 		p.pluginName = bytes_to_str(pluginName)
 
 		b, _ = p.recvPackets(4)
@@ -579,12 +569,7 @@ func (p *wireProtocol) opAccept(user string, password string, clientPublic *big.
 
 		b, _ = p.recvPackets(4)
 		ln = int(bytes_to_bint32(b))
-		_, _ = p.recvPackets(ln) // keys
-		readLength = int(4 + ln)
-		if readLength%4 != 0 {
-			p.recvPackets(4 - readLength%4) // padding
-			readLength += 4 - readLength%4
-		}
+		_, _ = p.recvPacketsAlignment(ln) // keys
 
 		if p.pluginName == "Legacy_Auth" && isAuthenticated == 0 {
 			err = errors.New("opAccept() Unauthorized")
