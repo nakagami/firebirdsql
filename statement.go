@@ -38,10 +38,10 @@ type firebirdsqlStmt struct {
 
 func (stmt *firebirdsqlStmt) Close() (err error) {
 	stmt.wp.opFreeStatement(stmt.stmtHandle, 2) // DSQL_drop
-	if stmt.wp.acceptType != ptype_lazy_send {
-		_, _, _, err = stmt.wp.opResponse()
-	} else {
+	if stmt.wp.acceptType == ptype_lazy_send {
 		stmt.wp.lazyResponseCount++
+	} else {
+		_, _, _, err = stmt.wp.opResponse()
 	}
 
 	return

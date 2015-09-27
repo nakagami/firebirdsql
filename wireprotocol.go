@@ -468,10 +468,10 @@ func (p *wireProtocol) getBlobSegments(blobId []byte, transHandle int32) ([]byte
 	}
 
 	p.opCloseBlob(blobHandle)
-	if p.acceptType != ptype_lazy_send {
-		_, _, _, err = p.opResponse()
-	} else {
+	if p.acceptType == ptype_lazy_send {
 		p.lazyResponseCount++
+	} else {
+		_, _, _, err = p.opResponse()
 	}
 
 	p.resumeBuffer(suspendBuf)
@@ -819,7 +819,7 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsql
 		b, _ = p.recvPackets(4)
 	}
 
-	for bytes_to_bint32(b) == op_response {
+	for bytes_to_bint32(b) == op_response && p.lazyResponseCount > 0 {
 		p.lazyResponseCount--
 		p._parse_op_response()
 		b, _ = p.recvPackets(4)
@@ -959,12 +959,13 @@ func (p *wireProtocol) opCloseBlob(blobHandle int32) {
 
 func (p *wireProtocol) opResponse() (int32, []byte, []byte, error) {
 	debugPrint(p, "opResponse")
-	for p.lazyResponseCount > 0 {
-		p.lazyResponseCount--
-		_, _, _, _ = p.opResponse()
-	}
 	b, _ := p.recvPackets(4)
 	for bytes_to_bint32(b) == op_dummy {
+		b, _ = p.recvPackets(4)
+	}
+	for bytes_to_bint32(b) == op_response && p.lazyResponseCount > 0 {
+		p.lazyResponseCount--
+		_, _, _, _ = p._parse_op_response()
 		b, _ = p.recvPackets(4)
 	}
 
