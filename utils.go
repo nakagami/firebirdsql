@@ -27,6 +27,7 @@ import (
 	"bytes"
 	"container/list"
 	"encoding/binary"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -225,15 +226,28 @@ func split1(src string, delm string) (string, string) {
 }
 
 func parseDSN(dsn string) (addr string, dbName string, user string, passwd string, role string, err error) {
-	s1, s2 := split1(dsn, "@")
-	user, passwd = split1(s1, ":")
-	passwd, role = split1(passwd, ":")
-	addr, dbName = split1(s2, "/")
+	u, err := url.Parse("firebird://" + dsn)
+	if err != nil {
+		return
+	}
+	user = u.User.Username()
+	passwd, _ = u.User.Password()
+	addr = u.Host
 	if !strings.ContainsRune(addr, ':') {
 		addr += ":3050"
 	}
-	if strings.ContainsRune(dbName, '/') {
-		dbName = "/" + dbName
+	dbName = u.Path
+	if !strings.ContainsRune(dbName[1:], '/') {
+		dbName = dbName[1:]
+	}
+
+	m, _ := url.ParseQuery(u.RawQuery)
+
+	values, ok := m["role"]
+	if ok {
+		role = values[0]
+	} else {
+		role = ""
 	}
 
 	return
