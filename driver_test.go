@@ -205,7 +205,7 @@ func TestRole(t *testing.T) {
 	}
 	conn1.Close()
 
-	conn2, err := sql.Open("firebirdsql", "drivertest:driverpw@localhost:3050/tmp/go_test_role.fdb?role=driverrol")
+	conn2, err := sql.Open("firebirdsql", "drivertest:driverpw@localhost:3050/tmp/go_test_role.fdb?role=driverrole")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
