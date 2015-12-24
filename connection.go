@@ -84,7 +84,7 @@ func (fc *firebirdsqlConn) Query(query string, args []driver.Value) (rows driver
 }
 
 func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
-	addr, dbName, user, password, role, err := parseDSN(dsn)
+	addr, dbName, user, password, role, _, _, err := parseDSN(dsn)
 	wp, err := newWireProtocol(addr)
 	if err != nil {
 		return
@@ -118,7 +118,7 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 
 func createFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	// Create Database
-	addr, dbName, user, password, role, err := parseDSN(dsn)
+	addr, dbName, user, password, role, _, _, err := parseDSN(dsn)
 	wp, err := newWireProtocol(addr)
 	if err != nil {
 		return

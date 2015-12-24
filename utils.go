@@ -28,6 +28,7 @@ import (
 	"container/list"
 	"encoding/binary"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -225,7 +226,7 @@ func split1(src string, delm string) (string, string) {
 	return src, ""
 }
 
-func parseDSN(dsn string) (addr string, dbName string, user string, passwd string, role string, err error) {
+func parseDSN(dsn string) (addr string, dbName string, user string, passwd string, role string, authPluginName string, wireCrypt bool, err error) {
 	u, err := url.Parse("firebird://" + dsn)
 	if err != nil {
 		return
@@ -248,6 +249,20 @@ func parseDSN(dsn string) (addr string, dbName string, user string, passwd strin
 		role = values[0]
 	} else {
 		role = ""
+	}
+
+	values, ok = m["auth_plugin_name"]
+	if ok {
+		authPluginName = values[0]
+	} else {
+		authPluginName = "Srp"
+	}
+
+	values, ok = m["wire_crypt"]
+	if ok {
+		wireCrypt, _ = strconv.ParseBool(values[0])
+	} else {
+		wireCrypt = true
 	}
 
 	return

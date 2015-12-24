@@ -30,23 +30,25 @@ import (
 
 func TestDSNParse(t *testing.T) {
 	var testDSNs = []struct {
-		dsn    string
-		addr   string
-		dbName string
-		user   string
-		passwd string
-		role   string
+		dsn            string
+		addr           string
+		dbName         string
+		user           string
+		passwd         string
+		role           string
+		authPluginName string
+		wireCrypt      bool
 	}{
-		{"user:password@localhost:3000/dbname", "localhost:3000", "dbname", "user", "password", ""},
-		{"user:password@localhost/dbname", "localhost:3050", "dbname", "user", "password", ""},
-		{"user:password@localhost/dir/dbname", "localhost:3050", "/dir/dbname", "user", "password", ""},
-		{"user:password@localhost/c:\\fbdata\\database.fdb", "localhost:3050", "c:\\fbdata\\database.fdb", "user", "password", ""},
-		{"user:password@localhost/dbname?role=role", "localhost:3050", "dbname", "user", "password", "role"},
+		{"user:password@localhost:3000/dbname", "localhost:3000", "dbname", "user", "password", "", "Srp", true},
+		{"user:password@localhost/dbname", "localhost:3050", "dbname", "user", "password", "", "Srp", true},
+		{"user:password@localhost/dir/dbname", "localhost:3050", "/dir/dbname", "user", "password", "", "Srp", true},
+		{"user:password@localhost/c:\\fbdata\\database.fdb", "localhost:3050", "c:\\fbdata\\database.fdb", "user", "password", "", "Srp", true},
+		{"user:password@localhost/dbname?role=role", "localhost:3050", "dbname", "user", "password", "role", "Srp", true},
 	}
 
 	for _, d := range testDSNs {
-		addr, dbName, user, passwd, role, err := parseDSN(d.dsn)
-		if addr != d.addr || dbName != d.dbName || user != d.user || passwd != d.passwd || role != d.role {
+		addr, dbName, user, passwd, role, authPluginName, wireCrypt, err := parseDSN(d.dsn)
+		if addr != d.addr || dbName != d.dbName || user != d.user || passwd != d.passwd || role != d.role || authPluginName != d.authPluginName || wireCrypt != d.wireCrypt {
 			err = errors.New("parse DSN fail:" + d.dsn)
 		}
 		if err != nil {
