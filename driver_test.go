@@ -195,7 +195,7 @@ func TestRole(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error creating role: %v", err)
 	}
-	conn1.Exec("GRANT DRIVERROLE TO DRIVERTEST")
+	conn1.Exec("GRANT DRIVERROLE TO SYSDBA")
 	if err != nil {
 		t.Fatalf("Error creating role: %v", err)
 	}
@@ -205,7 +205,7 @@ func TestRole(t *testing.T) {
 	}
 	conn1.Close()
 
-	conn2, err := sql.Open("firebirdsql", "drivertest:driverpw@localhost:3050/tmp/go_test_role.fdb?role=driverrole")
+	conn2, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_role.fdb?role=driverrole")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}

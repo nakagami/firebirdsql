@@ -9,5 +9,4 @@ before_install:
   - sudo sed /ENABLE_FIREBIRD_SERVER=/s/no/yes/ -i /etc/default/firebird2.5
   - cat /etc/default/firebird2.5 | grep ENABLE_FIREBIRD_SERVER
   - sudo service firebird2.5-super start
-  - gsec -user sysdba -password masterkey -add drivertest -pw driverpw -admin yes
 
