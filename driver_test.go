@@ -268,7 +268,7 @@ func TestInsertTimestamp(t *testing.T) {
 }
 
 /*
-func TestFB3(t *testing.T) {
+func TestBoolean(t *testing.T) {
 	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_fb3.fdb")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
@@ -321,3 +321,23 @@ func TestFB3(t *testing.T) {
 	defer conn.Close()
 }
 */
+
+func TestFB3Connect(t *testing.T) {
+	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_connect.fdb")
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	conn.Close()
+
+	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_connect.fdb?auth_plugin_name=Legacy_Auth")
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	conn.Close()
+
+	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_connect.fdb?wire_crypt=false")
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	conn.Close()
+}
