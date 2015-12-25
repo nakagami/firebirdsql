@@ -41,7 +41,6 @@ import (
 )
 
 const (
-	PLUGIN_NAME       = "Srp"
 	PLUGIN_LIST       = "Srp,Legacy_Auth"
 	BUFFER_LEN        = 1024
 	MAX_CHAR_LENGTH   = 32767
@@ -187,7 +186,7 @@ func getClientPublicBytes(clientPublic *big.Int) (bs []byte) {
 	return bs
 }
 
-func (p *wireProtocol) uid(user string, password string, clientPublic *big.Int) []byte {
+func (p *wireProtocol) uid(user string, password string, authPluginName string, clientPublic *big.Int) []byte {
 	sysUser := os.Getenv("USER")
 	if sysUser == "" {
 		sysUser = os.Getenv("USERNAME")
@@ -197,7 +196,7 @@ func (p *wireProtocol) uid(user string, password string, clientPublic *big.Int) 
 	sysUserBytes := bytes.NewBufferString(sysUser).Bytes()
 	hostnameBytes := bytes.NewBufferString(hostname).Bytes()
 	pluginListNameBytes := bytes.NewBufferString(PLUGIN_LIST).Bytes()
-	pluginNameBytes := bytes.NewBufferString(PLUGIN_NAME).Bytes()
+	pluginNameBytes := bytes.NewBufferString(authPluginName).Bytes()
 	userBytes := bytes.NewBufferString(strings.ToUpper(user)).Bytes()
 
 	return bytes.Join([][]byte{
@@ -478,7 +477,7 @@ func (p *wireProtocol) getBlobSegments(blobId []byte, transHandle int32) ([]byte
 	return blob, err
 }
 
-func (p *wireProtocol) opConnect(dbName string, user string, password string, clientPublic *big.Int) {
+func (p *wireProtocol) opConnect(dbName string, user string, password string, authPluginName string, clientPublic *big.Int) {
 	debugPrint(p, "opConnect")
 	protocols := []string{
 		// PROTOCOL_VERSION, Arch type (Generic=1), min, max, weight
@@ -493,7 +492,7 @@ func (p *wireProtocol) opConnect(dbName string, user string, password string, cl
 	p.packInt(1) // Arch type(GENERIC)
 	p.packString(dbName)
 	p.packInt(int32(len(protocols)))
-	p.packBytes(p.uid(strings.ToUpper(user), password, clientPublic))
+	p.packBytes(p.uid(strings.ToUpper(user), password, authPluginName, clientPublic))
 	buf, _ := hex.DecodeString(strings.Join(protocols, ""))
 	p.appendBytes(buf)
 	p.sendPackets()
@@ -528,7 +527,7 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 	p.sendPackets()
 }
 
-func (p *wireProtocol) opAccept(user string, password string, clientPublic *big.Int, clientSecret *big.Int) (err error) {
+func (p *wireProtocol) opAccept(user string, password string, authPluginName string, clientPublic *big.Int, clientSecret *big.Int) (err error) {
 	debugPrint(p, "opAccept")
 
 	b, err := p.recvPackets(4)
@@ -585,7 +584,7 @@ func (p *wireProtocol) opAccept(user string, password string, clientPublic *big.
 			// Send op_cont_auth
 			p.packInt(op_cont_auth)
 			p.packString(hex.EncodeToString(clientProof))
-			p.packString(PLUGIN_NAME)
+			p.packString(authPluginName)
 			p.packString(PLUGIN_LIST)
 			p.packString("")
 			p.sendPackets()
