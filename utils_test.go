@@ -44,6 +44,8 @@ func TestDSNParse(t *testing.T) {
 		{"user:password@localhost/dir/dbname", "localhost:3050", "/dir/dbname", "user", "password", "", "Srp", true},
 		{"user:password@localhost/c:\\fbdata\\database.fdb", "localhost:3050", "c:\\fbdata\\database.fdb", "user", "password", "", "Srp", true},
 		{"user:password@localhost/dbname?role=role", "localhost:3050", "dbname", "user", "password", "role", "Srp", true},
+		{"user:password@localhost/dbname?auth_plugin_name=Legacy_Auth", "localhost:3050", "dbname", "user", "password", "role", "Legacy_Auth", true},
+		{"user:password@localhost/dbname?auth_plugin_name=Legacy_Auth&wire_crypt=false", "localhost:3050", "dbname", "user", "password", "role", "Legacy_Auth", false},
 	}
 
 	for _, d := range testDSNs {

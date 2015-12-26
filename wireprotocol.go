@@ -205,7 +205,6 @@ func (p *wireProtocol) uid(user string, password string, authPluginName string, 
 		wireCryptByte = 0
 	}
 
-    fmt.Println(authPluginName)
 	var specific_data []byte
 	if authPluginName == "Srp" {
 		specific_data = getClientPublicBytes(clientPublic)
