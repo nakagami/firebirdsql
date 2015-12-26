@@ -25,6 +25,7 @@ package firebirdsql
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 )
 
@@ -44,15 +45,28 @@ func TestDSNParse(t *testing.T) {
 		{"user:password@localhost/dir/dbname", "localhost:3050", "/dir/dbname", "user", "password", "", "Srp", true},
 		{"user:password@localhost/c:\\fbdata\\database.fdb", "localhost:3050", "c:\\fbdata\\database.fdb", "user", "password", "", "Srp", true},
 		{"user:password@localhost/dbname?role=role", "localhost:3050", "dbname", "user", "password", "role", "Srp", true},
-		{"user:password@localhost/dbname?auth_plugin_name=Legacy_Auth", "localhost:3050", "dbname", "user", "password", "role", "Legacy_Auth", true},
-		{"user:password@localhost/dbname?auth_plugin_name=Legacy_Auth&wire_crypt=false", "localhost:3050", "dbname", "user", "password", "role", "Legacy_Auth", false},
+		{"user:password@localhost/dbname?auth_plugin_name=Legacy_Auth", "localhost:3050", "dbname", "user", "password", "", "Legacy_Auth", true},
+		{"user:password@localhost/dbname?auth_plugin_name=Legacy_Auth&wire_crypt=false", "localhost:3050", "dbname", "user", "password", "", "Legacy_Auth", false},
 	}
 
 	for _, d := range testDSNs {
 		addr, dbName, user, passwd, role, authPluginName, wireCrypt, err := parseDSN(d.dsn)
-		if addr != d.addr || dbName != d.dbName || user != d.user || passwd != d.passwd || role != d.role || authPluginName != d.authPluginName || wireCrypt != d.wireCrypt {
-			err = errors.New("parse DSN fail:" + d.dsn)
+		if addr != d.addr {
+			err = errors.New(fmt.Sprintf("parse DSN fail:%s(%s != %s)", d.dsn, addr, d.addr))
+		} else if dbName != d.dbName {
+			err = errors.New(fmt.Sprintf("parse DSN fail:%s(%s != %s)", d.dsn, dbName, d.dbName))
+		} else if user != d.user {
+			err = errors.New(fmt.Sprintf("parse DSN fail:%s(%s != %s)", d.dsn, user, d.user))
+		} else if passwd != d.passwd {
+			err = errors.New(fmt.Sprintf("parse DSN fail:%s(%s != %s)", d.dsn, passwd, d.passwd))
+		} else if role != d.role {
+			err = errors.New(fmt.Sprintf("parse DSN fail:%s(%s != %s)", d.dsn, role, d.role))
+		} else if authPluginName != d.authPluginName {
+			err = errors.New(fmt.Sprintf("parse DSN fail:%s(%s != %s)", d.dsn, authPluginName, d.authPluginName))
+		} else if wireCrypt != d.wireCrypt {
+			err = errors.New(fmt.Sprintf("parse DSN fail:%s(%v != %v)", d.dsn, wireCrypt, d.wireCrypt))
 		}
+
 		if err != nil {
 			t.Error(err.Error())
 		}
