@@ -186,7 +186,7 @@ func getClientPublicBytes(clientPublic *big.Int) (bs []byte) {
 	return bs
 }
 
-func (p *wireProtocol) uid(user string, password string, authPluginName string, clientPublic *big.Int) []byte {
+func (p *wireProtocol) uid(user string, password string, authPluginName string, wireCrypt bool, clientPublic *big.Int) []byte {
 	sysUser := os.Getenv("USER")
 	if sysUser == "" {
 		sysUser = os.Getenv("USERNAME")
@@ -198,13 +198,19 @@ func (p *wireProtocol) uid(user string, password string, authPluginName string, 
 	pluginListNameBytes := bytes.NewBufferString(PLUGIN_LIST).Bytes()
 	pluginNameBytes := bytes.NewBufferString(authPluginName).Bytes()
 	userBytes := bytes.NewBufferString(strings.ToUpper(user)).Bytes()
+	var wireCryptByte byte
+	if wireCrypt {
+		wireCryptByte = 1
+	} else {
+		wireCryptByte = 0
+	}
 
 	return bytes.Join([][]byte{
 		[]byte{CNCT_login, byte(len(userBytes))}, userBytes,
 		[]byte{CNCT_plugin_name, byte(len(pluginNameBytes))}, pluginNameBytes,
 		[]byte{CNCT_plugin_list, byte(len(pluginListNameBytes))}, pluginListNameBytes,
 		getClientPublicBytes(clientPublic),
-		[]byte{CNCT_client_crypt, 4, 1, 0, 0, 0},
+		[]byte{CNCT_client_crypt, 4, wireCryptByte, 0, 0, 0},
 		[]byte{CNCT_user, byte(len(sysUserBytes))}, sysUserBytes,
 		[]byte{CNCT_host, byte(len(hostnameBytes))}, hostnameBytes,
 		[]byte{CNCT_user_verification, 0},
@@ -477,7 +483,7 @@ func (p *wireProtocol) getBlobSegments(blobId []byte, transHandle int32) ([]byte
 	return blob, err
 }
 
-func (p *wireProtocol) opConnect(dbName string, user string, password string, authPluginName string, clientPublic *big.Int) {
+func (p *wireProtocol) opConnect(dbName string, user string, password string, authPluginName string, wireCrypt bool, clientPublic *big.Int) {
 	debugPrint(p, "opConnect")
 	protocols := []string{
 		// PROTOCOL_VERSION, Arch type (Generic=1), min, max, weight
@@ -492,7 +498,7 @@ func (p *wireProtocol) opConnect(dbName string, user string, password string, au
 	p.packInt(1) // Arch type(GENERIC)
 	p.packString(dbName)
 	p.packInt(int32(len(protocols)))
-	p.packBytes(p.uid(strings.ToUpper(user), password, authPluginName, clientPublic))
+	p.packBytes(p.uid(strings.ToUpper(user), password, authPluginName, wireCrypt, clientPublic))
 	buf, _ := hex.DecodeString(strings.Join(protocols, ""))
 	p.appendBytes(buf)
 	p.sendPackets()
