@@ -205,11 +205,21 @@ func (p *wireProtocol) uid(user string, password string, authPluginName string, 
 		wireCryptByte = 0
 	}
 
+    fmt.Println(authPluginName)
+	var specific_data []byte
+	if authPluginName == "Srp" {
+		specific_data = getClientPublicBytes(clientPublic)
+	} else if authPluginName == "Legacy_Auth" {
+		panic("Not implement Legacy_Auth")
+	} else {
+		panic(fmt.Sprintf("Unknown plugin name:%s", authPluginName))
+	}
+
 	return bytes.Join([][]byte{
 		[]byte{CNCT_login, byte(len(userBytes))}, userBytes,
 		[]byte{CNCT_plugin_name, byte(len(pluginNameBytes))}, pluginNameBytes,
 		[]byte{CNCT_plugin_list, byte(len(pluginListNameBytes))}, pluginListNameBytes,
-		getClientPublicBytes(clientPublic),
+		specific_data,
 		[]byte{CNCT_client_crypt, 4, wireCryptByte, 0, 0, 0},
 		[]byte{CNCT_user, byte(len(sysUserBytes))}, sysUserBytes,
 		[]byte{CNCT_host, byte(len(hostnameBytes))}, hostnameBytes,
