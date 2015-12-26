@@ -46,3 +46,29 @@ Example
 
 
 See also driver_test.go
+
+Connection string
+--------------------------
+
+::
+
+   user:password@servername[:port_number]/database_name_or_file[?params1=value1[&param2=value2]...]
+
+
+General
+=========
+
+- user: login user
+- password: login password
+- servername: Firebird server's host name or IP address.
+- port_number: Port number. default value is 3050.
+- database_name_or_file: Database name
+
+Optional
+=========
+
+param1, param2... are
+
+- role: role name
+- auth_plugin_name: Authentication plugin name for FB3. 'Srp' or 'Legacy_Auth' are available.
+- wire_crypt: Enable wire data encryption or not. It is for FB3 server.
