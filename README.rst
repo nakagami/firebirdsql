@@ -62,7 +62,7 @@ General
 - password: login password
 - servername: Firebird server's host name or IP address.
 - port_number: Port number. default value is 3050.
-- database_name_or_file: Database name
+- database_name_or_file: Database path (or alias name).
 
 Optional
 =========
