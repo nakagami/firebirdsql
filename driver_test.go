@@ -322,24 +322,38 @@ func TestBoolean(t *testing.T) {
 }
 */
 
-func TestFB3Connect(t *testing.T) {
+func TestLegacyAuthWireCrypt(t *testing.T) {
 	var n int
 	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_connect.fdb")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
 
-	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_connect.fdb?auth_plugin_name=Legacy_Auth")
+	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_connect.fdb?auth_plugin_anme=Legacy_Auth")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
 	err = conn.QueryRow("SELECT Count(*) FROM rdb$relations").Scan(&n)
-	conn.Close()
 
 	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_connect.fdb?wire_crypt=false")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
 	err = conn.QueryRow("SELECT Count(*) FROM rdb$relations").Scan(&n)
+
+	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_connect.fdb?auth_plugin_name=Legacy_Auth&wire_auth=true")
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	err = conn.QueryRow("SELECT Count(*) FROM rdb$relations").Scan(&n)
+	conn.Close()
+
+	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_connect.fdb?auth_plugin_name=Legacy_Auth&wire_auth=false")
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	err = conn.QueryRow("SELECT Count(*) FROM rdb$relations").Scan(&n)
+	conn.Close()
+
 	conn.Close()
 }
