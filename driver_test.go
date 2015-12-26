@@ -328,14 +328,14 @@ func TestFB3Connect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
-	/*
-		conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_connect.fdb?auth_plugin_name=Legacy_Auth")
-		if err != nil {
-			t.Fatalf("Error connecting: %v", err)
-		}
-		err = conn.QueryRow("SELECT Count(*) FROM rdb$relations").Scan(&n)
-		conn.Close()
-	*/
+
+	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_connect.fdb?auth_plugin_name=Legacy_Auth")
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	err = conn.QueryRow("SELECT Count(*) FROM rdb$relations").Scan(&n)
+	conn.Close()
+
 	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_connect.fdb?wire_crypt=false")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)

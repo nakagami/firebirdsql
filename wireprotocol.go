@@ -31,6 +31,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/nyarlabo/go-crypt"
 	"math/big"
 	"net"
 	"os"
@@ -209,7 +210,10 @@ func (p *wireProtocol) uid(user string, password string, authPluginName string, 
 	if authPluginName == "Srp" {
 		specific_data = getSrpClientPublicBytes(clientPublic)
 	} else if authPluginName == "Legacy_Auth" {
-		panic("Not implement Legacy_Auth")
+		b := bytes.NewBufferString(crypt.Crypt(password, "9z")[2:]).Bytes()
+		specific_data = bytes.Join([][]byte{
+			[]byte{CNCT_specific_data, byte(len(b)) + 1, 0}, b,
+		}, nil)
 	} else {
 		panic(fmt.Sprintf("Unknown plugin name:%s", authPluginName))
 	}
