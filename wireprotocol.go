@@ -171,7 +171,7 @@ func (p *wireProtocol) appendBytes(bs []byte) {
 	}
 }
 
-func getClientPublicBytes(clientPublic *big.Int) (bs []byte) {
+func getSrpClientPublicBytes(clientPublic *big.Int) (bs []byte) {
 	b := bytes.NewBufferString(hex.EncodeToString(bigToBytes(clientPublic))).Bytes()
 	if len(b) > 254 {
 		bs = bytes.Join([][]byte{
@@ -207,7 +207,7 @@ func (p *wireProtocol) uid(user string, password string, authPluginName string, 
 
 	var specific_data []byte
 	if authPluginName == "Srp" {
-		specific_data = getClientPublicBytes(clientPublic)
+		specific_data = getSrpClientPublicBytes(clientPublic)
 	} else if authPluginName == "Legacy_Auth" {
 		panic("Not implement Legacy_Auth")
 	} else {
