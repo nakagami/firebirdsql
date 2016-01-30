@@ -309,13 +309,19 @@ func (p *wireProtocol) _parse_status_vector() (*list.List, int, string, error) {
 			}
 			num_arg += 1
 			message = strings.Replace(message, "@"+strconv.Itoa(num_arg), strconv.Itoa(num), 1)
-		case n == isc_arg_string || n == isc_arg_interpreted:
+		case n == isc_arg_string:
 			b, err = p.recvPackets(4)
 			nbytes := int(bytes_to_bint32(b))
 			b, err = p.recvPacketsAlignment(nbytes)
 			s := bytes_to_str(b)
 			num_arg += 1
 			message = strings.Replace(message, "@"+strconv.Itoa(num_arg), s, 1)
+		case n == isc_arg_interpreted:
+			b, err = p.recvPackets(4)
+			nbytes := int(bytes_to_bint32(b))
+			b, err = p.recvPacketsAlignment(nbytes)
+			s := bytes_to_str(b)
+			message += s
 		case n == isc_arg_sql_state:
 			b, err = p.recvPackets(4)
 			nbytes := int(bytes_to_bint32(b))
