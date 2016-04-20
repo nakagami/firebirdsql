@@ -354,6 +354,12 @@ func TestLegacyAuthWireCrypt(t *testing.T) {
 	}
 	err = conn.QueryRow("SELECT Count(*) FROM rdb$relations").Scan(&n)
 	conn.Close()
+}
 
+func TestErrorConnect(t *testing.T) {
+	conn, err := sql.Open("firebirdsql", "foo:bar@example.com:3050/dbname")
+	if err == nil {
+		t.Fatalf("Error not occured")
+	}
 	conn.Close()
 }
