@@ -59,13 +59,49 @@ func (tx *firebirdsqlTx) Rollback() (err error) {
 func newFirebirdsqlTx(wp *wireProtocol) (tx *firebirdsqlTx, err error) {
 	tx = new(firebirdsqlTx)
 	tx.wp = wp
-	wp.opTransaction([]byte{
-		byte(isc_tpb_version3),
-		byte(isc_tpb_write),
-		byte(isc_tpb_wait),
-		byte(isc_tpb_read_committed),
-		byte(isc_tpb_no_rec_version),
-	})
+	var tpb []byte
+	isolation_level := 1
+	switch isolation_level {
+	case ISOLATION_LEVEL_READ_COMMITED_LEGACY:
+		tpb = []byte{
+			byte(isc_tpb_version3),
+			byte(isc_tpb_write),
+			byte(isc_tpb_wait),
+			byte(isc_tpb_read_committed),
+			byte(isc_tpb_no_rec_version),
+		}
+	case ISOLATION_LEVEL_READ_COMMITED:
+		tpb = []byte{
+			byte(isc_tpb_version3),
+			byte(isc_tpb_write),
+			byte(isc_tpb_wait),
+			byte(isc_tpb_read_committed),
+			byte(isc_tpb_rec_version),
+		}
+	case ISOLATION_LEVEL_REPEATABLE_READ:
+		tpb = []byte{
+			byte(isc_tpb_version3),
+			byte(isc_tpb_write),
+			byte(isc_tpb_wait),
+			byte(isc_tpb_concurrency),
+		}
+	case ISOLATION_LEVEL_SERIALIZABLE:
+		tpb = []byte{
+			byte(isc_tpb_version3),
+			byte(isc_tpb_write),
+			byte(isc_tpb_wait),
+			byte(isc_tpb_consistency),
+		}
+	case ISOLATION_LEVEL_READ_COMMITED_READ_ONLY:
+		tpb = []byte{
+			byte(isc_tpb_version3),
+			byte(isc_tpb_read),
+			byte(isc_tpb_wait),
+			byte(isc_tpb_read_committed),
+			byte(isc_tpb_rec_version),
+		}
+	}
+	wp.opTransaction(tpb)
 	tx.transHandle, _, _, err = wp.opResponse()
 	return
 }

@@ -149,7 +149,7 @@ const (
 	isc_info_svc_running            = 67
 	isc_info_svc_get_users          = 68
 
-	ISOLATION_LEVEL_READ_UNCOMMITTED        = 0
+	ISOLATION_LEVEL_READ_COMMITED_LEGACY    = 0
 	ISOLATION_LEVEL_READ_COMMITED           = 1
 	ISOLATION_LEVEL_REPEATABLE_READ         = 2
 	ISOLATION_LEVEL_SERIALIZABLE            = 3
