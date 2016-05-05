@@ -242,6 +242,11 @@ func parseDSN(dsn string) (addr string, dbName string, user string, passwd strin
 		dbName = dbName[1:]
 	}
 
+	//Windows Path
+	if strings.ContainsRune(dbName[2:], ':') {
+		dbName = dbName[1:]
+	}
+
 	m, _ := url.ParseQuery(u.RawQuery)
 
 	values, ok := m["role"]
