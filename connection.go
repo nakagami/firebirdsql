@@ -29,19 +29,20 @@ import (
 )
 
 type firebirdsqlConn struct {
-	wp           *wireProtocol
-	tx           *firebirdsqlTx
-	addr         string
-	dbName       string
-	user         string
-	password     string
-	isAutocommit bool
-	clientPublic *big.Int
-	clientSecret *big.Int
+	wp             *wireProtocol
+	tx             *firebirdsqlTx
+	addr           string
+	dbName         string
+	user           string
+	password       string
+	isolationLevel int
+	isAutocommit   bool
+	clientPublic   *big.Int
+	clientSecret   *big.Int
 }
 
 func (fc *firebirdsqlConn) Begin() (driver.Tx, error) {
-	tx, err := newFirebirdsqlTx(fc.wp)
+	tx, err := newFirebirdsqlTx(fc.wp, fc.isolationLevel)
 	fc.tx = tx
 	fc.isAutocommit = false
 	return driver.Tx(tx), err
@@ -68,7 +69,7 @@ func (fc *firebirdsqlConn) Exec(query string, args []driver.Value) (result drive
 	}
 	if fc.isAutocommit {
 		fc.tx.Commit()
-		fc.tx, err = newFirebirdsqlTx(fc.wp)
+		fc.tx, err = newFirebirdsqlTx(fc.wp, fc.isolationLevel)
 	}
 	stmt.Close()
 	return
@@ -84,7 +85,7 @@ func (fc *firebirdsqlConn) Query(query string, args []driver.Value) (rows driver
 }
 
 func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
-	addr, dbName, user, password, role, authPluginName, wireCrypt, _, err := parseDSN(dsn)
+	addr, dbName, user, password, role, authPluginName, wireCrypt, isolationLevel, err := parseDSN(dsn)
 	wp, err := newWireProtocol(addr)
 	if err != nil {
 		return
@@ -108,7 +109,8 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	fc.dbName = dbName
 	fc.user = user
 	fc.password = password
-	fc.tx, err = newFirebirdsqlTx(wp)
+	fc.isolationLevel = isolationLevel
+	fc.tx, err = newFirebirdsqlTx(wp, fc.isolationLevel)
 	fc.isAutocommit = true
 	fc.clientPublic = clientPublic
 	fc.clientSecret = clientSecret
@@ -118,7 +120,7 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 
 func createFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	// Create Database
-	addr, dbName, user, password, role, authPluginName, wireCrypt, _, err := parseDSN(dsn)
+	addr, dbName, user, password, role, authPluginName, wireCrypt, isolationLevel, err := parseDSN(dsn)
 	wp, err := newWireProtocol(addr)
 	if err != nil {
 		return
@@ -140,7 +142,8 @@ func createFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	fc.dbName = dbName
 	fc.user = user
 	fc.password = password
-	fc.tx, err = newFirebirdsqlTx(wp)
+	fc.isolationLevel = isolationLevel
+	fc.tx, err = newFirebirdsqlTx(wp, fc.isolationLevel)
 	fc.isAutocommit = true
 	fc.clientPublic = clientPublic
 	fc.clientSecret = clientSecret

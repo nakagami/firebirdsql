@@ -56,12 +56,11 @@ func (tx *firebirdsqlTx) Rollback() (err error) {
 	return
 }
 
-func newFirebirdsqlTx(wp *wireProtocol) (tx *firebirdsqlTx, err error) {
+func newFirebirdsqlTx(wp *wireProtocol, isolationLevel int) (tx *firebirdsqlTx, err error) {
 	tx = new(firebirdsqlTx)
 	tx.wp = wp
 	var tpb []byte
-	isolation_level := 1
-	switch isolation_level {
+	switch isolationLevel {
 	case ISOLATION_LEVEL_READ_COMMITED_LEGACY:
 		tpb = []byte{
 			byte(isc_tpb_version3),
