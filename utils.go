@@ -27,6 +27,7 @@ import (
 	"bytes"
 	"container/list"
 	"encoding/binary"
+	"errors"
 	"net/url"
 	"strconv"
 	"strings"
@@ -226,7 +227,7 @@ func split1(src string, delm string) (string, string) {
 	return src, ""
 }
 
-func parseDSN(dsn string) (addr string, dbName string, user string, passwd string, role string, authPluginName string, wireCrypt bool, err error) {
+func parseDSN(dsn string) (addr string, dbName string, user string, passwd string, role string, authPluginName string, wireCrypt bool, isolationLevel int, err error) {
 	u, err := url.Parse("firebird://" + dsn)
 	if err != nil {
 		return
@@ -268,6 +269,23 @@ func parseDSN(dsn string) (addr string, dbName string, user string, passwd strin
 		wireCrypt, _ = strconv.ParseBool(values[0])
 	} else {
 		wireCrypt = true
+	}
+
+	values, ok = m["isolation_level"]
+	if ok {
+		var kv = map[string]int{
+			"READ_COMMITED_LEGACY":    ISOLATION_LEVEL_READ_COMMITED_LEGACY,
+			"READ_COMMITED":           ISOLATION_LEVEL_READ_COMMITED,
+			"REPEATABLE_READ":         ISOLATION_LEVEL_REPEATABLE_READ,
+			"SERIALIZABLE":            ISOLATION_LEVEL_SERIALIZABLE,
+			"READ_COMMITED_READ_ONLY": ISOLATION_LEVEL_READ_COMMITED_READ_ONLY,
+		}
+		isolationLevel, ok = kv[values[0]]
+		if !ok {
+			err = errors.New("invalid isolation_level")
+		}
+	} else {
+		isolationLevel = ISOLATION_LEVEL_READ_COMMITED
 	}
 
 	return
