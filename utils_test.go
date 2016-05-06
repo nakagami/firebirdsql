@@ -49,6 +49,11 @@ func TestDSNParse(t *testing.T) {
 		{"user:password@localhost/dbname?role=role", "localhost:3050", "dbname", "user", "password", "role", "Srp", true, 1},
 		{"user:password@localhost/dbname?auth_plugin_name=Legacy_Auth", "localhost:3050", "dbname", "user", "password", "", "Legacy_Auth", true, 1},
 		{"user:password@localhost/dbname?auth_plugin_name=Legacy_Auth&wire_crypt=false", "localhost:3050", "dbname", "user", "password", "", "Legacy_Auth", false, 1},
+		{"user:password@localhost/dbname?isolation_level=READ_COMMITED_LEGACY", "localhost:3050", "dbname", "user", "password", "", "Srp", true, 0},
+		{"user:password@localhost/dbname?isolation_level=READ_COMMITED", "localhost:3050", "dbname", "user", "password", "", "Srp", true, 1},
+		{"user:password@localhost/dbname?isolation_level=REPEATABLE_READ", "localhost:3050", "dbname", "user", "password", "", "Srp", true, 2},
+		{"user:password@localhost/dbname?isolation_level=SERIALIZABLE", "localhost:3050", "dbname", "user", "password", "", "Srp", true, 3},
+		{"user:password@localhost/dbname?isolation_level=READ_COMMITED_READ_ONLY", "localhost:3050", "dbname", "user", "password", "", "Srp", true, 4},
 	}
 
 	for _, d := range testDSNs {
