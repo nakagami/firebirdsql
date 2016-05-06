@@ -54,6 +54,7 @@ func TestDSNParse(t *testing.T) {
 		{"user:password@localhost/dbname?isolation_level=REPEATABLE_READ", "localhost:3050", "dbname", "user", "password", "", "Srp", true, 2},
 		{"user:password@localhost/dbname?isolation_level=SERIALIZABLE", "localhost:3050", "dbname", "user", "password", "", "Srp", true, 3},
 		{"user:password@localhost/dbname?isolation_level=READ_COMMITED_READ_ONLY", "localhost:3050", "dbname", "user", "password", "", "Srp", true, 4},
+		{"user:password@localhost:3000/c:/fbdata/database.fdb?role=role&wire_crypt=false", "localhost:3000", "c:/fbdata/database.fdb", "user", "password", "role", "Srp", false, 1},
 	}
 
 	for _, d := range testDSNs {
