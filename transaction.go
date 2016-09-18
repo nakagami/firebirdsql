@@ -24,43 +24,43 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 type firebirdsqlTx struct {
-	wp          *wireProtocol
+	fc          *firebirdsqlConn
 	transHandle int32
 }
 
 func (tx *firebirdsqlTx) Commit() (err error) {
-	tx.wp.opCommit(tx.transHandle)
-	_, _, _, err = tx.wp.opResponse()
-	tx.wp.opTransaction([]byte{
+	tx.fc.wp.opCommit(tx.transHandle)
+	_, _, _, err = tx.fc.wp.opResponse()
+	tx.fc.wp.opTransaction([]byte{
 		byte(isc_tpb_version3),
 		byte(isc_tpb_write),
 		byte(isc_tpb_wait),
 		byte(isc_tpb_read_committed),
 		byte(isc_tpb_no_rec_version),
 	})
-	tx.transHandle, _, _, err = tx.wp.opResponse()
+	tx.transHandle, _, _, err = tx.fc.wp.opResponse()
 	return
 }
 
 func (tx *firebirdsqlTx) Rollback() (err error) {
-	tx.wp.opRollback(tx.transHandle)
-	_, _, _, err = tx.wp.opResponse()
-	tx.wp.opTransaction([]byte{
+	tx.fc.wp.opRollback(tx.transHandle)
+	_, _, _, err = tx.fc.wp.opResponse()
+	tx.fc.wp.opTransaction([]byte{
 		byte(isc_tpb_version3),
 		byte(isc_tpb_write),
 		byte(isc_tpb_wait),
 		byte(isc_tpb_read_committed),
 		byte(isc_tpb_no_rec_version),
 	})
-	tx.transHandle, _, _, err = tx.wp.opResponse()
+	tx.transHandle, _, _, err = tx.fc.wp.opResponse()
 	return
 }
 
-func newFirebirdsqlTx(wp *wireProtocol, isolationLevel int) (tx *firebirdsqlTx, err error) {
+func newFirebirdsqlTx(fc *firebirdsqlConn) (tx *firebirdsqlTx, err error) {
 	tx = new(firebirdsqlTx)
-	tx.wp = wp
+	tx.fc = fc
 	var tpb []byte
-	switch isolationLevel {
+	switch fc.isolationLevel {
 	case ISOLATION_LEVEL_READ_COMMITED_LEGACY:
 		tpb = []byte{
 			byte(isc_tpb_version3),
@@ -100,7 +100,7 @@ func newFirebirdsqlTx(wp *wireProtocol, isolationLevel int) (tx *firebirdsqlTx, 
 			byte(isc_tpb_rec_version),
 		}
 	}
-	wp.opTransaction(tpb)
-	tx.transHandle, _, _, err = wp.opResponse()
+	fc.wp.opTransaction(tpb)
+	tx.transHandle, _, _, err = fc.wp.opResponse()
 	return
 }
