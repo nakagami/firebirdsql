@@ -678,28 +678,28 @@ func (p *wireProtocol) opTransaction(tpb []byte) {
 }
 
 func (p *wireProtocol) opCommit(transHandle int32) {
-	debugPrint(p, "opCommit")
+	debugPrint(p, fmt.Sprintf("opCommit():%d", transHandle))
 	p.packInt(op_commit)
 	p.packInt(transHandle)
 	p.sendPackets()
 }
 
 func (p *wireProtocol) opCommitRetaining(transHandle int32) {
-	debugPrint(p, "opCommitRetaining")
+	debugPrint(p, fmt.Sprintf("opCommitRetaining():%d", transHandle))
 	p.packInt(op_commit_retaining)
 	p.packInt(transHandle)
 	p.sendPackets()
 }
 
 func (p *wireProtocol) opRollback(transHandle int32) {
-	debugPrint(p, "opRollback")
+	debugPrint(p, fmt.Sprintf("opRollback():%d", transHandle))
 	p.packInt(op_rollback)
 	p.packInt(transHandle)
 	p.sendPackets()
 }
 
 func (p *wireProtocol) opRollbackRetaining(transHandle int32) {
-	debugPrint(p, "opRollbackRetaining")
+	debugPrint(p, fmt.Sprintf("opRollbackRetaining():%d", transHandle))
 	p.packInt(op_rollback_retaining)
 	p.packInt(transHandle)
 	p.sendPackets()
