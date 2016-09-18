@@ -42,9 +42,8 @@ type firebirdsqlConn struct {
 }
 
 func (fc *firebirdsqlConn) Begin() (driver.Tx, error) {
-	tx, err := newFirebirdsqlTx(fc)
+	tx, err := newFirebirdsqlTx(fc, false)
 	fc.tx = tx
-	fc.isAutocommit = false
 	return driver.Tx(tx), err
 }
 
@@ -67,9 +66,8 @@ func (fc *firebirdsqlConn) Exec(query string, args []driver.Value) (result drive
 	if err != nil {
 		return
 	}
-	if fc.isAutocommit {
+	if fc.isAutocommit && fc.tx.isAutocommit {
 		fc.tx.Commit()
-		fc.tx, err = newFirebirdsqlTx(fc)
 	}
 	stmt.Close()
 	return
@@ -110,8 +108,8 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	fc.user = user
 	fc.password = password
 	fc.isolationLevel = isolationLevel
-	fc.tx, err = newFirebirdsqlTx(fc)
 	fc.isAutocommit = true
+	fc.tx, err = newFirebirdsqlTx(fc, fc.isAutocommit)
 	fc.clientPublic = clientPublic
 	fc.clientSecret = clientSecret
 
@@ -143,8 +141,8 @@ func createFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	fc.user = user
 	fc.password = password
 	fc.isolationLevel = isolationLevel
-	fc.tx, err = newFirebirdsqlTx(fc)
 	fc.isAutocommit = true
+	fc.tx, err = newFirebirdsqlTx(fc, fc.isAutocommit)
 	fc.clientPublic = clientPublic
 	fc.clientSecret = clientSecret
 

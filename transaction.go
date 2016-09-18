@@ -24,43 +24,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 type firebirdsqlTx struct {
-	fc          *firebirdsqlConn
-	transHandle int32
+	fc           *firebirdsqlConn
+	isAutocommit bool
+	transHandle  int32
 }
 
-func (tx *firebirdsqlTx) Commit() (err error) {
-	tx.fc.wp.opCommit(tx.transHandle)
-	_, _, _, err = tx.fc.wp.opResponse()
-	tx.fc.wp.opTransaction([]byte{
-		byte(isc_tpb_version3),
-		byte(isc_tpb_write),
-		byte(isc_tpb_wait),
-		byte(isc_tpb_read_committed),
-		byte(isc_tpb_no_rec_version),
-	})
-	tx.transHandle, _, _, err = tx.fc.wp.opResponse()
-	return
-}
-
-func (tx *firebirdsqlTx) Rollback() (err error) {
-	tx.fc.wp.opRollback(tx.transHandle)
-	_, _, _, err = tx.fc.wp.opResponse()
-	tx.fc.wp.opTransaction([]byte{
-		byte(isc_tpb_version3),
-		byte(isc_tpb_write),
-		byte(isc_tpb_wait),
-		byte(isc_tpb_read_committed),
-		byte(isc_tpb_no_rec_version),
-	})
-	tx.transHandle, _, _, err = tx.fc.wp.opResponse()
-	return
-}
-
-func newFirebirdsqlTx(fc *firebirdsqlConn) (tx *firebirdsqlTx, err error) {
-	tx = new(firebirdsqlTx)
-	tx.fc = fc
+func (tx *firebirdsqlTx) begin() (err error) {
 	var tpb []byte
-	switch fc.isolationLevel {
+	switch tx.fc.isolationLevel {
 	case ISOLATION_LEVEL_READ_COMMITED_LEGACY:
 		tpb = []byte{
 			byte(isc_tpb_version3),
@@ -100,7 +71,43 @@ func newFirebirdsqlTx(fc *firebirdsqlConn) (tx *firebirdsqlTx, err error) {
 			byte(isc_tpb_rec_version),
 		}
 	}
-	fc.wp.opTransaction(tpb)
-	tx.transHandle, _, _, err = fc.wp.opResponse()
+	tx.fc.wp.opTransaction(tpb)
+	tx.transHandle, _, _, err = tx.fc.wp.opResponse()
+	return
+}
+
+func (tx *firebirdsqlTx) Commit() (err error) {
+	tx.fc.wp.opCommit(tx.transHandle)
+	_, _, _, err = tx.fc.wp.opResponse()
+	tx.fc.wp.opTransaction([]byte{
+		byte(isc_tpb_version3),
+		byte(isc_tpb_write),
+		byte(isc_tpb_wait),
+		byte(isc_tpb_read_committed),
+		byte(isc_tpb_no_rec_version),
+	})
+	tx.transHandle, _, _, err = tx.fc.wp.opResponse()
+	return
+}
+
+func (tx *firebirdsqlTx) Rollback() (err error) {
+	tx.fc.wp.opRollback(tx.transHandle)
+	_, _, _, err = tx.fc.wp.opResponse()
+	tx.fc.wp.opTransaction([]byte{
+		byte(isc_tpb_version3),
+		byte(isc_tpb_write),
+		byte(isc_tpb_wait),
+		byte(isc_tpb_read_committed),
+		byte(isc_tpb_no_rec_version),
+	})
+	tx.transHandle, _, _, err = tx.fc.wp.opResponse()
+	return
+}
+
+func newFirebirdsqlTx(fc *firebirdsqlConn, isAutocommit bool) (tx *firebirdsqlTx, err error) {
+	tx = new(firebirdsqlTx)
+	tx.fc = fc
+	tx.isAutocommit = isAutocommit
+	tx.begin()
 	return
 }
