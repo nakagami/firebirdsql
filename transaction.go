@@ -77,30 +77,14 @@ func (tx *firebirdsqlTx) begin() (err error) {
 }
 
 func (tx *firebirdsqlTx) Commit() (err error) {
-	tx.fc.wp.opCommit(tx.transHandle)
+	tx.fc.wp.opCommitRetaining(tx.transHandle)
 	_, _, _, err = tx.fc.wp.opResponse()
-	tx.fc.wp.opTransaction([]byte{
-		byte(isc_tpb_version3),
-		byte(isc_tpb_write),
-		byte(isc_tpb_wait),
-		byte(isc_tpb_read_committed),
-		byte(isc_tpb_no_rec_version),
-	})
-	tx.transHandle, _, _, err = tx.fc.wp.opResponse()
 	return
 }
 
 func (tx *firebirdsqlTx) Rollback() (err error) {
-	tx.fc.wp.opRollback(tx.transHandle)
+	tx.fc.wp.opRollbackRetaining(tx.transHandle)
 	_, _, _, err = tx.fc.wp.opResponse()
-	tx.fc.wp.opTransaction([]byte{
-		byte(isc_tpb_version3),
-		byte(isc_tpb_write),
-		byte(isc_tpb_wait),
-		byte(isc_tpb_read_committed),
-		byte(isc_tpb_no_rec_version),
-	})
-	tx.transHandle, _, _, err = tx.fc.wp.opResponse()
 	return
 }
 
