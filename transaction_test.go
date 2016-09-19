@@ -132,3 +132,40 @@ func TestTransaction(t *testing.T) {
 
 	conn.Close()
 }
+
+func TestIssue35(t *testing.T) {
+	var n int
+	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_issue35.fdb")
+
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+
+	tx, err := conn.Begin()
+
+	if err != nil {
+		t.Fatalf("Error Begin: %v", err)
+	}
+
+	err = tx.Commit()
+
+	if err != nil {
+		t.Fatalf("Error Commit: %v", err)
+	}
+
+	_, err = conn.Exec("CREATE TABLE test_issue35 (s varchar(2048))")
+
+	if err != nil {
+		t.Fatalf("Error CREATE TABLE: %v", err)
+	}
+	conn.Close()
+
+	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_issue35.fdb")
+	err = conn.QueryRow("SELECT Count(*) FROM test_issue35").Scan(&n)
+	if err != nil {
+		t.Fatalf("Error SELECT: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("Incorrect count: %v", n)
+	}
+}
