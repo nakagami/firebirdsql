@@ -40,12 +40,18 @@ func TestTransaction(t *testing.T) {
 	conn.Close()
 	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_transaction.fdb")
 	err = conn.QueryRow("SELECT Count(*) FROM test_trans").Scan(&n)
+	if err != nil {
+		t.Fatalf("Error SELECT: %v", err)
+	}
 	if n != 0 {
 		t.Fatalf("Incorrect count: %v", n)
 	}
 	conn.Exec("INSERT INTO test_trans (s) values ('A')")
 	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_transaction.fdb")
 	err = conn.QueryRow("SELECT Count(*) FROM test_trans").Scan(&n)
+	if err != nil {
+		t.Fatalf("Error SELECT: %v", err)
+	}
 	if n != 1 {
 		t.Fatalf("Incorrect count: %v", n)
 	}
@@ -58,27 +64,48 @@ func TestTransaction(t *testing.T) {
 
 	// Rollback
 	err = tx.QueryRow("SELECT Count(*) FROM test_trans").Scan(&n)
+	if err != nil {
+		t.Fatalf("Error SELECT: %v", err)
+	}
 	if n != 1 {
 		t.Fatalf("Incorrect count: %v", n)
 	}
 	_, err = tx.Exec("INSERT INTO test_trans (s) values ('B')")
 	err = tx.QueryRow("SELECT Count(*) FROM test_trans").Scan(&n)
+	if err != nil {
+		t.Fatalf("Error SELECT: %v", err)
+	}
 	if n != 2 {
 		t.Fatalf("Incorrect count: %v", n)
 	}
-	tx.Rollback()
-	tx, err = conn.Begin()
+	err = tx.Rollback()
+	if err != nil {
+		t.Fatalf("Error Rollback: %v", err)
+	}
+
 	err = tx.QueryRow("SELECT Count(*) FROM test_trans").Scan(&n)
+	if err != nil {
+		t.Fatalf("Error SELECT: %v", err)
+	}
 	if n != 1 {
 		t.Fatalf("Incorrect count: %v", n)
 	}
 
 	// Commit & Rollback
 	_, err = tx.Exec("INSERT INTO test_trans (s) values ('C')")
-	tx.Commit()
-	tx.Rollback()
-	tx, err = conn.Begin()
+	err = tx.Commit()
+	if err != nil {
+		t.Fatalf("Error Commit: %v", err)
+	}
+	err = tx.Rollback()
+	if err != nil {
+		t.Fatalf("Error Rollback: %v", err)
+	}
+
 	err = tx.QueryRow("SELECT Count(*) FROM test_trans").Scan(&n)
+	if err != nil {
+		t.Fatalf("Error SELECT: %v", err)
+	}
 	if n != 2 {
 		t.Fatalf("Incorrect count: %v", n)
 	}
@@ -88,7 +115,9 @@ func TestTransaction(t *testing.T) {
 	conn.Close()
 	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_transaction.fdb")
 	err = tx.QueryRow("SELECT Count(*) FROM test_trans").Scan(&n)
-
+	if err != nil {
+		t.Fatalf("Error SELECT: %v", err)
+	}
 	if n != 3 {
 		t.Fatalf("Incorrect count: %v", n)
 	}
