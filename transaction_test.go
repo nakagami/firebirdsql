@@ -83,6 +83,7 @@ func TestTransaction(t *testing.T) {
 		t.Fatalf("Error Rollback: %v", err)
 	}
 
+	tx, err = conn.Begin()
 	err = tx.QueryRow("SELECT Count(*) FROM test_trans").Scan(&n)
 	if err != nil {
 		t.Fatalf("Error SELECT: %v", err)
@@ -91,17 +92,24 @@ func TestTransaction(t *testing.T) {
 		t.Fatalf("Incorrect count: %v", n)
 	}
 
-	// Commit & Rollback
+	// Commit
 	_, err = tx.Exec("INSERT INTO test_trans (s) values ('C')")
 	err = tx.Commit()
 	if err != nil {
 		t.Fatalf("Error Commit: %v", err)
 	}
-	err = tx.Rollback()
+	tx, err = conn.Begin()
+	err = tx.QueryRow("SELECT Count(*) FROM test_trans").Scan(&n)
 	if err != nil {
-		t.Fatalf("Error Rollback: %v", err)
+		t.Fatalf("Error SELECT: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("Incorrect count: %v", n)
 	}
 
+	// without Commit (Need commit manually)
+	_, err = tx.Exec("INSERT INTO test_trans (s) values ('D')")
+	tx, err = conn.Begin()
 	err = tx.QueryRow("SELECT Count(*) FROM test_trans").Scan(&n)
 	if err != nil {
 		t.Fatalf("Error SELECT: %v", err)
@@ -111,7 +119,7 @@ func TestTransaction(t *testing.T) {
 	}
 
 	// Connection (autocommit)
-	conn.Exec("INSERT INTO test_trans (s) values ('D')")
+	conn.Exec("INSERT INTO test_trans (s) values ('E')")
 	conn.Close()
 	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_transaction.fdb")
 	err = tx.QueryRow("SELECT Count(*) FROM test_trans").Scan(&n)
