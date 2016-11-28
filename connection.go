@@ -59,12 +59,16 @@ func (fc *firebirdsqlConn) Close() (err error) {
 	return
 }
 
-func (fc *firebirdsqlConn) Prepare(query string) (driver.Stmt, error) {
+func (fc *firebirdsqlConn) prepare(ctx context.Context, query string) (driver.Stmt, error) {
 	return newFirebirdsqlStmt(fc, query)
 }
 
-func (fc *firebirdsqlConn) Exec(query string, args []driver.Value) (result driver.Result, err error) {
-	stmt, err := fc.Prepare(query)
+func (fc *firebirdsqlConn) Prepare(query string) (driver.Stmt, error) {
+	return fc.prepare(context.Background(), query)
+}
+
+func (fc *firebirdsqlConn) exec(ctx context.Context, query string, args []driver.Value) (result driver.Result, err error) {
+	stmt, err := fc.prepare(ctx, query)
 	if err != nil {
 		return
 	}
@@ -79,13 +83,21 @@ func (fc *firebirdsqlConn) Exec(query string, args []driver.Value) (result drive
 	return
 }
 
-func (fc *firebirdsqlConn) Query(query string, args []driver.Value) (rows driver.Rows, err error) {
-	stmt, err := fc.Prepare(query)
+func (fc *firebirdsqlConn) Exec(query string, args []driver.Value) (result driver.Result, err error) {
+	return fc.exec(context.Background(), query, args)
+}
+
+func (fc *firebirdsqlConn) query(ctx context.Context, query string, args []driver.Value) (rows driver.Rows, err error) {
+	stmt, err := fc.prepare(ctx, query)
 	if err != nil {
 		return
 	}
 	rows, err = stmt.Query(args)
 	return
+}
+
+func (fc *firebirdsqlConn) Query(query string, args []driver.Value) (rows driver.Rows, err error) {
+	return fc.query(context.Background(), query, args)
 }
 
 func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
