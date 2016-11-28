@@ -23,8 +23,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 package firebirdsql
 
+import (
+	"context"
+)
+
 type firebirdsqlTx struct {
 	fc           *firebirdsqlConn
+	ctx          context.Context
 	isAutocommit bool
 	transHandle  int32
 }
@@ -92,9 +97,10 @@ func (tx *firebirdsqlTx) Rollback() (err error) {
 	return
 }
 
-func newFirebirdsqlTx(fc *firebirdsqlConn, isAutocommit bool) (tx *firebirdsqlTx, err error) {
+func newFirebirdsqlTx(fc *firebirdsqlConn, ctx context.Context, isAutocommit bool) (tx *firebirdsqlTx, err error) {
 	tx = new(firebirdsqlTx)
 	tx.fc = fc
+	tx.ctx = ctx
 	tx.isAutocommit = isAutocommit
 	tx.begin()
 	return

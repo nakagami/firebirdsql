@@ -26,6 +26,8 @@ package firebirdsql
 import (
 	"database/sql/driver"
 	"math/big"
+
+	"context"
 )
 
 type firebirdsqlConn struct {
@@ -41,10 +43,14 @@ type firebirdsqlConn struct {
 	clientSecret   *big.Int
 }
 
-func (fc *firebirdsqlConn) Begin() (driver.Tx, error) {
-	tx, err := newFirebirdsqlTx(fc, false)
+func (fc *firebirdsqlConn) begin(ctx context.Context) (driver.Tx, error) {
+	tx, err := newFirebirdsqlTx(fc, ctx, false)
 	fc.tx = tx
 	return driver.Tx(tx), err
+}
+
+func (fc *firebirdsqlConn) Begin() (driver.Tx, error) {
+	return fc.begin(context.Background())
 }
 
 func (fc *firebirdsqlConn) Close() (err error) {
@@ -109,7 +115,7 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	fc.password = password
 	fc.isolationLevel = isolationLevel
 	fc.isAutocommit = true
-	fc.tx, err = newFirebirdsqlTx(fc, fc.isAutocommit)
+	fc.tx, err = newFirebirdsqlTx(fc, context.Background(), fc.isAutocommit)
 	fc.clientPublic = clientPublic
 	fc.clientSecret = clientSecret
 
@@ -142,7 +148,7 @@ func createFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	fc.password = password
 	fc.isolationLevel = isolationLevel
 	fc.isAutocommit = true
-	fc.tx, err = newFirebirdsqlTx(fc, fc.isAutocommit)
+	fc.tx, err = newFirebirdsqlTx(fc, context.Background(), fc.isAutocommit)
 	fc.clientPublic = clientPublic
 	fc.clientSecret = clientSecret
 
