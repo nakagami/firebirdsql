@@ -25,6 +25,8 @@ package firebirdsql
 
 import (
 	"database/sql/driver"
+
+	"context"
 )
 
 type firebirdsqlStmt struct {
@@ -51,7 +53,7 @@ func (stmt *firebirdsqlStmt) NumInput() int {
 	return -1
 }
 
-func (stmt *firebirdsqlStmt) Exec(args []driver.Value) (result driver.Result, err error) {
+func (stmt *firebirdsqlStmt) exec(ctx context.Context, args []driver.Value) (result driver.Result, err error) {
 	stmt.wp.opExecute(stmt.stmtHandle, stmt.tx.transHandle, args)
 	_, _, _, err = stmt.wp.opResponse()
 	if err != nil {
@@ -80,7 +82,11 @@ func (stmt *firebirdsqlStmt) Exec(args []driver.Value) (result driver.Result, er
 	return
 }
 
-func (stmt *firebirdsqlStmt) Query(args []driver.Value) (rows driver.Rows, err error) {
+func (stmt *firebirdsqlStmt) Exec(args []driver.Value) (result driver.Result, err error) {
+	return stmt.exec(context.Background(), args)
+}
+
+func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (rows driver.Rows, err error) {
 	if stmt.stmtType == isc_info_sql_stmt_exec_procedure {
 		stmt.wp.opExecute2(stmt.stmtHandle, stmt.tx.transHandle, args, stmt.blr)
 		result, _ := stmt.wp.opSqlResponse(stmt.xsqlda)
@@ -92,6 +98,10 @@ func (stmt *firebirdsqlStmt) Query(args []driver.Value) (rows driver.Rows, err e
 		rows = newFirebirdsqlRows(stmt, nil)
 	}
 	return
+}
+
+func (stmt *firebirdsqlStmt) Query(args []driver.Value) (rows driver.Rows, err error) {
+	return stmt.query(context.Background(), args)
 }
 
 func newFirebirdsqlStmt(fc *firebirdsqlConn, query string) (stmt *firebirdsqlStmt, err error) {
