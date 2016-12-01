@@ -27,24 +27,56 @@ package firebirdsql
 
 import (
 	"database/sql/driver"
+	"errors"
 
 	"context"
 )
 
 func (stmt *firebirdsqlStmt) ExecContext(ctx context.Context, namedargs []driver.NamedValue) (result driver.Result, err error) {
-       args := make([]driver.Value, len(namedargs))
-       for i, nv := range namedargs {
-               args[i] = nv.Value
-       }
+	args := make([]driver.Value, len(namedargs))
+	for i, nv := range namedargs {
+		args[i] = nv.Value
+	}
 
-       return stmt.exec(ctx, args)
+	return stmt.exec(ctx, args)
 }
 
 func (stmt *firebirdsqlStmt) QueryContext(ctx context.Context, namedargs []driver.NamedValue) (rows driver.Rows, err error) {
-       args := make([]driver.Value, len(namedargs))
-       for i, nv := range namedargs {
-               args[i] = nv.Value
-       }
+	args := make([]driver.Value, len(namedargs))
+	for i, nv := range namedargs {
+		args[i] = nv.Value
+	}
 
-       return stmt.query(ctx, args)
+	return stmt.query(ctx, args)
+}
+
+func (fc *firebirdsqlConn) BeginContext(ctx context.Context) (driver.Tx, error) {
+	return fc.begin(ctx)
+}
+
+func (fc *firebirdsqlConn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
+	return fc.prepare(ctx, query)
+}
+
+func (fc *firebirdsqlConn) ExecContext(ctx context.Context, query string, namedargs []driver.NamedValue) (result driver.Result, err error) {
+	args := make([]driver.Value, len(namedargs))
+	for i, nv := range namedargs {
+		args[i] = nv.Value
+	}
+	return fc.exec(ctx, query, args)
+}
+
+func (fc *firebirdsqlConn) Ping(ctx context.Context) error {
+	if fc == nil {
+		return errors.New("Connection was closed")
+	}
+	return nil
+}
+
+func (fc *firebirdsqlConn) QueryContext(ctx context.Context, query string, namedargs []driver.NamedValue) (rows driver.Rows, err error) {
+	args := make([]driver.Value, len(namedargs))
+	for i, nv := range namedargs {
+		args[i] = nv.Value
+	}
+	return fc.query(ctx, query, args)
 }
