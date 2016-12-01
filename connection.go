@@ -72,7 +72,7 @@ func (fc *firebirdsqlConn) exec(ctx context.Context, query string, args []driver
 	if err != nil {
 		return
 	}
-	result, err = stmt.Exec(args)
+	result, err = stmt.(*firebirdsqlStmt).exec(ctx, args)
 	if err != nil {
 		return
 	}
@@ -92,7 +92,7 @@ func (fc *firebirdsqlConn) query(ctx context.Context, query string, args []drive
 	if err != nil {
 		return
 	}
-	rows, err = stmt.Query(args)
+	rows, err = stmt.(*firebirdsqlStmt).query(ctx, args)
 	return
 }
 
