@@ -23,13 +23,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 package firebirdsql
 
-import (
-	"context"
-)
-
 type firebirdsqlTx struct {
 	fc             *firebirdsqlConn
-	ctx            context.Context
 	isolationLevel int
 	readOnly       bool
 	isAutocommit   bool

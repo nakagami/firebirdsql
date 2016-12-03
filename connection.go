@@ -50,7 +50,7 @@ func (fc *firebirdsqlConn) begin(isolationLevel int, readOnly bool) (driver.Tx, 
 }
 
 func (fc *firebirdsqlConn) Begin() (driver.Tx, error) {
-	return fc.begin(0, false)
+	return fc.begin(ISOLATION_LEVEL_READ_COMMITED, false)
 }
 
 func (fc *firebirdsqlConn) Close() (err error) {
@@ -127,7 +127,7 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	fc.password = password
 	fc.isolationLevel = isolationLevel
 	fc.isAutocommit = true
-	fc.tx, err = newFirebirdsqlTx(fc, 0, false, fc.isAutocommit)
+	fc.tx, err = newFirebirdsqlTx(fc, ISOLATION_LEVEL_READ_COMMITED, false, fc.isAutocommit)
 	fc.clientPublic = clientPublic
 	fc.clientSecret = clientSecret
 
@@ -160,7 +160,7 @@ func createFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	fc.password = password
 	fc.isolationLevel = isolationLevel
 	fc.isAutocommit = true
-	fc.tx, err = newFirebirdsqlTx(fc, 0, false, fc.isAutocommit)
+	fc.tx, err = newFirebirdsqlTx(fc, ISOLATION_LEVEL_READ_COMMITED, false, fc.isAutocommit)
 	fc.clientPublic = clientPublic
 	fc.clientSecret = clientSecret
 
