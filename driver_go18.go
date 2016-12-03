@@ -26,6 +26,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
+	"database/sql"
 	"database/sql/driver"
 	"errors"
 
@@ -52,7 +53,23 @@ func (stmt *firebirdsqlStmt) QueryContext(ctx context.Context, namedargs []drive
 
 func (fc *firebirdsqlConn) BeginContext(ctx context.Context) (driver.Tx, error) {
 	isolationLevel := ISOLATION_LEVEL_READ_COMMITED
-	readOnly := false
+	contextIsolationLevel, ok := driver.IsolationFromContext(ctx)
+	if ok {
+		switch (sql.IsolationLevel)(contextIsolationLevel) {
+		case sql.LevelDefault:
+			isolationLevel = ISOLATION_LEVEL_READ_COMMITED
+		case sql.LevelReadUncommitted:
+			isolationLevel = ISOLATION_LEVEL_READ_COMMITED_LEGACY
+		case sql.LevelReadCommitted:
+			isolationLevel = ISOLATION_LEVEL_READ_COMMITED
+		case sql.LevelRepeatableRead:
+			isolationLevel = ISOLATION_LEVEL_REPEATABLE_READ
+		case sql.LevelSerializable:
+			isolationLevel = ISOLATION_LEVEL_SERIALIZABLE
+		default:
+		}
+	}
+	readOnly := driver.ReadOnlyFromContext(ctx)
 	return fc.begin(isolationLevel, readOnly)
 }
 
