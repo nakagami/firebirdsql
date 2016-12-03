@@ -39,25 +39,18 @@ func TestDSNParse(t *testing.T) {
 		role           string
 		authPluginName string
 		wireCrypt      bool
-		isolationLevel int
 	}{
-		{"user:password@localhost:3000/dbname", "localhost:3000", "dbname", "user", "password", "", "Srp", true, 1},
-		{"user:password@localhost/dbname", "localhost:3050", "dbname", "user", "password", "", "Srp", true, 1},
-		{"user:password@localhost/dir/dbname", "localhost:3050", "/dir/dbname", "user", "password", "", "Srp", true, 1},
-		{"user:password@localhost/c:\\fbdata\\database.fdb", "localhost:3050", "c:\\fbdata\\database.fdb", "user", "password", "", "Srp", true, 1},
-		{"user:password@localhost/c:/fbdata/database.fdb", "localhost:3050", "c:/fbdata/database.fdb", "user", "password", "", "Srp", true, 1},
-		{"user:password@localhost/dbname?role=role", "localhost:3050", "dbname", "user", "password", "role", "Srp", true, 1},
-		{"user:password@localhost/dbname?auth_plugin_name=Legacy_Auth", "localhost:3050", "dbname", "user", "password", "", "Legacy_Auth", true, 1},
-		{"user:password@localhost/dbname?auth_plugin_name=Legacy_Auth&wire_crypt=false", "localhost:3050", "dbname", "user", "password", "", "Legacy_Auth", false, 1},
-		{"user:password@localhost/dbname?isolation_level=READ_COMMITED_LEGACY", "localhost:3050", "dbname", "user", "password", "", "Srp", true, 0},
-		{"user:password@localhost/dbname?isolation_level=READ_COMMITED", "localhost:3050", "dbname", "user", "password", "", "Srp", true, 1},
-		{"user:password@localhost/dbname?isolation_level=REPEATABLE_READ", "localhost:3050", "dbname", "user", "password", "", "Srp", true, 2},
-		{"user:password@localhost/dbname?isolation_level=SERIALIZABLE", "localhost:3050", "dbname", "user", "password", "", "Srp", true, 3},
-		{"user:password@localhost:3000/c:/fbdata/database.fdb?role=role&wire_crypt=false", "localhost:3000", "c:/fbdata/database.fdb", "user", "password", "role", "Srp", false, 1},
+		{"user:password@localhost:3000/dbname", "localhost:3000", "dbname", "user", "password", "", "Srp", true},
+		{"user:password@localhost/dbname", "localhost:3050", "dbname", "user", "password", "", "Srp", true},
+		{"user:password@localhost/dir/dbname", "localhost:3050", "/dir/dbname", "user", "password", "", "Srp", true},
+		{"user:password@localhost/c:\\fbdata\\database.fdb", "localhost:3050", "c:\\fbdata\\database.fdb", "user", "password", "", "Srp", true},
+		{"user:password@localhost/c:/fbdata/database.fdb", "localhost:3050", "c:/fbdata/database.fdb", "user", "password", "", "Srp", true},
+		{"user:password@localhost/dbname?role=role", "localhost:3050", "dbname", "user", "password", "role", "Srp", true},
+		{"user:password@localhost:3000/c:/fbdata/database.fdb?role=role&wire_crypt=false", "localhost:3000", "c:/fbdata/database.fdb", "user", "password", "role", "Srp", false},
 	}
 
 	for _, d := range testDSNs {
-		addr, dbName, user, passwd, role, authPluginName, wireCrypt, isolationLevel, err := parseDSN(d.dsn)
+		addr, dbName, user, passwd, role, authPluginName, wireCrypt, err := parseDSN(d.dsn)
 		if addr != d.addr {
 			err = errors.New(fmt.Sprintf("parse DSN fail:%s(%s != %s)", d.dsn, addr, d.addr))
 		} else if dbName != d.dbName {
@@ -72,8 +65,6 @@ func TestDSNParse(t *testing.T) {
 			err = errors.New(fmt.Sprintf("parse DSN fail:%s(%s != %s)", d.dsn, authPluginName, d.authPluginName))
 		} else if wireCrypt != d.wireCrypt {
 			err = errors.New(fmt.Sprintf("parse DSN fail:%s(%v != %v)", d.dsn, wireCrypt, d.wireCrypt))
-		} else if isolationLevel != d.isolationLevel {
-			err = errors.New(fmt.Sprintf("parse DSN fail:%s(%v != %v)", d.dsn, isolationLevel, d.isolationLevel))
 		}
 
 		if err != nil {
