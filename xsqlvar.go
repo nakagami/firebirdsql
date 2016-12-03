@@ -146,10 +146,19 @@ func (x *xSQLVAR) scantype() reflect.Type {
 	case SQL_TYPE_VARYING:
 		return reflect.TypeOf("")
 	case SQL_TYPE_SHORT:
+		if x.sqlscale != 0 {
+			return reflect.TypeOf(big.NewRat(0, 0))
+		}
 		return reflect.TypeOf(int16(0))
 	case SQL_TYPE_LONG:
+		if x.sqlscale != 0 {
+			return reflect.TypeOf(big.NewRat(0, 0))
+		}
 		return reflect.TypeOf(int32(0))
 	case SQL_TYPE_INT64:
+		if x.sqlscale != 0 {
+			return reflect.TypeOf(big.NewRat(0, 0))
+		}
 		return reflect.TypeOf(int64(0))
 	case SQL_TYPE_DATE:
 		return reflect.TypeOf(time.Time{})
