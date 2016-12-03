@@ -51,7 +51,9 @@ func (stmt *firebirdsqlStmt) QueryContext(ctx context.Context, namedargs []drive
 }
 
 func (fc *firebirdsqlConn) BeginContext(ctx context.Context) (driver.Tx, error) {
-	return fc.begin(ctx)
+	isolationLevel := 0
+	readOnly := false
+	return fc.begin(isolationLevel, readOnly)
 }
 
 func (fc *firebirdsqlConn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
