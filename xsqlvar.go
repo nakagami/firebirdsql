@@ -28,6 +28,7 @@ import (
 	"encoding/binary"
 	"math"
 	"math/big"
+	"reflect"
 	"time"
 )
 
@@ -82,6 +83,22 @@ var xsqlvarTypeDisplayLength = map[int]int{
 	SQL_TYPE_BOOLEAN:   5,
 }
 
+var xsqlvarTypeName = map[int]string{
+	SQL_TYPE_VARYING:   "VARYING",
+	SQL_TYPE_SHORT:     "SHORT",
+	SQL_TYPE_LONG:      "LONG",
+	SQL_TYPE_FLOAT:     "FLOAT",
+	SQL_TYPE_TIME:      "TIME",
+	SQL_TYPE_DATE:      "DATE",
+	SQL_TYPE_DOUBLE:    "DOUBLE",
+	SQL_TYPE_TIMESTAMP: "TIMESTAMP",
+	SQL_TYPE_BLOB:      "BLOB",
+	SQL_TYPE_ARRAY:     "ARRAY",
+	SQL_TYPE_QUAD:      "QUAD",
+	SQL_TYPE_INT64:     "INT64",
+	SQL_TYPE_BOOLEAN:   "BOOLEAN",
+}
+
 type xSQLVAR struct {
 	sqltype    int
 	sqlscale   int
@@ -102,12 +119,54 @@ func (x *xSQLVAR) ioLength() int {
 	}
 }
 
-func (x *xSQLVAR) displayLenght() int {
+func (x *xSQLVAR) displayLength() int {
 	if x.sqltype == SQL_TYPE_TEXT {
 		return x.sqllen
 	} else {
 		return xsqlvarTypeDisplayLength[x.sqltype]
 	}
+}
+
+func (x *xSQLVAR) nullable() bool {
+	return x.null_ok
+}
+
+func (x *xSQLVAR) scale() int {
+	return x.sqlscale
+}
+
+func (x *xSQLVAR) typename() string {
+	return xsqlvarTypeName[x.sqltype]
+}
+
+func (x *xSQLVAR) scantype() reflect.Type {
+	switch x.sqltype {
+	case SQL_TYPE_TEXT:
+		return reflect.TypeOf("")
+	case SQL_TYPE_VARYING:
+		return reflect.TypeOf("")
+	case SQL_TYPE_SHORT:
+		return reflect.TypeOf(int16(0))
+	case SQL_TYPE_LONG:
+		return reflect.TypeOf(int32(0))
+	case SQL_TYPE_INT64:
+		return reflect.TypeOf(int64(0))
+	case SQL_TYPE_DATE:
+		return reflect.TypeOf(time.Time{})
+	case SQL_TYPE_TIME:
+		return reflect.TypeOf(time.Time{})
+	case SQL_TYPE_TIMESTAMP:
+		return reflect.TypeOf(time.Time{})
+	case SQL_TYPE_FLOAT:
+		return reflect.TypeOf(float32(0))
+	case SQL_TYPE_DOUBLE:
+		return reflect.TypeOf(float64(0))
+	case SQL_TYPE_BOOLEAN:
+		return reflect.TypeOf(false)
+	case SQL_TYPE_BLOB:
+		return reflect.TypeOf([]byte{})
+	}
+	return reflect.TypeOf(nil)
 }
 
 func (x *xSQLVAR) _parseDate(raw_value []byte) (int, int, int) {

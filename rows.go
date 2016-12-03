@@ -28,6 +28,7 @@ import (
 	"container/list"
 	"database/sql/driver"
 	"io"
+	"reflect"
 )
 
 type firebirdsqlRows struct {
@@ -111,4 +112,24 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 	}
 
 	return
+}
+
+func (rows *firebirdsqlRows) ColumnTypeDatabaseTypeName(index int) string {
+	return rows.stmt.xsqlda[index].typename()
+}
+
+func (rows *firebirdsqlRows) ColumnTypeLength(index int) (length int64, ok bool) {
+	return int64(rows.stmt.xsqlda[index].displayLength()), true
+}
+
+func (rows *firebirdsqlRows) ColumnTypeNullable(index int) (nullable bool, ok bool) {
+	return rows.stmt.xsqlda[index].null_ok, true
+}
+
+func (rows *firebirdsqlRows) ColumnTypePrecisionScale(index int) (precision, scale int64, ok bool) {
+	return int64(rows.stmt.xsqlda[index].displayLength()), int64(rows.stmt.xsqlda[index].scale()), true
+}
+
+func (rows *firebirdsqlRows) ColumnTypeScanType(index int) reflect.Type {
+	return rows.stmt.xsqlda[index].scantype()
 }
