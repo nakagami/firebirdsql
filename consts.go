@@ -149,12 +149,6 @@ const (
 	isc_info_svc_running            = 67
 	isc_info_svc_get_users          = 68
 
-	ISOLATION_LEVEL_READ_COMMITED_LEGACY = 0
-	ISOLATION_LEVEL_READ_COMMITED        = 1
-	ISOLATION_LEVEL_REPEATABLE_READ      = 2
-	ISOLATION_LEVEL_SERIALIZABLE         = 3
-	ISOLATION_LEVEL_READ_COMMITED_RO     = 4
-
 	isc_tpb_version1         = 1
 	isc_tpb_version3         = 3
 	isc_tpb_consistency      = 1
@@ -404,4 +398,12 @@ const (
 	op_crypt                = 96
 	op_crypt_key_callback   = 97
 	op_cond_accept          = 98
+)
+
+const (
+	ISOLATION_LEVEL_READ_COMMITED_LEGACY = iota
+	ISOLATION_LEVEL_READ_COMMITED
+	ISOLATION_LEVEL_REPEATABLE_READ
+	ISOLATION_LEVEL_SERIALIZABLE
+	ISOLATION_LEVEL_READ_COMMITED_RO
 )
