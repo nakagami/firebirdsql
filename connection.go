@@ -31,15 +31,15 @@ import (
 )
 
 type firebirdsqlConn struct {
-	wp             *wireProtocol
-	tx             *firebirdsqlTx
-	addr           string
-	dbName         string
-	user           string
-	password       string
-	isAutocommit   bool
-	clientPublic   *big.Int
-	clientSecret   *big.Int
+	wp           *wireProtocol
+	tx           *firebirdsqlTx
+	addr         string
+	dbName       string
+	user         string
+	password     string
+	isAutocommit bool
+	clientPublic *big.Int
+	clientSecret *big.Int
 }
 
 func (fc *firebirdsqlConn) begin(isolationLevel int, readOnly bool) (driver.Tx, error) {
