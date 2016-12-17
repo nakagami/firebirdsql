@@ -26,11 +26,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
+	"context"
 	"database/sql"
 	"database/sql/driver"
 	"errors"
-
-	"context"
 )
 
 func (stmt *firebirdsqlStmt) ExecContext(ctx context.Context, namedargs []driver.NamedValue) (result driver.Result, err error) {
@@ -51,12 +50,8 @@ func (stmt *firebirdsqlStmt) QueryContext(ctx context.Context, namedargs []drive
 	return stmt.query(ctx, args)
 }
 
-func (fc *firebirdsqlConn) BeginTx(ctx context.Context, opts *driver.TxOptions) (driver.Tx, error) {
+func (fc *firebirdsqlConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
 	isolationLevel := ISOLATION_LEVEL_READ_COMMITED
-
-	if opts == nil {
-		return fc.begin(isolationLevel, false)
-	}
 
 	switch (sql.IsolationLevel)(opts.Isolation) {
 	case sql.LevelDefault:
