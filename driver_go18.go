@@ -51,9 +51,13 @@ func (stmt *firebirdsqlStmt) QueryContext(ctx context.Context, namedargs []drive
 	return stmt.query(ctx, args)
 }
 
-func (fc *firebirdsqlConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
-
+func (fc *firebirdsqlConn) BeginTx(ctx context.Context, opts *driver.TxOptions) (driver.Tx, error) {
 	isolationLevel := ISOLATION_LEVEL_READ_COMMITED
+
+	if opts == nil {
+		return fc.begin(isolationLevel, false)
+	}
+
 	switch (sql.IsolationLevel)(opts.Isolation) {
 	case sql.LevelDefault:
 		isolationLevel = ISOLATION_LEVEL_READ_COMMITED

@@ -26,8 +26,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
+	"context"
 	"database/sql"
-//	"reflect"
+	//	"reflect"
 	"testing"
 	"time"
 )
@@ -60,11 +61,14 @@ func TestGo18(t *testing.T) {
 	conn.Exec("insert into foo(a, b, c, h) values (1, 'a', 'b','This is a memo')")
 	conn.Exec("insert into foo(a, b, c, e, g, i, j) values (2, 'A', 'B', '1999-01-25', '00:00:01', 0.1, 0.1)")
 	conn.Exec("insert into foo(a, b, c, e, g, i, j) values (3, 'X', 'Y', '2001-07-05', '00:01:02', 0.2, 0.2)")
-	conn.Close()
 
-	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_go18.fdb")
+	ctx := context.Background()
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("Error BeginTx(): %v", err)
+	}
 
-	rows, err := conn.Query("select a, b, c, d, e, f, g, h, i, j from foo")
+	rows, err := tx.QueryContext(ctx, "select a, b, c, d, e, f, g, h, i, j from foo")
 	var a int
 	var b, c string
 	var d float64
