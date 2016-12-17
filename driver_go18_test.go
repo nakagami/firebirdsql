@@ -28,7 +28,7 @@ package firebirdsql
 import (
 	"context"
 	"database/sql"
-	//	"reflect"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -82,6 +82,11 @@ func TestGo18(t *testing.T) {
 	}
 
 	rows, err := tx.QueryContext(ctx, "select a, b, c, d, e, f, g, h, i, j from foo")
+	columns, err := rows.Columns()
+	if !reflect.DeepEqual(columns, []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J"}) {
+		t.Fatalf("Columns() mismatch: %v", columns)
+	}
+
 	var a int
 	var b, c string
 	var d float64
