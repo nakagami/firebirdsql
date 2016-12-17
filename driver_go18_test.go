@@ -57,16 +57,17 @@ func TestGo18(t *testing.T) {
             CONSTRAINT CHECK_A CHECK (a <> 0)
         )
     `)
-	// 3 records insert
 	conn.Exec("insert into foo(a, b, c, h) values (1, 'a', 'b','This is a memo')")
 	conn.Exec("insert into foo(a, b, c, e, g, i, j) values (2, 'A', 'B', '1999-01-25', '00:00:01', 0.1, 0.1)")
-	conn.Exec("insert into foo(a, b, c, e, g, i, j) values (3, 'X', 'Y', '2001-07-05', '00:01:02', 0.2, 0.2)")
 
 	ctx := context.Background()
-	tx, err := conn.BeginTx(ctx, nil)
+	opts := &sql.TxOptions{sql.LevelDefault, true}
+	tx, err := conn.BeginTx(ctx, opts)
 	if err != nil {
 		t.Fatalf("Error BeginTx(): %v", err)
 	}
+
+	tx.Exec("insert into foo(a, b, c, e, g, i, j) values (3, 'X', 'Y', '2001-07-05', '00:01:02', 0.2, 0.2)")
 
 	rows, err := tx.QueryContext(ctx, "select a, b, c, d, e, f, g, h, i, j from foo")
 	var a int
