@@ -26,22 +26,17 @@ package firebirdsql
 type firebirdsqlTx struct {
 	fc             *firebirdsqlConn
 	isolationLevel int
-	readOnly       bool
 	isAutocommit   bool
 	transHandle    int32
 }
 
 func (tx *firebirdsqlTx) begin() (err error) {
 	var tpb []byte
-	var readwrite = isc_tpb_write
-	if tx.readOnly {
-		readwrite = isc_tpb_read
-	}
 	switch tx.isolationLevel {
 	case ISOLATION_LEVEL_READ_COMMITED_LEGACY:
 		tpb = []byte{
 			byte(isc_tpb_version3),
-			byte(readwrite),
+			byte(isc_tpb_write),
 			byte(isc_tpb_wait),
 			byte(isc_tpb_read_committed),
 			byte(isc_tpb_no_rec_version),
@@ -49,7 +44,7 @@ func (tx *firebirdsqlTx) begin() (err error) {
 	case ISOLATION_LEVEL_READ_COMMITED:
 		tpb = []byte{
 			byte(isc_tpb_version3),
-			byte(readwrite),
+			byte(isc_tpb_write),
 			byte(isc_tpb_wait),
 			byte(isc_tpb_read_committed),
 			byte(isc_tpb_rec_version),
@@ -57,16 +52,24 @@ func (tx *firebirdsqlTx) begin() (err error) {
 	case ISOLATION_LEVEL_REPEATABLE_READ:
 		tpb = []byte{
 			byte(isc_tpb_version3),
-			byte(readwrite),
+			byte(isc_tpb_write),
 			byte(isc_tpb_wait),
 			byte(isc_tpb_concurrency),
 		}
 	case ISOLATION_LEVEL_SERIALIZABLE:
 		tpb = []byte{
 			byte(isc_tpb_version3),
-			byte(readwrite),
+			byte(isc_tpb_write),
 			byte(isc_tpb_wait),
 			byte(isc_tpb_consistency),
+		}
+	case ISOLATION_LEVEL_READ_COMMITED_RO:
+		tpb = []byte{
+			byte(isc_tpb_version3),
+			byte(isc_tpb_read),
+			byte(isc_tpb_wait),
+			byte(isc_tpb_read_committed),
+			byte(isc_tpb_rec_version),
 		}
 	}
 	tx.fc.wp.opTransaction(tpb)
@@ -90,11 +93,10 @@ func (tx *firebirdsqlTx) Rollback() (err error) {
 	return
 }
 
-func newFirebirdsqlTx(fc *firebirdsqlConn, isolationLevel int, readOnly bool, isAutocommit bool) (tx *firebirdsqlTx, err error) {
+func newFirebirdsqlTx(fc *firebirdsqlConn, isolationLevel int, isAutocommit bool) (tx *firebirdsqlTx, err error) {
 	tx = new(firebirdsqlTx)
 	tx.fc = fc
 	tx.isolationLevel = isolationLevel
-	tx.readOnly = readOnly
 	tx.isAutocommit = isAutocommit
 	tx.begin()
 	return

@@ -67,7 +67,19 @@ func TestGo18(t *testing.T) {
 		t.Fatalf("Error BeginTx(): %v", err)
 	}
 
-	tx.Exec("insert into foo(a, b, c, e, g, i, j) values (3, 'X', 'Y', '2001-07-05', '00:01:02', 0.2, 0.2)")
+	_, err = tx.Exec("insert into foo(a, b, c, e, g, i, j) values (3, 'X', 'Y', '2001-07-05', '00:01:02', 0.2, 0.2)")
+	if err == nil {
+		t.Fatalf("Need read-only transaction error")
+	}
+
+	var n int
+	err = tx.QueryRow("select count(*) cnt from foo").Scan(&n)
+	if err != nil {
+		t.Fatalf("Error QueryRow: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("Error bad record count: %v", n)
+	}
 
 	rows, err := tx.QueryContext(ctx, "select a, b, c, d, e, f, g, h, i, j from foo")
 	var a int
