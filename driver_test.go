@@ -88,6 +88,10 @@ func TestBasic(t *testing.T) {
 	}
 
 	rows, err := conn.Query("select a, b, c, d, e, f, g, h, i, j from foo")
+	columns, err := rows.Columns()
+	if !reflect.DeepEqual(columns, []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J"}) {
+		t.Fatalf("Columns() mismatch: %v", columns)
+	}
 	var a int
 	var b, c string
 	var d float64
