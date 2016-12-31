@@ -135,6 +135,10 @@ func (x *xSQLVAR) scale() int {
 	return x.sqlscale
 }
 
+func (x *xSQLVAR) hasPrecisionScale() bool {
+    return (x.sqltype == SQL_TYPE_SHORT || x.sqltype == SQL_TYPE_LONG || x.sqltype == SQL_TYPE_QUAD || x.sqltype == SQL_TYPE_INT64) && x.sqlscale != 0
+}
+
 func (x *xSQLVAR) typename() string {
 	return xsqlvarTypeName[x.sqltype]
 }

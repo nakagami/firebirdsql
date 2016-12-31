@@ -127,7 +127,7 @@ func (rows *firebirdsqlRows) ColumnTypeNullable(index int) (nullable bool, ok bo
 }
 
 func (rows *firebirdsqlRows) ColumnTypePrecisionScale(index int) (precision, scale int64, ok bool) {
-	return int64(rows.stmt.xsqlda[index].displayLength()), int64(rows.stmt.xsqlda[index].scale()), true
+	return int64(rows.stmt.xsqlda[index].displayLength()), int64(rows.stmt.xsqlda[index].scale()), rows.stmt.xsqlda[index].hasPrecisionScale()
 }
 
 func (rows *firebirdsqlRows) ColumnTypeScanType(index int) reflect.Type {
