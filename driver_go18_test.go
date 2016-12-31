@@ -28,7 +28,6 @@ package firebirdsql
 import (
 	"context"
 	"database/sql"
-	"reflect"
 	"testing"
 	"time"
 )
@@ -82,9 +81,27 @@ func TestGo18(t *testing.T) {
 	}
 
 	rows, err := tx.QueryContext(ctx, "select a, b, c, d, e, f, g, h, i, j from foo")
-	columns, err := rows.Columns()
-	if !reflect.DeepEqual(columns, []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J"}) {
-		t.Fatalf("Columns() mismatch: %v", columns)
+	ct, err := rows.ColumnTypes()
+	var testColumnTypes = []struct {
+		name     string
+		typeName string
+	}{
+		{"A", "LONG"},
+		{"B", "VARYING"},
+		{"C", "VARYING"},
+		{"D", "INT64"},
+		{"E", "DATE"},
+		{"F", "TIMESTAMP"},
+		{"G", "TIME"},
+		{"H", "BLOB"},
+		{"I", "DOUBLE"},
+		{"J", "FLOAT"},
+	}
+
+	for i, tct := range testColumnTypes {
+		if ct[i].Name() != tct.name || ct[i].DatabaseTypeName() != tct.typeName {
+			t.Fatalf("Error Column Type: %v", tct.name)
+		}
 	}
 
 	var a int
