@@ -27,7 +27,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"math"
-	"math/big"
+	//	"math/big"
 	"reflect"
 	"time"
 )
@@ -151,17 +151,20 @@ func (x *xSQLVAR) scantype() reflect.Type {
 		return reflect.TypeOf("")
 	case SQL_TYPE_SHORT:
 		if x.sqlscale != 0 {
-			return reflect.TypeOf(big.NewRat(0, 1))
+			//return reflect.TypeOf(big.NewRat(0, 1))
+			return reflect.TypeOf(float64(0))
 		}
 		return reflect.TypeOf(int16(0))
 	case SQL_TYPE_LONG:
 		if x.sqlscale != 0 {
-			return reflect.TypeOf(big.NewRat(0, 1))
+			//return reflect.TypeOf(big.NewRat(0, 1))
+			return reflect.TypeOf(float64(0))
 		}
 		return reflect.TypeOf(int32(0))
 	case SQL_TYPE_INT64:
 		if x.sqlscale != 0 {
-			return reflect.TypeOf(big.NewRat(0, 1))
+			//return reflect.TypeOf(big.NewRat(0, 1))
+			return reflect.TypeOf(float64(0))
 		}
 		return reflect.TypeOf(int64(0))
 	case SQL_TYPE_DATE:
@@ -250,7 +253,8 @@ func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
 		if x.sqlscale > 0 {
 			v = int64(i16) * int64(math.Pow10(x.sqlscale))
 		} else if x.sqlscale < 0 {
-			v = big.NewRat(int64(i16), int64(math.Pow10(x.sqlscale*-1)))
+			//v = big.NewRat(int64(i16), int64(math.Pow10(x.sqlscale*-1)))
+			v = float64(i16) / float64(math.Pow10(x.sqlscale*-1))
 		} else {
 			v = i16
 		}
