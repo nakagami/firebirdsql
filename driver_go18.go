@@ -30,9 +30,13 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"sort"
 )
 
 func (stmt *firebirdsqlStmt) ExecContext(ctx context.Context, namedargs []driver.NamedValue) (result driver.Result, err error) {
+	sort.SliceStable(namedargs, func(i, j int) bool {
+		return namedargs[i].Ordinal < namedargs[j].Ordinal
+	})
 	args := make([]driver.Value, len(namedargs))
 	for i, nv := range namedargs {
 		args[i] = nv.Value
