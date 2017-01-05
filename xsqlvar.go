@@ -136,7 +136,7 @@ func (x *xSQLVAR) scale() int {
 }
 
 func (x *xSQLVAR) hasPrecisionScale() bool {
-    return (x.sqltype == SQL_TYPE_SHORT || x.sqltype == SQL_TYPE_LONG || x.sqltype == SQL_TYPE_QUAD || x.sqltype == SQL_TYPE_INT64) && x.sqlscale != 0
+	return (x.sqltype == SQL_TYPE_SHORT || x.sqltype == SQL_TYPE_LONG || x.sqltype == SQL_TYPE_QUAD || x.sqltype == SQL_TYPE_INT64) && x.sqlscale != 0
 }
 
 func (x *xSQLVAR) typename() string {
@@ -259,7 +259,8 @@ func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
 		if x.sqlscale > 0 {
 			v = int64(i32) * int64(math.Pow10(x.sqlscale))
 		} else if x.sqlscale < 0 {
-			v = big.NewRat(int64(i32), int64(math.Pow10(x.sqlscale*-1)))
+			//v = big.NewRat(int64(i32), int64(math.Pow10(x.sqlscale*-1)))
+			v = float64(i32) / float64(math.Pow10(x.sqlscale*-1))
 		} else {
 			v = i32
 		}
@@ -268,7 +269,8 @@ func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
 		if x.sqlscale > 0 {
 			v = i64 * int64(math.Pow10(x.sqlscale))
 		} else if x.sqlscale < 0 {
-			v = big.NewRat(i64, int64(math.Pow10(x.sqlscale*-1)))
+			//v = big.NewRat(i64, int64(math.Pow10(x.sqlscale*-1)))
+			v = float64(i64) / float64(math.Pow10(x.sqlscale*-1))
 		} else {
 			v = i64
 		}
