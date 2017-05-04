@@ -169,3 +169,42 @@ func TestIssue35(t *testing.T) {
 		t.Fatalf("Incorrect count: %v", n)
 	}
 }
+
+func TestIssue38(t *testing.T) {
+	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_issue38.fdb")
+
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	conn.Exec(`
+        CREATE TABLE test_issue38 (
+          id  INTEGER NOT NULL,
+          key VARCHAR(64),
+          value VARCHAR(64)
+        )
+    `)
+	if err != nil {
+		t.Fatalf("Error CREATE TABLE: %v", err)
+	}
+	conn.Close()
+
+	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_issue38.fdb")
+	defer conn.Close()
+	tx, err := conn.Begin()
+
+	if err != nil {
+		t.Fatalf("Error Begin: %v", err)
+	}
+
+	var rowId = sql.NullInt64{}
+
+	err = tx.QueryRow(
+		"INSERT INTO test_issue38 (id, key, value) VALUES (?, ?, ?) RETURNING id", 1, "testKey", "testValue").Scan(&rowId)
+	if err == nil {
+		t.Fatalf("'Dynamic SQL Error' is not occuerd.")
+	}
+	err = tx.Rollback()
+	if err != nil {
+		t.Fatalf("Error Rollback: %v", err)
+	}
+}
