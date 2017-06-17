@@ -210,12 +210,7 @@ func TestIssue38(t *testing.T) {
 }
 
 func TestIssue39(t *testing.T) {
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp /go_test_issue39.fdb")
-	if err != nil {
-		t.Fatalf("Error connecting: %v", err)
-	}
-	conn.Close()
-	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_issue38.fdb")
+	conn, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_transaction.fdb")
 	defer conn.Close()
 	tx, err := conn.Begin()
 
