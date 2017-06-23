@@ -223,7 +223,7 @@ func TestIssue39(t *testing.T) {
 		t.Fatalf("'Dynamic SQL Error' is not occured.")
 	}
 	err = tx.Rollback()
-	if err == nil {
+	if err != nil {
 		t.Fatalf("broken transaction, but error is not occured.")
 	}
 }
