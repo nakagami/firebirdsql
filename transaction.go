@@ -23,8 +23,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 package firebirdsql
 
-import "errors"
-
 type firebirdsqlTx struct {
 	fc             *firebirdsqlConn
 	isolationLevel int
@@ -82,9 +80,6 @@ func (tx *firebirdsqlTx) begin() (err error) {
 func (tx *firebirdsqlTx) Commit() (err error) {
 	tx.fc.wp.opCommit(tx.transHandle)
 	_, _, _, err = tx.fc.wp.opResponse()
-	if err != nil {
-		err = errors.New("Commit failed")
-	}
 	tx.isAutocommit = tx.fc.isAutocommit
 	tx.begin()
 	return
@@ -93,9 +88,6 @@ func (tx *firebirdsqlTx) Commit() (err error) {
 func (tx *firebirdsqlTx) Rollback() (err error) {
 	tx.fc.wp.opRollback(tx.transHandle)
 	_, _, _, err = tx.fc.wp.opResponse()
-	if err != nil {
-		err = errors.New("Rollback failed")
-	}
 	tx.isAutocommit = tx.fc.isAutocommit
 	tx.begin()
 	return
