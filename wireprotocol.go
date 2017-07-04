@@ -559,7 +559,8 @@ func (p *wireProtocol) opAccept(user string, password string, authPluginName str
 	opcode := bytes_to_bint32(b)
 
 	for opcode == op_dummy {
-		b, err = p.recvPackets(4)
+		b, _ = p.recvPackets(4)
+		opcode = bytes_to_bint32(b)
 	}
 
 	if opcode == op_reject {
