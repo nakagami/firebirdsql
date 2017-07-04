@@ -208,3 +208,22 @@ func TestIssue38(t *testing.T) {
 		t.Fatalf("Error Rollback: %v", err)
 	}
 }
+
+func TestIssue39(t *testing.T) {
+	conn, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_transaction.fdb")
+	defer conn.Close()
+	tx, err := conn.Begin()
+
+	if err != nil {
+		t.Fatalf("Error Begin: %v", err)
+	}
+	var rowId = sql.NullInt64{}
+	err = tx.QueryRow("select 5 / 0 from rdb$database").Scan(&rowId)
+	if err == nil {
+		t.Fatalf("'Dynamic SQL Error' is not occured.")
+	}
+	err = tx.Rollback()
+	if err != nil {
+		t.Fatalf("broken transaction, but error is not occured.")
+	}
+}
