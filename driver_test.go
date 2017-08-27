@@ -373,7 +373,6 @@ func TestErrorConnect(t *testing.T) {
 	conn.Close()
 }
 
-/*
 func TestGoIssue44(t *testing.T) {
 	conn, err := sql.Open("firebirdsql", "SomethingWrongConnectionString")
 	err = conn.Ping()
@@ -381,4 +380,3 @@ func TestGoIssue44(t *testing.T) {
 		t.Fatalf("Error not occured")
 	}
 }
-*/
