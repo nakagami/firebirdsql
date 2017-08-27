@@ -76,5 +76,9 @@ func TestDSNParse(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Error Not occured")
 	}
+	_, _, _, _, _, _, _, err = parseDSN("SomethingWrongConnectionString")
+	if err == nil {
+		t.Fatalf("Error Not occured")
+	}
 
 }

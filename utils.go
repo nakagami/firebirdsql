@@ -27,6 +27,7 @@ import (
 	"bytes"
 	"container/list"
 	"encoding/binary"
+	"errors"
 	"net/url"
 	"strconv"
 	"strings"
@@ -229,6 +230,10 @@ func split1(src string, delm string) (string, string) {
 func parseDSN(dsn string) (addr string, dbName string, user string, passwd string, role string, authPluginName string, wireCrypt bool, err error) {
 	u, err := url.Parse("firebird://" + dsn)
 	if err != nil {
+		return
+	}
+	if u.User == nil {
+		err = errors.New("User unknown.")
 		return
 	}
 	user = u.User.Username()
