@@ -71,4 +71,10 @@ func TestDSNParse(t *testing.T) {
 			t.Error(err.Error())
 		}
 	}
+
+	_, _, _, _, _, _, _, err := parseDSN("something wrong")
+	if err == nil {
+		t.Fatalf("Error Not occured")
+	}
+
 }
