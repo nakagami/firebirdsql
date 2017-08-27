@@ -835,8 +835,8 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsql
 		b, _ = p.recvPackets(4)
 	}
 	if bytes_to_bint32(b) != op_fetch_response {
-        	if bytes_to_bint32(b) == op_response {
-		        _, _, _, err := p._parse_op_response()
+		if bytes_to_bint32(b) == op_response {
+			_, _, _, err := p._parse_op_response()
 			if err != nil {
 				return nil, false, err
 			}

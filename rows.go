@@ -88,8 +88,8 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 		if err == nil {
 			rows.currentChunkRow = chunk.Front()
 		} else {
-                	return
-                }        
+			return
+		}
 	}
 
 	if rows.currentChunkRow == nil {
