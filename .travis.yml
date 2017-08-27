@@ -4,6 +4,7 @@ go:
   - "tip"
 
 before_install:
+  - if [ "$TRAVIS_OS_NAME" == "linux" ]; then cat /etc/lsb-release; fi
   - sudo apt-get update -qq
   - sudo apt-get install -qq firebird2.5-super firebird2.5-dev
   - sudo sed /ENABLE_FIREBIRD_SERVER=/s/no/yes/ -i /etc/default/firebird2.5
