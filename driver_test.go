@@ -155,14 +155,14 @@ func TestInsertBlobsWithParams(t *testing.T) {
 	defer conn.Close()
 
 	s0 := "Test Text"
-	b0 := []byte{0, 1, 2, 3, 4}
-	if _, err := conn.Exec("INSERT INTO test_blobs (f1, f2) values (?, ?)", s0, b0); err != nil {
+	b0 := []byte{0, 1, 2, 3, 4, 13, 10, 5, 6, 7}
+	if _, err := conn.Exec("INSERT INTO test_blobs (f1, f2) values (?, ?)", b0, s0); err != nil {
 		t.Fatalf("Error inserting blobs with params: %v", err)
 	}
 
 	var s string
 	var b []byte
-	err := conn.QueryRow("SELECT f1, f2 from test_blobs").Scan(&s, &b)
+	err := conn.QueryRow("SELECT f1, f2 from test_blobs").Scan(&b, &s)
 	if err != nil {
 		t.Fatalf("Error in query: %v", err)
 	}
