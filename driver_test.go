@@ -391,8 +391,8 @@ func TestGoIssue45(t *testing.T) {
     `)
 
 	type response struct {
-		name     string
-		created  *time.Time
+		name    string
+		created *time.Time
 	}
 	r := response{}
 
