@@ -94,7 +94,7 @@ func (c *wireChannel) Read(buf []byte) (n int, err error) {
 	if c.rc4reader != nil {
 		src := make([]byte, len(buf))
 		n, err = c.conn.Read(src)
-		c.rc4reader.XORKeyStream(buf, src)
+		c.rc4reader.XORKeyStream(buf, src[0:n])
 		return
 	}
 	return c.conn.Read(buf)
@@ -104,7 +104,15 @@ func (c *wireChannel) Write(buf []byte) (n int, err error) {
 	if c.rc4writer != nil {
 		dst := make([]byte, len(buf))
 		c.rc4writer.XORKeyStream(dst, buf)
-		n, err = c.conn.Write(dst)
+		written := 0
+		for written < len(buf) {
+			n, err = c.conn.Write(dst[written:])
+			if err != nil {
+				return
+			}
+			written += n
+		}
+		n = written
 	} else {
 		n, err = c.conn.Write(buf)
 	}
