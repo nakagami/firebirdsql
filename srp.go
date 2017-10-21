@@ -36,6 +36,7 @@ const (
 	SRP_KEY_SIZE      = 128
 	SRP_SALT_SIZE     = 32
 	DEBUG_PRIVATE_KEY = "60975527035CF2AD1989806F0407210BC81EDC04E2762A56AFD529DDDA2D4393"
+	DEBUG_SRP         = false
 )
 
 func bigFromHexString(s string) *big.Int {
@@ -136,16 +137,23 @@ func getUserHash(salt []byte, user string, password string) *big.Int {
 
 func getClientSeed() (keyA *big.Int, keya *big.Int) {
 	prime, g, _ := getPrime()
-	keya = new(big.Int).Rand(rand.New(rand.NewSource(time.Now().UnixNano())),
-		bigFromString("340282366920938463463374607431768211456")) // 1 << 128
+	if DEBUG_SRP {
+		keya = bigFromString(DEBUG_PRIVATE_KEY)
+	} else {
+		keya = new(big.Int).Rand(rand.New(rand.NewSource(time.Now().UnixNano())),
+			bigFromString("340282366920938463463374607431768211456")) // 1 << 128
+	}
+
 	keyA = mathutil.ModPowBigInt(g, keya, prime)
 	return
 }
 
 func getSalt() []byte {
 	buf := make([]byte, SRP_SALT_SIZE)
-	for i, _ := range buf {
-		buf[i] = byte(rand.Intn(256))
+	if DEBUG_SRP == false {
+		for i, _ := range buf {
+			buf[i] = byte(rand.Intn(256))
+		}
 	}
 	return buf
 }
