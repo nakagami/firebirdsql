@@ -78,10 +78,21 @@ func (tx *firebirdsqlTx) begin() (err error) {
 }
 
 func (tx *firebirdsqlTx) Commit() (err error) {
-	tx.fc.wp.opCommit(tx.transHandle)
-	_, _, _, err = tx.fc.wp.opResponse()
-	tx.isAutocommit = tx.fc.isAutocommit
-	tx.begin()
+	//tx.fc.wp.opCommit(tx.transHandle)
+	//_, _, _, err = tx.fc.wp.opResponse()
+	//tx.isAutocommit = tx.fc.isAutocommit
+	//tx.begin()
+
+	stmt, err := tx.fc.Prepare("commit")
+	if err != nil {
+		return
+	}
+	_, err = stmt.(*firebirdsqlStmt).Exec(nil)
+	if err != nil {
+		return
+	}
+	stmt.Close()
+
 	return
 }
 
