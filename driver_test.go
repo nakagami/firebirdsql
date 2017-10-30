@@ -180,8 +180,10 @@ func TestError(t *testing.T) {
 		t.Fatalf("Error connecting: %v", err)
 	}
 	_, err = conn.Exec("incorrect sql statement")
-	if err == nil || err.Error() != "Dynamic SQL Error\nSQL error code = -104\nToken unknown - line 1, column 1\nincorrect\n" {
+	if err == nil {
 		t.Fatalf("Incorrect error")
+	} else if err.Error() != "Dynamic SQL Error\nSQL error code = -104\nToken unknown - line 1, column 1\nincorrect\n" {
+		t.Fatalf("Incorrect error: %v", err.Error())
 	}
 }
 

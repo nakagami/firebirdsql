@@ -614,6 +614,10 @@ func (p *wireProtocol) opAccept(user string, password string, authPluginName str
 			serverSalt := data[2 : ln+2]
 			serverPublic := bigFromHexString(bytes_to_str(data[4+ln:]))
 			clientProof, authKey := getClientProof(strings.ToUpper(user), password, serverSalt, clientPublic, serverPublic, clientSecret)
+			if DEBUG_SRP {
+				fmt.Printf("serverSalt=%s\nserverPublic(bin)=%s\nserverPublic=%s\nclientProof=%v, authKey=%v\n",
+					serverSalt, data[4+ln:], serverPublic, clientProof, authKey)
+			}
 
 			// Send op_cont_auth
 			p.packInt(op_cont_auth)
@@ -994,6 +998,9 @@ func (p *wireProtocol) opResponse() (int32, []byte, []byte, error) {
 	}
 
 	if bytes_to_bint32(b) != op_response {
+		if DEBUG_SRP && bytes_to_bint32(b) == op_cont_auth {
+			panic("auth error")
+		}
 		return 0, nil, nil, errors.New(fmt.Sprintf("Error op_response:%d", bytes_to_bint32(b)))
 	}
 	return p._parse_op_response()
