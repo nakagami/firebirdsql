@@ -137,6 +137,7 @@ type wireProtocol struct {
 	pluginName string
 	user       string
 	password   string
+	authData   []byte
 }
 
 func newWireProtocol(addr string) (*wireProtocol, error) {
@@ -553,6 +554,14 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 		[]byte{4, 4}, int32_to_bytes(page_size),
 	}, nil)
 
+	if p.authData != nil {
+		// FIXME
+		dpb = bytes.Join([][]byte{
+			dpb,
+			[]byte{84}, xdrString(hex.EncodeToString(p.authData)),
+		}, nil)
+	}
+
 	p.packInt(op_create)
 	p.packInt(0) // Database Object ID
 	p.packString(dbName)
@@ -560,7 +569,7 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 	p.sendPackets()
 }
 
-func (p *wireProtocol) opAccept(user string, password string, authPluginName string, clientPublic *big.Int, clientSecret *big.Int) (err error) {
+func (p *wireProtocol) opAccept(user string, password string, authPluginName string, wireCrypt bool, clientPublic *big.Int, clientSecret *big.Int) (err error) {
 	debugPrint(p, "opAccept")
 
 	b, err := p.recvPackets(4)
@@ -604,47 +613,53 @@ func (p *wireProtocol) opAccept(user string, password string, authPluginName str
 		ln = int(bytes_to_bint32(b))
 		_, _ = p.recvPacketsAlignment(ln) // keys
 
-		if p.pluginName == "Legacy_Auth" && isAuthenticated == 0 {
-			err = errors.New("opAccept() Unauthorized")
-			return
-		}
-
-		if p.pluginName == "Srp" {
-			ln = int(bytes_to_int16(data[:2]))
-			serverSalt := data[2 : ln+2]
-			serverPublic := bigFromHexString(bytes_to_str(data[4+ln:]))
-			clientProof, authKey := getClientProof(strings.ToUpper(user), password, serverSalt, clientPublic, serverPublic, clientSecret)
-			if DEBUG_SRP {
-				fmt.Printf("serverSalt=%s\nserverPublic(bin)=%s\nserverPublic=%s\nclientProof=%v, authKey=%v\n",
-					serverSalt, data[4+ln:], serverPublic, clientProof, authKey)
-			}
-
-			// Send op_cont_auth
-			p.packInt(op_cont_auth)
-			p.packString(hex.EncodeToString(clientProof))
-			p.packString(authPluginName)
-			p.packString(PLUGIN_LIST)
-			p.packString("")
-			p.sendPackets()
-			_, _, _, err = p.opResponse()
-			if err != nil {
+		if isAuthenticated == 0 {
+			var authData []byte
+			var sessionKey []byte
+			if p.pluginName == "Srp" {
+				ln = int(bytes_to_int16(data[:2]))
+				serverSalt := data[2 : ln+2]
+				serverPublic := bigFromHexString(bytes_to_str(data[4+ln:]))
+				authData, sessionKey = getClientProof(strings.ToUpper(user), password, serverSalt, clientPublic, serverPublic, clientSecret)
+				if DEBUG_SRP {
+					fmt.Printf("serverSalt=%s\nserverPublic(bin)=%s\nserverPublic=%s\nauthData=%v,sessionKey=%v\n",
+						serverSalt, data[4+ln:], serverPublic, authData, sessionKey)
+				}
+			} else if p.pluginName == "Legacy_Auth" {
+				authData = bytes.NewBufferString(crypt.Crypt(password, "9z")[2:]).Bytes()
+			} else {
+				err = errors.New("opAccept() Unauthorized")
 				return
 			}
+			if wireCrypt {
+				// Send op_cont_auth
+				p.packInt(op_cont_auth)
+				p.packString(hex.EncodeToString(authData))
+				p.packString(authPluginName)
+				p.packString(PLUGIN_LIST)
+				p.packString("")
+				p.sendPackets()
+				_, _, _, err = p.opResponse()
+				if err != nil {
+					return
+				}
 
-			// Send op_crypt
-			p.packInt(op_crypt)
-			p.packString("Arc4")
-			p.packString("Symmetric")
-			p.sendPackets()
-			p.conn.setAuthKey(authKey)
+				// Send op_crypt
+				p.packInt(op_crypt)
+				p.packString("Arc4")
+				p.packString("Symmetric")
+				p.sendPackets()
+				p.conn.setAuthKey(sessionKey)
 
-			_, _, _, err = p.opResponse()
-			if err != nil {
-				return
+				_, _, _, err = p.opResponse()
+				if err != nil {
+					return
+				}
+			} else {
+				p.authData = authData // use later opAttach and opCreate
 			}
 
 		}
-
 	} else {
 		if opcode != op_accept {
 			err = errors.New("opAccept() protocol error")
@@ -668,6 +683,13 @@ func (p *wireProtocol) opAttach(dbName string, user string, password string, rol
 		[]byte{29, byte(len(passwordBytes))}, passwordBytes,
 		[]byte{60, byte(len(roleBytes))}, roleBytes,
 	}, nil)
+	if p.authData != nil {
+		// FIXME
+		dbp = bytes.Join([][]byte{
+			dbp,
+			[]byte{84}, xdrString(hex.EncodeToString(p.authData)),
+		}, nil)
+	}
 	p.packInt(op_attach)
 	p.packInt(0) // Database Object ID
 	p.packString(dbName)
