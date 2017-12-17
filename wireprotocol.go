@@ -581,6 +581,7 @@ func (p *wireProtocol) opAccept(user string, password string, authPluginName str
 	}
 
 	if opcode == op_reject {
+		err = errors.New("opAccept() op_reject")
 		return
 	}
 	if opcode == op_response {
