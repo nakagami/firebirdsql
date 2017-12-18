@@ -78,18 +78,16 @@ func (tx *firebirdsqlTx) begin() (err error) {
 }
 
 func (tx *firebirdsqlTx) Commit() (err error) {
-	tx.fc.wp.opCommit(tx.transHandle)
+	tx.fc.wp.opCommitRetaining(tx.transHandle)
 	_, _, _, err = tx.fc.wp.opResponse()
 	tx.isAutocommit = tx.fc.isAutocommit
-	tx.begin()
 	return
 }
 
 func (tx *firebirdsqlTx) Rollback() (err error) {
-	tx.fc.wp.opRollback(tx.transHandle)
+	tx.fc.wp.opRollbackRetaining(tx.transHandle)
 	_, _, _, err = tx.fc.wp.opResponse()
 	tx.isAutocommit = tx.fc.isAutocommit
-	tx.begin()
 	return
 }
 
