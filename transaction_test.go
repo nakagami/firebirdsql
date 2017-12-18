@@ -38,6 +38,7 @@ func TestTransaction(t *testing.T) {
 	// Connection (autocommit)
 	conn.Exec("CREATE TABLE test_trans (s varchar(2048))")
 	conn.Close()
+
 	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_transaction.fdb")
 	err = conn.QueryRow("SELECT Count(*) FROM test_trans").Scan(&n)
 	if err != nil {
@@ -47,6 +48,8 @@ func TestTransaction(t *testing.T) {
 		t.Fatalf("Incorrect count: %v", n)
 	}
 	conn.Exec("INSERT INTO test_trans (s) values ('A')")
+	conn.Close()
+
 	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_transaction.fdb")
 	err = conn.QueryRow("SELECT Count(*) FROM test_trans").Scan(&n)
 	if err != nil {
@@ -168,6 +171,8 @@ func TestIssue35(t *testing.T) {
 	if n != 0 {
 		t.Fatalf("Incorrect count: %v", n)
 	}
+
+	conn.Close()
 }
 
 func TestIssue38(t *testing.T) {
@@ -189,7 +194,6 @@ func TestIssue38(t *testing.T) {
 	conn.Close()
 
 	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_issue38.fdb")
-	defer conn.Close()
 	tx, err := conn.Begin()
 
 	if err != nil {
@@ -207,11 +211,12 @@ func TestIssue38(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error Rollback: %v", err)
 	}
+
+	conn.Close()
 }
 
 func TestIssue39(t *testing.T) {
 	conn, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_transaction.fdb")
-	defer conn.Close()
 	tx, err := conn.Begin()
 
 	if err != nil {
@@ -226,4 +231,6 @@ func TestIssue39(t *testing.T) {
 	if err != nil {
 		t.Fatalf("broken transaction, but error is not occured.")
 	}
+
+	conn.Close()
 }

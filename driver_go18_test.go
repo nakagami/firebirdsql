@@ -34,7 +34,6 @@ import (
 
 func TestGo18(t *testing.T) {
 	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_go18.fdb")
-	defer conn.Close()
 
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
@@ -117,4 +116,5 @@ func TestGo18(t *testing.T) {
 	for rows.Next() {
 		rows.Scan(&a, &b, &c, &d, &e, &f, &g, &h, &i, &j)
 	}
+	conn.Close()
 }

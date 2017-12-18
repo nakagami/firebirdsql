@@ -32,7 +32,6 @@ import (
 
 func TestBasic(t *testing.T) {
 	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_basic.fdb")
-	defer conn.Close()
 
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
@@ -117,11 +116,12 @@ func TestBasic(t *testing.T) {
 	if n != 1 {
 		t.Fatalf("Error bad record count: %v", n)
 	}
+
+	conn.Close()
 }
 
 func TestReturning(t *testing.T) {
 	conn, _ := sql.Open("firebirdsql_createdb", "SYSDBA:masterkey@localhost:3050/tmp/go_test_returning.fdb")
-	defer conn.Close()
 
 	conn.Exec(`
         CREATE TABLE test_returning (
@@ -147,12 +147,12 @@ func TestReturning(t *testing.T) {
 		}
 	}
 
+	conn.Close()
 }
 
 func TestInsertBlobsWithParams(t *testing.T) {
 	conn, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_insert_blobs_with_params.fdb")
 	conn.Exec("CREATE TABLE test_blobs (f1 BLOB SUB_TYPE 0, f2 BLOB SUB_TYPE 1)")
-	defer conn.Close()
 
 	s0 := "Test Text"
 	b0 := []byte{0, 1, 2, 3, 4, 13, 10, 5, 6, 7}
@@ -172,6 +172,8 @@ func TestInsertBlobsWithParams(t *testing.T) {
 	if !reflect.DeepEqual(b, b0) {
 		t.Fatalf("Binary blob: expected <%v>, got <%v> (%s)", b0, b, string(b))
 	}
+
+	conn.Close()
 }
 
 func TestError(t *testing.T) {
@@ -185,6 +187,7 @@ func TestError(t *testing.T) {
 	} else if err.Error() != "Dynamic SQL Error\nSQL error code = -104\nToken unknown - line 1, column 1\nincorrect\n" {
 		t.Fatalf("Incorrect error: %v", err.Error())
 	}
+    conn.Close()
 }
 
 func TestRole(t *testing.T) {
@@ -217,13 +220,13 @@ func TestRole(t *testing.T) {
 	}
 
 	rows, err := conn2.Query("SELECT f1 FROM test_role")
-	defer conn2.Close()
 	if err != nil {
 		t.Fatalf("Error Query: %v", err)
 	}
 
 	for rows.Next() {
 	}
+	conn2.Close()
 }
 
 func TestInsertTimestamp(t *testing.T) {
@@ -237,7 +240,6 @@ func TestInsertTimestamp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error creating: %v", err)
 	}
-	defer conn.Close()
 
 	_, err = conn.Exec(sqlSchema)
 	if err != nil {
@@ -271,6 +273,7 @@ func TestInsertTimestamp(t *testing.T) {
 	if rt4 != dt1 {
 		t.Errorf("Expected <%v>, got <%v>", dt1, rt4)
 	}
+	conn.Close()
 }
 
 /*
@@ -324,7 +327,7 @@ func TestBoolean(t *testing.T) {
 		conn.Exec("Invalid boolean value")
 	}
 
-	defer conn.Close()
+	conn.Close()
 }
 */
 
@@ -334,18 +337,21 @@ func TestLegacyAuthWireCrypt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
+	conn.Close()
 
 	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_connect.fdb?auth_plugin_anme=Legacy_Auth")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
 	err = conn.QueryRow("SELECT Count(*) FROM rdb$relations").Scan(&n)
+	conn.Close()
 
 	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_connect.fdb?wire_crypt=false")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
 	err = conn.QueryRow("SELECT Count(*) FROM rdb$relations").Scan(&n)
+	conn.Close()
 
 	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_connect.fdb?auth_plugin_name=Legacy_Auth&wire_auth=true")
 	if err != nil {
@@ -359,6 +365,7 @@ func TestLegacyAuthWireCrypt(t *testing.T) {
 		t.Fatalf("Error connecting: %v", err)
 	}
 	err = conn.QueryRow("SELECT Count(*) FROM rdb$relations").Scan(&n)
+
 	conn.Close()
 }
 
@@ -372,6 +379,7 @@ func TestErrorConnect(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Error not occured")
 	}
+
 	conn.Close()
 }
 
@@ -381,6 +389,7 @@ func TestGoIssue44(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Error not occured")
 	}
+    conn.Close()
 }
 
 func TestGoIssue45(t *testing.T) {
@@ -439,4 +448,6 @@ func TestGoIssue45(t *testing.T) {
 	if r.created != nil {
 		t.Fatalf("created is not nil")
 	}
+
+	conn.Close()
 }
