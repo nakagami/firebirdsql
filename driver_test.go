@@ -187,7 +187,7 @@ func TestError(t *testing.T) {
 	} else if err.Error() != "Dynamic SQL Error\nSQL error code = -104\nToken unknown - line 1, column 1\nincorrect\n" {
 		t.Fatalf("Incorrect error: %v", err.Error())
 	}
-    conn.Close()
+	conn.Close()
 }
 
 func TestRole(t *testing.T) {
@@ -389,7 +389,7 @@ func TestGoIssue44(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Error not occured")
 	}
-    conn.Close()
+	conn.Close()
 }
 
 func TestGoIssue45(t *testing.T) {

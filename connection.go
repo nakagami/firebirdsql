@@ -149,6 +149,9 @@ func createFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	}
 	wp.opCreate(dbName, user, password, role)
 	wp.dbHandle, _, _, err = wp.opResponse()
+	if err != nil {
+		return
+	}
 
 	fc = new(firebirdsqlConn)
 	fc.wp = wp
