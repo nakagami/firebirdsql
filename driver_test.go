@@ -36,11 +36,10 @@ func TestBasic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
-	var sql string
 	var n int
 
-	sql = "SELECT Count(*) FROM rdb$relations where rdb$relation_name='FOO'"
-	err = conn.QueryRow(sql).Scan(&n)
+	query := "SELECT Count(*) FROM rdb$relations where rdb$relation_name='FOO'"
+	err = conn.QueryRow(query).Scan(&n)
 	if err != nil {
 		t.Fatalf("Error QueryRow: %v", err)
 	}
@@ -48,7 +47,7 @@ func TestBasic(t *testing.T) {
 		conn.Exec("DROP TABLE foo")
 	}
 
-	sql = `
+	query = `
         CREATE TABLE foo (
             a INTEGER NOT NULL,
             b VARCHAR(30) NOT NULL UNIQUE,
@@ -64,7 +63,10 @@ func TestBasic(t *testing.T) {
             CONSTRAINT CHECK_A CHECK (a <> 0)
         )
     `
-	conn.Exec(sql)
+	conn.Exec(query)
+	conn.Close()
+
+	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_basic.fdb")
 	_, err = conn.Exec("CREATE TABLE foo (a INTEGER)")
 	if err == nil {
 		t.Fatalf("Need metadata update error")
@@ -153,6 +155,8 @@ func TestReturning(t *testing.T) {
 func TestInsertBlobsWithParams(t *testing.T) {
 	conn, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_insert_blobs_with_params.fdb")
 	conn.Exec("CREATE TABLE test_blobs (f1 BLOB SUB_TYPE 0, f2 BLOB SUB_TYPE 1)")
+	conn.Close()
+	conn, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_insert_blobs_with_params.fdb")
 
 	s0 := "Test Text"
 	b0 := []byte{0, 1, 2, 3, 4, 13, 10, 5, 6, 7}
