@@ -51,6 +51,9 @@ func TestTransaction(t *testing.T) {
 	conn.Close()
 
 	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_transaction.fdb")
+	if err != nil {
+		t.Fatalf("sql.Open(): %v", err)
+	}
 	err = conn.QueryRow("SELECT Count(*) FROM test_trans").Scan(&n)
 	if err != nil {
 		t.Fatalf("Error SELECT: %v", err)
