@@ -68,6 +68,7 @@ func TestGo18(t *testing.T) {
 	}
 
 	_, err = tx.Exec("insert into foo(a, b, c, e, g, i, j) values (3, 'X', 'Y', '2001-07-05', '00:01:02', 0.2, 0.2)")
+
 	if err == nil {
 		t.Fatalf("Need read-only transaction error")
 	}

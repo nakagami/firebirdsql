@@ -127,6 +127,7 @@ func TestTransaction(t *testing.T) {
 	// Connection (autocommit)
 	conn.Exec("INSERT INTO test_trans (s) values ('E')")
 	conn.Close()
+
 	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_transaction.fdb")
 	err = tx.QueryRow("SELECT Count(*) FROM test_trans").Scan(&n)
 	if err != nil {

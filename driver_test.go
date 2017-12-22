@@ -26,6 +26,7 @@ package firebirdsql
 import (
 	"database/sql"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -71,7 +72,7 @@ func TestBasic(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Need metadata update error")
 	}
-	if err.Error()[:29] != "unsuccessful metadata update\n" {
+	if !strings.Contains(err.Error(), "unsuccessful metadata update\n") {
 		t.Fatalf("Bad message:%v", err.Error())
 	}
 
