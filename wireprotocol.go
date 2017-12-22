@@ -942,7 +942,7 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsql
 }
 
 func (p *wireProtocol) opDetach() {
-	debugPrint(p, "opDetatch")
+	debugPrint(p, "opDetach")
 	p.packInt(op_detach)
 	p.packInt(p.dbHandle)
 	p.sendPackets()

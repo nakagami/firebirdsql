@@ -54,6 +54,7 @@ func (fc *firebirdsqlConn) Begin() (driver.Tx, error) {
 
 func (fc *firebirdsqlConn) Close() (err error) {
 	fc.wp.opDetach()
+	_, _, _, err = fc.wp.opResponse()
 	fc.wp.conn.Close()
 	return
 }
