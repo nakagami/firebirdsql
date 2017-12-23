@@ -419,7 +419,8 @@ func TestGoIssue44(t *testing.T) {
 }
 
 func TestGoIssue45(t *testing.T) {
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_issue45.fdb")
+	temppath := TempFileName("test_issue45_")
+	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
 	if err != nil {
 		t.Fatalf("Error occured at sql.Open()")
 	}
@@ -432,7 +433,7 @@ func TestGoIssue45(t *testing.T) {
     `)
 	conn.Close()
 
-	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_issue45.fdb")
+	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
 	if err != nil {
 		t.Fatalf("Error occured at sql.Open()")
 	}
