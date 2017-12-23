@@ -219,7 +219,7 @@ func TestIssue38(t *testing.T) {
 
 	time.Sleep(2 * time.Second)
 
-	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_issue38.fdb")
+	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
 	tx, err := conn.Begin()
 
 	if err != nil {
