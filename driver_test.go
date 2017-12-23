@@ -42,7 +42,8 @@ func TempFileName(prefix string) string {
 }
 
 func TestBasic(t *testing.T) {
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_basic.fdb")
+	temppath := TempFileName("test_basic_")
+	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
 
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
@@ -77,7 +78,7 @@ func TestBasic(t *testing.T) {
 	conn.Exec(query)
 	conn.Close()
 
-	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_basic.fdb")
+	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
 	_, err = conn.Exec("CREATE TABLE foo (a INTEGER)")
 	if err == nil {
 		t.Fatalf("Need metadata update error")
@@ -134,16 +135,18 @@ func TestBasic(t *testing.T) {
 }
 
 func TestReturning(t *testing.T) {
-	conn, _ := sql.Open("firebirdsql_createdb", "SYSDBA:masterkey@localhost:3050/tmp/go_test_returning.fdb")
+	temppath := TempFileName("test_returning_")
+	conn, _ := sql.Open("firebirdsql_createdb", "SYSDBA:masterkey@localhost:3050"+temppath)
 
 	conn.Exec(`
         CREATE TABLE test_returning (
             f1 integer NOT NULL,
             f2 integer default 2,
             f3 varchar(20) default 'abc')`)
+
 	conn.Close()
 
-	conn, _ = sql.Open("firebirdsql", "SYSDBA:masterkey@localhost:3050/tmp/go_test_returning.fdb")
+	conn, _ = sql.Open("firebirdsql", "SYSDBA:masterkey@localhost:3050"+temppath)
 
 	for i := 0; i < 2; i++ {
 
