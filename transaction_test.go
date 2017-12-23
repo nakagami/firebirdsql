@@ -116,6 +116,10 @@ func TestTransaction(t *testing.T) {
 	// without Commit (Need commit manually)
 	_, err = tx.Exec("INSERT INTO test_trans (s) values ('D')")
 	tx, err = conn.Begin()
+	if err != nil {
+		t.Fatalf("Error Begin: %v", err)
+	}
+
 	err = tx.QueryRow("SELECT Count(*) FROM test_trans").Scan(&n)
 	if err != nil {
 		t.Fatalf("Error SELECT: %v", err)
