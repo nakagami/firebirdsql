@@ -243,7 +243,7 @@ func TestIssue38(t *testing.T) {
 
 func TestIssue39(t *testing.T) {
 	temppath := TempFileName("test_issue39_")
-	conn, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
 	tx, err := conn.Begin()
 
 	if err != nil {
