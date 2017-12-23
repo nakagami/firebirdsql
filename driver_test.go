@@ -262,33 +262,28 @@ func TestRole(t *testing.T) {
 
 func TestInsertTimestamp(t *testing.T) {
 	temppath := TempFileName("test_timestamp_")
-	const (
-		sqlSchema = "CREATE TABLE TEST (VAL1 TIMESTAMP, VAL2 TIMESTAMP, VAL3 TIMESTAMP, VAL4 TIMESTAMP);"
-		sqlInsert = "INSERT INTO TEST (VAL1, VAL2, VAL3, VAL4) VALUES (?, ?, ?, '2015/2/9 19:25:50.7405');"
-		sqlSelect = "SELECT * FROM TEST;"
-	)
 
 	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
 	if err != nil {
 		t.Fatalf("Error creating: %v", err)
 	}
 
-	_, err = conn.Exec(sqlSchema)
+	_, err = conn.Exec("CREATE TABLE TEST (VAL1 TIMESTAMP, VAL2 TIMESTAMP, VAL3 TIMESTAMP, VAL4 TIMESTAMP)")
 	if err != nil {
-		t.Fatalf("Error creating schema: %v", err)
+		t.Fatalf("Error creating table: %v", err)
 	}
 
 	dt1 := time.Date(2015, 2, 9, 19, 25, 50, 740500000, time.UTC)
 	dt2 := "2015/2/9 19:25:50.7405"
 	dt3 := "2015-2-9 19:25:50.7405"
 
-	if _, err = conn.Exec(sqlInsert, dt1, dt2, dt3); err != nil {
+	if _, err = conn.Exec("INSERT INTO TEST (VAL1, VAL2, VAL3, VAL4) VALUES (?, ?, ?, '2015/2/9 19:25:50.7405')", dt1, dt2, dt3); err != nil {
 		t.Fatalf("Error executing insert: %s", err)
 	}
 
 	var rt1, rt2, rt3, rt4 time.Time
 
-	err = conn.QueryRow(sqlSelect).Scan(&rt1, &rt2, &rt3, &rt4)
+	err = conn.QueryRow("SELECT * FROM TEST").Scan(&rt1, &rt2, &rt3, &rt4)
 	if err != nil {
 		t.Fatalf("Unexpected error in select: %s", err)
 	}
