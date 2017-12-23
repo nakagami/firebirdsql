@@ -34,8 +34,6 @@ func TestTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
-
-	// Connection (autocommit)
 	conn.Exec("CREATE TABLE test_trans (s varchar(2048))")
 	conn.Close()
 

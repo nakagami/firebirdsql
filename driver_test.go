@@ -202,10 +202,7 @@ func TestRole(t *testing.T) {
 	}
 	conn1.Exec("CREATE TABLE test_role (f1 integer)")
 	conn1.Exec("INSERT INTO test_role (f1) values (1)")
-	if err != nil {
-		t.Fatalf("Error connecting: %v", err)
-	}
-	conn1.Exec("CREATE ROLE DRIVERROLE")
+	_, err = conn1.Exec("CREATE ROLE DRIVERROLE")
 	if err != nil {
 		t.Fatalf("Error creating role: %v", err)
 	}
