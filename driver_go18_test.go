@@ -38,7 +38,7 @@ func TestGo18(t *testing.T) {
 	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
 
 	if err != nil {
-		t.Fatalf("Error connecting: %v", err)
+		t.Fatalf("Error sql.Open(): %v", err)
 	}
 
 	conn.Exec(`
@@ -66,9 +66,12 @@ func TestGo18(t *testing.T) {
 
 	conn.Close()
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second)
 
-	conn, _ = sql.Open("firebirdsql", "SYSDBA:masterkey@localhost:3050"+temppath)
+	conn, err = sql.Open("firebirdsql", "SYSDBA:masterkey@localhost:3050"+temppath)
+	if err != nil {
+		t.Fatalf("Error sql.Open(): %v", err)
+	}
 
 	ctx := context.Background()
 	opts := &sql.TxOptions{sql.LevelDefault, true} // Default isolation leve and ReadOnly

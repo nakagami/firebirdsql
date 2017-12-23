@@ -149,7 +149,7 @@ func TestReturning(t *testing.T) {
 
 	conn.Close()
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	conn, err = sql.Open("firebirdsql", "SYSDBA:masterkey@localhost:3050"+temppath)
 	if err != nil {
@@ -157,7 +157,6 @@ func TestReturning(t *testing.T) {
 	}
 
 	for i := 0; i < 2; i++ {
-
 		rows, err := conn.Query("INSERT INTO test_returning (f1) values (1) returning f2, f3")
 		if err != nil {
 			t.Fatalf("Error Insert returning : %v", err)
@@ -180,7 +179,7 @@ func TestInsertBlobsWithParams(t *testing.T) {
 	conn.Exec("CREATE TABLE test_blobs (f1 BLOB SUB_TYPE 0, f2 BLOB SUB_TYPE 1)")
 	conn.Close()
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	conn, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
 
@@ -243,7 +242,7 @@ func TestRole(t *testing.T) {
 	}
 	conn1.Close()
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	conn2, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/"+temppath+"?role=driverrole")
 	if err != nil {
