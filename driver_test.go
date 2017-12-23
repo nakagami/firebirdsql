@@ -146,6 +146,8 @@ func TestReturning(t *testing.T) {
 
 	conn.Close()
 
+	time.Sleep(1 * time.Second)
+
 	conn, _ = sql.Open("firebirdsql", "SYSDBA:masterkey@localhost:3050"+temppath)
 
 	for i := 0; i < 2; i++ {
@@ -195,7 +197,8 @@ func TestInsertBlobsWithParams(t *testing.T) {
 }
 
 func TestError(t *testing.T) {
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_error.fdb")
+	temppath := TempFileName("test_error_")
+	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
@@ -230,6 +233,8 @@ func TestRole(t *testing.T) {
 	}
 	conn1.Close()
 
+	time.Sleep(1 * time.Second)
+
 	conn2, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/"+temppath+"?role=driverrole")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
@@ -246,13 +251,14 @@ func TestRole(t *testing.T) {
 }
 
 func TestInsertTimestamp(t *testing.T) {
+	temppath := TempFileName("test_timestamp_")
 	const (
 		sqlSchema = "CREATE TABLE TEST (VAL1 TIMESTAMP, VAL2 TIMESTAMP, VAL3 TIMESTAMP, VAL4 TIMESTAMP);"
 		sqlInsert = "INSERT INTO TEST (VAL1, VAL2, VAL3, VAL4) VALUES (?, ?, ?, '2015/2/9 19:25:50.7405');"
 		sqlSelect = "SELECT * FROM TEST;"
 	)
 
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_timestamp.fdb")
+	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
 	if err != nil {
 		t.Fatalf("Error creating: %v", err)
 	}

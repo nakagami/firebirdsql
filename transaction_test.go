@@ -26,18 +26,22 @@ package firebirdsql
 import (
 	"database/sql"
 	"testing"
+    "time"
 )
 
 func TestTransaction(t *testing.T) {
 	var n int
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_transaction.fdb")
+	temppath := TempFileName("test_transaction_")
+	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
 	conn.Exec("CREATE TABLE test_trans (s varchar(2048))")
 	conn.Close()
 
-	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_transaction.fdb")
+	time.Sleep(1 * time.Second)
+
+	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
 	err = conn.QueryRow("SELECT Count(*) FROM test_trans").Scan(&n)
 	if err != nil {
 		t.Fatalf("Error SELECT: %v", err)
@@ -48,7 +52,9 @@ func TestTransaction(t *testing.T) {
 	conn.Exec("INSERT INTO test_trans (s) values ('A')")
 	conn.Close()
 
-	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_transaction.fdb")
+	time.Sleep(1 * time.Second)
+
+	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
 	if err != nil {
 		t.Fatalf("sql.Open(): %v", err)
 	}
@@ -130,7 +136,9 @@ func TestTransaction(t *testing.T) {
 	conn.Exec("INSERT INTO test_trans (s) values ('E')")
 	conn.Close()
 
-	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_transaction.fdb")
+	time.Sleep(1 * time.Second)
+
+	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
 	err = tx.QueryRow("SELECT Count(*) FROM test_trans").Scan(&n)
 	if err != nil {
 		t.Fatalf("Error SELECT: %v", err)
