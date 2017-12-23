@@ -431,24 +431,24 @@ func TestGoIssue45(t *testing.T) {
             created TIMESTAMP
         )
     `)
+	conn.Exec(`
+        insert into person (name, created)
+        values ('Giovanni', null)
+    `)
+
 	conn.Close()
 
-	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
-	if err != nil {
-		t.Fatalf("Error occured at sql.Open()")
-	}
+	time.Sleep(2 * time.Second)
 
+	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+
+	// select null value
 	type response struct {
 		name    string
 		created *time.Time
 	}
 	r := response{}
 
-	// select null value
-	conn.Exec(`
-        insert into person (name, created)
-        values ('Giovanni', null)
-    `)
 	err = conn.QueryRow(`
         select name, created from person
     `).Scan(&r.name, &r.created)
