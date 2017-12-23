@@ -24,12 +24,22 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TempFileName(prefix string) string {
+	randBytes := make([]byte, 16)
+	rand.Read(randBytes)
+	return filepath.Join(os.TempDir(), prefix+hex.EncodeToString(randBytes)+".fdb")
+}
 
 func TestBasic(t *testing.T) {
 	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_basic.fdb")
@@ -196,7 +206,8 @@ func TestError(t *testing.T) {
 }
 
 func TestRole(t *testing.T) {
-	conn1, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_role.fdb")
+	temppath := TempFileName("test_role_")
+	conn1, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
 	if err != nil {
 		t.Fatalf("Error creating: %v", err)
 	}
@@ -216,7 +227,7 @@ func TestRole(t *testing.T) {
 	}
 	conn1.Close()
 
-	conn2, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_role.fdb?role=driverrole")
+	conn2, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/"+temppath+"?role=driverrole")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}

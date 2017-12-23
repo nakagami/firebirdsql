@@ -34,7 +34,8 @@ import (
 )
 
 func TestGo18(t *testing.T) {
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_go18.fdb")
+	temppath := TempFileName("test_go18_")
+	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
 
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
@@ -64,7 +65,7 @@ func TestGo18(t *testing.T) {
 	conn.Exec("insert into foo(a, b, c, e, g, i, j) values (2, 'A', 'B', '1999-01-25', '00:00:01', 0.1, 0.1)")
 
 	ctx := context.Background()
-	opts := &sql.TxOptions{sql.LevelDefault, true}  // Default isolation leve and ReadOnly
+	opts := &sql.TxOptions{sql.LevelDefault, true} // Default isolation leve and ReadOnly
 	tx, err := conn.BeginTx(ctx, opts)
 	if err != nil {
 		t.Fatalf("Error BeginTx(): %v", err)
