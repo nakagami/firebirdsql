@@ -139,7 +139,10 @@ func TestTransaction(t *testing.T) {
 	}
 
 	// Connection (autocommit)
-	conn.Exec("INSERT INTO test_trans (s) values ('E')")
+	_, err = conn.Exec("INSERT INTO test_trans (s) values ('E')")
+	if err != nil {
+		t.Fatalf("Error Insert: %v", err)
+	}
 	conn.Close()
 
 	time.Sleep(2 * time.Second)
