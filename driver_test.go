@@ -398,13 +398,23 @@ func TestGoIssue44(t *testing.T) {
 }
 
 func TestGoIssue45(t *testing.T) {
-	conn, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_issue45.fdb")
+	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_issue45.fdb")
+	if err != nil {
+		t.Fatalf("Error occured at sql.Open()")
+	}
+
 	conn.Exec(`
         CREATE TABLE person (
             name VARCHAR(60) NOT NULL,
             created TIMESTAMP
         )
     `)
+	conn.Close()
+
+	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_issue45.fdb")
+	if err != nil {
+		t.Fatalf("Error occured at sql.Open()")
+	}
 
 	type response struct {
 		name    string
@@ -417,7 +427,7 @@ func TestGoIssue45(t *testing.T) {
         insert into person (name, created)
         values ('Giovanni', null)
     `)
-	err := conn.QueryRow(`
+	err = conn.QueryRow(`
         select name, created from person
     `).Scan(&r.name, &r.created)
 	if err != nil {

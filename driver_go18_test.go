@@ -56,8 +56,15 @@ func TestGo18(t *testing.T) {
             CONSTRAINT CHECK_A CHECK (a <> 0)
         )
     `)
+
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
 	conn.Exec("insert into foo(a, b, c, h) values (1, 'a', 'b','This is a memo')")
 	conn.Exec("insert into foo(a, b, c, e, g, i, j) values (2, 'A', 'B', '1999-01-25', '00:00:01', 0.1, 0.1)")
+	conn.Close()
+
+	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_go18.fdb")
 
 	ctx := context.Background()
 	opts := &sql.TxOptions{sql.LevelDefault, true}
