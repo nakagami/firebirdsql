@@ -34,7 +34,7 @@ func TestTransaction(t *testing.T) {
 	temppath := TempFileName("test_transaction_")
 	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
 	if err != nil {
-		t.Fatalf("Error connecting: %v", err)
+		t.Fatalf("Error sql.Open(): %v", err)
 	}
 	conn.Exec("CREATE TABLE test_trans (s varchar(2048))")
 	conn.Close()
@@ -42,6 +42,9 @@ func TestTransaction(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	if err != nil {
+		t.Fatalf("Error sql.Open(): %v", err)
+	}
 	err = conn.QueryRow("SELECT Count(*) FROM test_trans").Scan(&n)
 	if err != nil {
 		t.Fatalf("Error SELECT: %v", err)
@@ -81,6 +84,9 @@ func TestTransaction(t *testing.T) {
 		t.Fatalf("Incorrect count: %v", n)
 	}
 	_, err = tx.Exec("INSERT INTO test_trans (s) values ('B')")
+	if err != nil {
+		t.Fatalf("Error Insert: %v", err)
+	}
 	err = tx.QueryRow("SELECT Count(*) FROM test_trans").Scan(&n)
 	if err != nil {
 		t.Fatalf("Error SELECT: %v", err)
@@ -206,6 +212,8 @@ func TestIssue38(t *testing.T) {
 		t.Fatalf("Error CREATE TABLE: %v", err)
 	}
 	conn.Close()
+
+	time.Sleep(1 * time.Second)
 
 	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_issue38.fdb")
 	tx, err := conn.Begin()
