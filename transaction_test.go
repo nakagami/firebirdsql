@@ -199,7 +199,8 @@ func TestIssue35(t *testing.T) {
 }
 
 func TestIssue38(t *testing.T) {
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_issue38.fdb")
+	temppath := TempFileName("test_issue38_")
+	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
 
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
@@ -241,7 +242,8 @@ func TestIssue38(t *testing.T) {
 }
 
 func TestIssue39(t *testing.T) {
-	conn, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/tmp/go_test_transaction.fdb")
+	temppath := TempFileName("test_issue39_")
+	conn, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
 	tx, err := conn.Begin()
 
 	if err != nil {
