@@ -26,7 +26,7 @@ package firebirdsql
 import (
 	"database/sql"
 	"testing"
-    "time"
+	"time"
 )
 
 func TestTransaction(t *testing.T) {
