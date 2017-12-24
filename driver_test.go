@@ -78,6 +78,8 @@ func TestBasic(t *testing.T) {
 	conn.Exec(query)
 	conn.Close()
 
+	time.Sleep(2 * time.Second)
+
 	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
 	_, err = conn.Exec("CREATE TABLE foo (a INTEGER)")
 	if err == nil {
