@@ -39,7 +39,7 @@ func TestTransaction(t *testing.T) {
 	conn.Exec("CREATE TABLE test_trans (s varchar(2048))")
 	conn.Close()
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
 
 	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
 	if err != nil {
@@ -55,7 +55,7 @@ func TestTransaction(t *testing.T) {
 	conn.Exec("INSERT INTO test_trans (s) values ('A')")
 	conn.Close()
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
 
 	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
 	if err != nil {
@@ -145,7 +145,7 @@ func TestTransaction(t *testing.T) {
 	}
 	conn.Close()
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
 
 	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
 	err = tx.QueryRow("SELECT Count(*) FROM test_trans").Scan(&n)
@@ -186,7 +186,7 @@ func TestIssue35(t *testing.T) {
 	}
 	conn.Close()
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
 
 	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
 	var n int
@@ -220,7 +220,7 @@ func TestIssue38(t *testing.T) {
 	}
 	conn.Close()
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
 
 	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
 	tx, err := conn.Begin()

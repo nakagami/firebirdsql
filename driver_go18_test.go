@@ -72,7 +72,7 @@ func TestGo18(t *testing.T) {
 
 	conn.Close()
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
 
 	conn, err = sql.Open("firebirdsql", "SYSDBA:masterkey@localhost:3050"+temppath)
 	if err != nil {
