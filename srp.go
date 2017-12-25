@@ -75,7 +75,11 @@ func pad(v *big.Int) []byte {
 		buf[i], buf[j] = buf[j], buf[i]
 	}
 
-	return buf
+	// skip 0
+	var i int
+	for i = 0; buf[i] == 0; i++ {
+	}
+	return buf[i:]
 }
 
 func bigToBytes(v *big.Int) []byte {
