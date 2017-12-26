@@ -617,7 +617,7 @@ func (p *wireProtocol) opAccept(user string, password string, authPluginName str
 		if isAuthenticated == 0 {
 			var authData []byte
 			var sessionKey []byte
-			if p.pluginName == "Srp" {
+			if p.pluginName == "Srp" && len(data) > 2 {
 				ln = int(bytes_to_int16(data[:2]))
 				serverSalt := data[2 : ln+2]
 				serverPublic := bigFromHexString(bytes_to_str(data[4+ln:]))
