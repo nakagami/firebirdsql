@@ -366,7 +366,7 @@ func TestLegacyAuthWireCrypt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
-    err = conn.Ping()
+	err = conn.Ping()
 	if err != nil {
 		t.Fatalf("Error ping: %v", err)
 	}
@@ -391,9 +391,9 @@ func TestLegacyAuthWireCrypt(t *testing.T) {
 		t.Fatalf("Error connecting: %v", err)
 	}
 	err = conn.QueryRow("SELECT Count(*) FROM rdb$relations").Scan(&n)
-//	if err != nil {
-//		t.Fatalf("Error SELECT: %v", err)
-//	}
+	if err != nil {
+		t.Fatalf("Error SELECT: %v", err)
+	}
 	conn.Close()
 
 	time.Sleep(1 * time.Second)

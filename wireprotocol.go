@@ -555,11 +555,10 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 	}, nil)
 
 	if p.authData != nil {
-		// FIXME
+		specificAuthData := bytes.NewBufferString(hex.EncodeToString(p.authData)).Bytes()
 		dpb = bytes.Join([][]byte{
 			dpb,
-			[]byte{84}, xdrString(hex.EncodeToString(p.authData)),
-		}, nil)
+			[]byte{84, byte(len(specificAuthData))}, specificAuthData}, nil)
 	}
 
 	p.packInt(op_create)
@@ -685,11 +684,10 @@ func (p *wireProtocol) opAttach(dbName string, user string, password string, rol
 		[]byte{60, byte(len(roleBytes))}, roleBytes,
 	}, nil)
 	if p.authData != nil {
-		// FIXME
+		specificAuthData := bytes.NewBufferString(hex.EncodeToString(p.authData)).Bytes()
 		dbp = bytes.Join([][]byte{
 			dbp,
-			[]byte{84}, xdrString(hex.EncodeToString(p.authData)),
-		}, nil)
+			[]byte{84, byte(len(specificAuthData))}, specificAuthData}, nil)
 	}
 	p.packInt(op_attach)
 	p.packInt(0) // Database Object ID
