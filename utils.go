@@ -228,12 +228,15 @@ func split1(src string, delm string) (string, string) {
 }
 
 func parseDSN(dsn string) (addr string, dbName string, user string, passwd string, role string, authPluginName string, wireCrypt bool, err error) {
-	u, err := url.Parse("firebird://" + dsn)
+	if !strings.HasPrefix(dsn, "firebird://") {
+		dsn = "firebird://" + dsn
+	}
+	u, err := url.Parse(dsn)
 	if err != nil {
 		return
 	}
 	if u.User == nil {
-		err = errors.New("User unknown.")
+		err = errors.New("User unknown")
 		return
 	}
 	user = u.User.Username()
