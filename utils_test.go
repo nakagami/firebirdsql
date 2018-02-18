@@ -24,8 +24,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
-	"errors"
-	"fmt"
 	"testing"
 )
 
@@ -51,24 +49,29 @@ func TestDSNParse(t *testing.T) {
 
 	for _, d := range testDSNs {
 		addr, dbName, user, passwd, role, authPluginName, wireCrypt, err := parseDSN(d.dsn)
-		if addr != d.addr {
-			err = errors.New(fmt.Sprintf("parse DSN fail:%s(%s != %s)", d.dsn, addr, d.addr))
-		} else if dbName != d.dbName {
-			err = errors.New(fmt.Sprintf("parse DSN fail:%s(%s != %s)", d.dsn, dbName, d.dbName))
-		} else if user != d.user {
-			err = errors.New(fmt.Sprintf("parse DSN fail:%s(%s != %s)", d.dsn, user, d.user))
-		} else if passwd != d.passwd {
-			err = errors.New(fmt.Sprintf("parse DSN fail:%s(%s != %s)", d.dsn, passwd, d.passwd))
-		} else if role != d.role {
-			err = errors.New(fmt.Sprintf("parse DSN fail:%s(%s != %s)", d.dsn, role, d.role))
-		} else if authPluginName != d.authPluginName {
-			err = errors.New(fmt.Sprintf("parse DSN fail:%s(%s != %s)", d.dsn, authPluginName, d.authPluginName))
-		} else if wireCrypt != d.wireCrypt {
-			err = errors.New(fmt.Sprintf("parse DSN fail:%s(%v != %v)", d.dsn, wireCrypt, d.wireCrypt))
-		}
-
 		if err != nil {
-			t.Error(err.Error())
+			t.Fatal(err)
+		}
+		if addr != d.addr {
+			t.Errorf("parse DSN fail:%s(%s != %s)", d.dsn, addr, d.addr)
+		}
+		if dbName != d.dbName {
+			t.Errorf("parse DSN fail:%s(%s != %s)", d.dsn, dbName, d.dbName)
+		}
+		if user != d.user {
+			t.Errorf("parse DSN fail:%s(%s != %s)", d.dsn, user, d.user)
+		}
+		if passwd != d.passwd {
+			t.Errorf("parse DSN fail:%s(%s != %s)", d.dsn, passwd, d.passwd)
+		}
+		if role != d.role {
+			t.Errorf("parse DSN fail:%s(%s != %s)", d.dsn, role, d.role)
+		}
+		if authPluginName != d.authPluginName {
+			t.Errorf("parse DSN fail:%s(%s != %s)", d.dsn, authPluginName, d.authPluginName)
+		}
+		if wireCrypt != d.wireCrypt {
+			t.Errorf("parse DSN fail:%s(%v != %v)", d.dsn, wireCrypt, d.wireCrypt)
 		}
 	}
 
