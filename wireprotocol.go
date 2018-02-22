@@ -31,13 +31,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/nyarla/go-crypt"
 	"math/big"
 	"net"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/nyarla/go-crypt"
 	//"unsafe"
 )
 
@@ -981,6 +982,8 @@ func (p *wireProtocol) opPutSegment(blobHandle int32, seg_data []byte) {
 	p.packInt(int32(ln))
 	p.packInt(int32(ln))
 	p.appendBytes(seg_data)
+	padding := [3]byte{0x0, 0x0, 0x0}
+	p.appendBytes(padding[:((4 - ln) & 3)])
 	p.sendPackets()
 }
 

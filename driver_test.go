@@ -27,6 +27,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -507,4 +508,73 @@ func TestGoIssue45(t *testing.T) {
 	}
 
 	conn.Close()
+}
+
+func TestGoIssue53(t *testing.T) {
+	timeout := time.Second * 40
+	temppath := TempFileName("test_issue53_")
+	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	if err != nil {
+		t.Fatalf("Error occured at sql.Open()")
+	}
+	defer conn.Close()
+
+	tests := []int{
+		31,
+		BLOB_SEGMENT_SIZE,
+		BLOB_SEGMENT_SIZE + 1,
+		22*BLOB_SEGMENT_SIZE + 21,
+		97*BLOB_SEGMENT_SIZE + 21,
+	}
+
+	conn.Exec(`CREATE TABLE BlobTest (bugField blob sub_type binary )`)
+
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("%d", test), func(t *testing.T) {
+			sqlDelete := `delete from BlobTest`
+			_, err = conn.Exec(sqlDelete)
+			if err != nil {
+				t.Error(err)
+			}
+
+			sqlTest1 := `insert into BlobTest(bugField) values(?)`
+
+			str := strings.Repeat("F", test)
+
+			done := make(chan bool)
+			go func(ch chan bool) {
+				_, err = conn.Exec(sqlTest1, str)
+				if err != nil {
+					t.Error(err)
+				}
+				close(done)
+			}(done)
+
+			select {
+			case <-done:
+			case <-time.After(timeout):
+				t.Fatal("Test timed out after ", timeout)
+			}
+
+			sqlget := `select bugField from BlobTest`
+			rows, err := conn.Query(sqlget)
+			if err != nil {
+				t.Error(err)
+			}
+
+			for rows.Next() {
+				var buf []byte
+				err = rows.Scan(&buf)
+				if err != nil {
+					t.Error(err)
+				}
+				if len(buf) != test {
+					t.Errorf("Expected size blob %d, got %d", test, len(buf))
+				}
+			}
+
+			rows.Close()
+
+		})
+	}
 }
