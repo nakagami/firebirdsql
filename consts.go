@@ -195,6 +195,29 @@ const (
 	isc_spb_dummy_packet_interval = 58 // isc_dpb_dummy_packet_interval
 	isc_spb_sql_role_name         = 60 // isc_dpb_sql_role_name
 
+	//Database Parameter Block Types
+	isc_dpb_version1              = 1
+	isc_dpb_page_size             = 4
+	isc_dpb_num_buffers           = 5
+	isc_dpb_force_write           = 24
+	isc_dpb_user_name             = 28
+	isc_dpb_password              = 29
+	isc_dpb_password_enc          = 30
+	isc_dpb_lc_ctype              = 48
+	isc_dpb_overwrite             = 54
+	isc_dpb_connect_timeout       = 57
+	isc_dpb_dummy_packet_interval = 58
+	isc_dpb_sql_role_name         = 60
+	isc_dpb_set_page_buffers      = 61
+	isc_dpb_sql_dialect           = 63
+	isc_dpb_set_db_charset        = 68
+	isc_dpb_process_id            = 71
+	isc_dpb_no_db_triggers        = 72
+	isc_dpb_trusted_auth          = 73
+	isc_dpb_process_name          = 74
+	isc_dpb_utf8_filename         = 77
+	isc_dpb_specific_auth_data    = 84
+
 	// backup
 	isc_spb_bkp_file               = 5
 	isc_spb_bkp_factor             = 6
