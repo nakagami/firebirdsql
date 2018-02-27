@@ -1138,10 +1138,10 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 	blrList.PushBack([]byte{5, 2, 4, 0, byte(ln & 255), byte(ln >> 8)})
 
 	if protocolVersion >= PROTOCOL_VERSION13 {
-		null_indicator := new(big.Int)
-		for i := len(params) - 1; i > 0; i-- {
+		nullIndicator := new(big.Int)
+		for i := len(params) - 1; i >= 0; i-- {
 			if params[i] == nil {
-				null_indicator.SetBit(null_indicator, i, 1)
+				nullIndicator.SetBit(nullIndicator, i, 1)
 			}
 		}
 		n := len(params) / 8
@@ -1152,8 +1152,8 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 			n += 4 - n%4
 		}
 		for i := 0; i < n; i++ {
-			valuesList.PushBack([]byte{byte(null_indicator.Mod(null_indicator, bi256).Int64())})
-			null_indicator = null_indicator.Div(null_indicator, bi256)
+			valuesList.PushBack([]byte{byte(nullIndicator.Mod(nullIndicator, bi256).Int64())})
+			nullIndicator = nullIndicator.Div(nullIndicator, bi256)
 		}
 	}
 

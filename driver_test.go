@@ -510,6 +510,66 @@ func TestGoIssue45(t *testing.T) {
 	conn.Close()
 }
 
+func TestGoIssue49(t *testing.T) {
+	temppath := TempFileName("test_issue49_")
+	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	if err != nil {
+		t.Fatalf("Error occured at sql.Open()")
+	}
+	defer conn.Close()
+
+	sqlCreate := `
+    CREATE TABLE NullTest (       
+        name VARCHAR(60) NOT NULL,
+        nullname VARCHAR(10),
+        nullDate DATE,
+        bug1 SMALLINT,
+        bug2 INTEGER
+    )
+`
+	conn.Exec(sqlCreate)
+
+	//Worked
+	sqlTest1 := `insert into NullTest (name, nullDate)values ('value', null)`
+	_, err = conn.Exec(sqlTest1)
+	if err != nil {
+		t.Error(err)
+	}
+	//Worked
+	sqlTest1 = `insert into NullTest (name, nullDate)values (?, ?)`
+	_, err = conn.Exec(sqlTest1, "value", nil)
+	if err != nil {
+		t.Error(err)
+	}
+
+	//Failed
+	sqlTest1 = `insert into NullTest (name, nullDate)values (?, ?)`
+	_, err = conn.Exec(sqlTest1, "value", nil)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Failed
+	sqlTest1 = `insert into NullTest (name, bug1) values ('value', ?)`
+	_, err = conn.Exec(sqlTest1, nil)
+	if err != nil {
+		t.Error(err)
+	}
+	// Failed
+	sqlTest1 = `insert into NullTest (name, bug1,bug2) values ('value', ?,?)`
+	_, err = conn.Exec(sqlTest1, nil, nil)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// must be failed!
+	sqlTest1 = `insert into NullTest (name, bug1) values ('value', ?)`
+	_, err = conn.Exec(sqlTest1)
+	if err == nil {
+		t.Error("Expected error!")
+	}
+}
+
 func TestGoIssue53(t *testing.T) {
 	timeout := time.Second * 40
 	temppath := TempFileName("test_issue53_")
