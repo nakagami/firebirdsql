@@ -38,6 +38,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kardianos/osext"
 	"github.com/nyarla/go-crypt"
 	//"unsafe"
 )
@@ -543,23 +544,23 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 	passwordBytes := bytes.NewBufferString(password).Bytes()
 	roleBytes := []byte(role)
 	dpb := bytes.Join([][]byte{
-		[]byte{1},
-		[]byte{68, byte(len(encode))}, encode,
-		[]byte{48, byte(len(encode))}, encode,
-		[]byte{28, byte(len(userBytes))}, userBytes,
-		[]byte{29, byte(len(passwordBytes))}, passwordBytes,
-		[]byte{60, byte(len(roleBytes))}, roleBytes,
-		[]byte{63, 4}, int32_to_bytes(3),
-		[]byte{24, 4}, bint32_to_bytes(1),
-		[]byte{54, 4}, bint32_to_bytes(1),
-		[]byte{4, 4}, int32_to_bytes(page_size),
+		[]byte{isc_dpb_version1},
+		[]byte{isc_dpb_set_db_charset, byte(len(encode))}, encode,
+		[]byte{isc_dpb_lc_ctype, byte(len(encode))}, encode,
+		[]byte{isc_dpb_user_name, byte(len(userBytes))}, userBytes,
+		[]byte{isc_dpb_password, byte(len(passwordBytes))}, passwordBytes,
+		[]byte{isc_dpb_sql_role_name, byte(len(roleBytes))}, roleBytes,
+		[]byte{isc_dpb_sql_dialect, 4}, int32_to_bytes(3),
+		[]byte{isc_dpb_force_write, 4}, bint32_to_bytes(1),
+		[]byte{isc_dpb_overwrite, 4}, bint32_to_bytes(1),
+		[]byte{isc_dpb_page_size, 4}, int32_to_bytes(page_size),
 	}, nil)
 
 	if p.authData != nil {
 		specificAuthData := bytes.NewBufferString(hex.EncodeToString(p.authData)).Bytes()
 		dpb = bytes.Join([][]byte{
 			dpb,
-			[]byte{84, byte(len(specificAuthData))}, specificAuthData}, nil)
+			[]byte{isc_dpb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)
 	}
 
 	p.packInt(op_create)
@@ -677,23 +678,40 @@ func (p *wireProtocol) opAttach(dbName string, user string, password string, rol
 	userBytes := bytes.NewBufferString(strings.ToUpper(user)).Bytes()
 	passwordBytes := bytes.NewBufferString(password).Bytes()
 	roleBytes := []byte(role)
-	dbp := bytes.Join([][]byte{
-		[]byte{1},
-		[]byte{48, byte(len(encode))}, encode,
-		[]byte{28, byte(len(userBytes))}, userBytes,
-		[]byte{29, byte(len(passwordBytes))}, passwordBytes,
-		[]byte{60, byte(len(roleBytes))}, roleBytes,
+
+	processName, err := osext.Executable()
+	var processNameBytes []byte
+	if err == nil {
+		if len(processName) > 255 {
+			//limit process name to last 255 symbols
+			processName = processName[len(processName)-255:]
+		}
+
+		processNameBytes = bytes.NewBufferString(processName).Bytes()
+	}
+	pid := int32(os.Getpid())
+
+	dpb := bytes.Join([][]byte{
+		[]byte{isc_dpb_version1},
+		[]byte{isc_dpb_sql_dialect, 4}, int32_to_bytes(3),
+		[]byte{isc_dpb_lc_ctype, byte(len(encode))}, encode,
+		[]byte{isc_dpb_user_name, byte(len(userBytes))}, userBytes,
+		[]byte{isc_dpb_password, byte(len(passwordBytes))}, passwordBytes,
+		[]byte{isc_dpb_sql_role_name, byte(len(roleBytes))}, roleBytes,
+		[]byte{isc_dpb_process_id, 4}, int32_to_bytes(pid),
+		[]byte{isc_dpb_process_name, byte(len(processNameBytes))}, processNameBytes,
 	}, nil)
+
 	if p.authData != nil {
 		specificAuthData := bytes.NewBufferString(hex.EncodeToString(p.authData)).Bytes()
-		dbp = bytes.Join([][]byte{
-			dbp,
-			[]byte{84, byte(len(specificAuthData))}, specificAuthData}, nil)
+		dpb = bytes.Join([][]byte{
+			dpb,
+			[]byte{isc_dpb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)
 	}
 	p.packInt(op_attach)
 	p.packInt(0) // Database Object ID
 	p.packString(dbName)
-	p.packBytes(dbp)
+	p.packBytes(dpb)
 	p.sendPackets()
 }
 
