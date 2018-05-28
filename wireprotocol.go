@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
+	"bufio"
 	"bytes"
 	"container/list"
 	"crypto/rc4"
@@ -74,6 +75,8 @@ func _INFO_SQL_SELECT_DESCRIBE_VARS() []byte {
 
 type wireChannel struct {
 	conn      net.Conn
+	reader    *bufio.Reader
+	writer    *bufio.Writer
 	rc4reader *rc4.Cipher
 	rc4writer *rc4.Cipher
 }
@@ -82,6 +85,8 @@ func newWireChannel(conn net.Conn) (wireChannel, error) {
 	var err error
 	c := new(wireChannel)
 	c.conn = conn
+	c.reader = bufio.NewReader(c.conn)
+	c.writer = bufio.NewWriter(c.conn)
 
 	return *c, err
 }
@@ -95,11 +100,11 @@ func (c *wireChannel) setAuthKey(key []byte) (err error) {
 func (c *wireChannel) Read(buf []byte) (n int, err error) {
 	if c.rc4reader != nil {
 		src := make([]byte, len(buf))
-		n, err = c.conn.Read(src)
+		n, err = c.reader.Read(src)
 		c.rc4reader.XORKeyStream(buf, src[0:n])
 		return
 	}
-	return c.conn.Read(buf)
+	return c.reader.Read(buf)
 }
 
 func (c *wireChannel) Write(buf []byte) (n int, err error) {
@@ -108,7 +113,7 @@ func (c *wireChannel) Write(buf []byte) (n int, err error) {
 		c.rc4writer.XORKeyStream(dst, buf)
 		written := 0
 		for written < len(buf) {
-			n, err = c.conn.Write(dst[written:])
+			n, err = c.writer.Write(dst[written:])
 			if err != nil {
 				return
 			}
@@ -116,10 +121,15 @@ func (c *wireChannel) Write(buf []byte) (n int, err error) {
 		}
 		n = written
 	} else {
-		n, err = c.conn.Write(buf)
+		n, err = c.writer.Write(buf)
 	}
 	return
 }
+
+func (c *wireChannel) Flush() error {
+	return c.writer.Flush()
+}
+
 func (c *wireChannel) Close() error {
 	return c.conn.Close()
 }
@@ -159,28 +169,19 @@ func newWireProtocol(addr string) (*wireProtocol, error) {
 
 func (p *wireProtocol) packInt(i int32) {
 	// pack big endian int32
-	p.buf = append(p.buf, byte(i>>24&0xFF))
-	p.buf = append(p.buf, byte(i>>16&0xFF))
-	p.buf = append(p.buf, byte(i>>8&0xFF))
-	p.buf = append(p.buf, byte(i&0xFF))
+	p.buf = append(p.buf, []byte{byte(i >> 24 & 0xFF), byte(i >> 16 & 0xFF), byte(i >> 8 & 0xFF), byte(i & 0xFF)}...)
 }
 
 func (p *wireProtocol) packBytes(b []byte) {
-	for _, b := range xdrBytes(b) {
-		p.buf = append(p.buf, b)
-	}
+	p.buf = append(p.buf, xdrBytes(b)...)
 }
 
 func (p *wireProtocol) packString(s string) {
-	for _, b := range xdrString(s) {
-		p.buf = append(p.buf, b)
-	}
+	p.buf = append(p.buf, xdrBytes([]byte(s))...)
 }
 
 func (p *wireProtocol) appendBytes(bs []byte) {
-	for _, b := range bs {
-		p.buf = append(p.buf, b)
-	}
+	p.buf = append(p.buf, bs...)
 }
 
 func getSrpClientPublicBytes(clientPublic *big.Int) (bs []byte) {
@@ -251,6 +252,7 @@ func (p *wireProtocol) sendPackets() (written int, err error) {
 		}
 		written += n
 	}
+	p.conn.Flush()
 	p.buf = make([]byte, 0, BUFFER_LEN)
 	return
 }
