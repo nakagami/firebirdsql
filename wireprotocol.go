@@ -469,6 +469,7 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
 				// bytes_to_int(rbuf[4:4+l]) == col_len
 				next_index, err = p._parse_select_items(rbuf[4+ln:], xsqlda)
 			}
+			break
 		} else {
 			break
 		}
