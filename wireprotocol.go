@@ -437,7 +437,6 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
 	var ln, col_len, next_index int
 	var err error
 	var stmt_type int32
-	var rbuf []byte
 	var xsqlda []xSQLVAR
 	i := 0
 
@@ -463,11 +462,11 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
 						_INFO_SQL_SELECT_DESCRIBE_VARS(),
 					}, nil))
 
-				_, _, rbuf, err = p.opResponse()
+				_, _, buf, err = p.opResponse()
 				// buf[:2] == []byte{0x04,0x07}
-				ln = int(bytes_to_int16(rbuf[2:4]))
-				// bytes_to_int(rbuf[4:4+l]) == col_len
-				next_index, err = p._parse_select_items(rbuf[4+ln:], xsqlda)
+				ln = int(bytes_to_int16(buf[2:4]))
+				// bytes_to_int(buf[4:4+l]) == col_len
+				next_index, err = p._parse_select_items(buf[4+ln:], xsqlda)
 			}
 		} else {
 			break
