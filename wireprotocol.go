@@ -441,7 +441,7 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
 	i := 0
 
 	for i < len(buf) {
-		if buf[i] == byte(isc_info_sql_stmt_type) {
+		if buf[i] == byte(isc_info_sql_stmt_type) && buf[i+1] == byte(0x04) && buf[i+2] == byte(0x00) {
 			i += 1
 			ln = int(bytes_to_int16(buf[i : i+2]))
 			i += 2

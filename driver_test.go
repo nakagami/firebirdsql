@@ -638,3 +638,95 @@ func TestGoIssue53(t *testing.T) {
 		})
 	}
 }
+func TestGoIssue65(t *testing.T) {
+	/*var field01 string
+	var field02 int
+	var field03 int
+	var field04 string
+	var field05 int
+	var field06 int
+	var field07 string
+	var field08 string
+	var field09 string
+	var field10 string
+	var field11 string
+	var field12 float32
+	var field13 float32
+	var field14 float32
+	var field15 float32
+	var field16 float32
+	var field17 float32
+	var field18 float32
+	var field19 float32
+	var field20 string
+	var field21 string
+	var field22 string
+	var field23 string
+	var field24 float32
+	var field25 float32
+	*/
+	temppath := TempFileName("test_issue65_")
+	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	if err != nil {
+		t.Fatalf("Error occured at sql.Open()")
+	}
+	defer conn.Close()
+
+	conn.Exec(`CREATE TABLE FPI_MOVTO_MOVIMIENTOS
+	(
+	  RFCEMPRESA varchar(20) NOT NULL,
+	  NOSUCURSAL integer NOT NULL,
+	  TIPO integer NOT NULL,
+	  SERIE varchar(5) NOT NULL,
+	  NODOCTO integer NOT NULL,
+	  LINEA integer NOT NULL,
+	  CODART varchar(20),
+	  NOMART varchar(80),
+	  CLAVEPRODSERV varchar(10),
+	  UNIDADCLAVE varchar(10),
+	  UNIDADNOMBRE varchar(80),
+	  CANT1 double precision,
+	  CATN2 double precision,
+	  PUNIT double precision,
+	  MONTO double precision,
+	  IMPTO1 double precision,
+	  IMPTO2 double precision,
+	  PIMPTO1 double precision,
+	  PIMPTO2 double precision,
+	  TIMPTO1 varchar(10),
+	  TIMPTO2 varchar(10),
+	  TFIMPTO1 varchar(10),
+	  TFIMPTO2 varchar(10),
+	  PDESCTO double precision,
+	  IDESCTO double precision,
+	  CONSTRAINT PXFPI_MOVTO_MOVIMIENTOS PRIMARY KEY (RFCEMPRESA,NOSUCURSAL,TIPO,SERIE,NODOCTO,LINEA)
+	);`)
+
+	//Worked
+	sqlTest1 := `INSERT INTO FPI_MOVTO_MOVIMIENTOS (RFCEMPRESA, NOSUCURSAL, TIPO, SERIE, NODOCTO, LINEA, CODART, NOMART, CLAVEPRODSERV, UNIDADCLAVE, UNIDADNOMBRE, CANT1, CATN2, PUNIT, MONTO, IMPTO1, IMPTO2, PIMPTO1, PIMPTO2, TIMPTO1, TIMPTO2, TFIMPTO1, TFIMPTO2, PDESCTO, IDESCTO) VALUES ('p2', '0', '700', 'X', '1', '1', 'ART-001', 'PRUEBA DE ARTICULO', '01010101', 'ACT', 'Actividad', '10.000000', '0.000000', '2.500000', '25.000000', '4.000000', '0.000000', '16.000000', '0.000000', '002', '', 'Tasa', '', '0.000000', '0.000000');`
+	_, err = conn.Exec(sqlTest1)
+	if err != nil {
+		t.Error(err)
+	}
+
+	sqlTest2 := "select doc.RFCEMPRESA, doc.NOSUCURSAL, doc.TIPO, doc.SERIE, doc.NODOCTO, doc.LINEA,\n" +
+		"	doc.CODART, doc.NOMART, doc.CLAVEPRODSERV, doc.UNIDADCLAVE, doc.UNIDADNOMBRE, doc.CANT1,\n" +
+		"	doc.CATN2, doc.PUNIT, doc.MONTO, doc.IMPTO1, doc.IMPTO2, doc.PIMPTO1, doc.PIMPTO2,\n" +
+		"	doc.TIMPTO1, doc.TIMPTO2, doc.TFIMPTO1, doc.TFIMPTO2, doc.PDESCTO, doc.IDESCTO\n" +
+		"from FPI_MOVTO_MOVIMIENTOS doc\n" +
+		"where doc.RFCEMPRESA = 'p2' and doc.NOSUCURSAL = 0 and doc.TIPO = 700 and doc.SERIE = 'X' and doc.NODOCTO = 1 \n"
+	movtos, err := conn.Query(sqlTest2)
+	if err != nil {
+		t.Error(err)
+	}
+
+	existData := movtos.Next()
+	if existData == false {
+		t.Fatalf("Expecting Data")
+	} /*else {
+		movtos.Scan(&field01, &field02, &field03, &field04, &field05, &field06, &field07, &field08, &field09, &field10,
+			&field11, &field12, &field13, &field14, &field15, &field16, &field17, &field18, &field19, &field20, &field21,
+			&field22, &field23, &field24, &field25)
+		t.Fatalf(field01)
+	}*/
+}
