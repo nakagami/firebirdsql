@@ -53,6 +53,11 @@ func (fc *firebirdsqlConn) Begin() (driver.Tx, error) {
 }
 
 func (fc *firebirdsqlConn) Close() (err error) {
+	fc.wp.opRollback(fc.tx.transHandle)
+	_, _, _, err = fc.wp.opResponse()
+	if err != nil {
+		return
+	}
 	fc.wp.opDetach()
 	_, _, _, err = fc.wp.opResponse()
 	fc.wp.conn.Close()

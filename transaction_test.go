@@ -264,3 +264,14 @@ func TestIssue39(t *testing.T) {
 
 	conn.Close()
 }
+
+func TestIssue67(t *testing.T) {
+	temppath := TempFileName("test_issue67_")
+	conn, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	var n int
+	conn.QueryRow("SELECT Count(*) FROM rdb$relations").Scan(&n)
+	err := conn.Close()
+	if err != nil {
+		t.Fatalf("Error Close: %v", err)
+	}
+}
