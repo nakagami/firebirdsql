@@ -274,4 +274,16 @@ func TestIssue67(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error Close: %v", err)
 	}
+
+	conn, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	tx, _ := conn.Begin()
+	tx.QueryRow("SELECT Count(*) FROM rdb$relations").Scan(&n)
+
+	tx.Commit()
+
+	err = conn.Close()
+	if err != nil {
+		t.Fatalf("Error Close: %v", err)
+	}
+
 }
