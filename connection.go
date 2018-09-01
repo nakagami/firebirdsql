@@ -40,6 +40,7 @@ type firebirdsqlConn struct {
 	isAutocommit bool
 	clientPublic *big.Int
 	clientSecret *big.Int
+	transHandles []int32
 }
 
 func (fc *firebirdsqlConn) begin(isolationLevel int) (driver.Tx, error) {
@@ -53,7 +54,10 @@ func (fc *firebirdsqlConn) Begin() (driver.Tx, error) {
 }
 
 func (fc *firebirdsqlConn) Close() (err error) {
-	fc.wp.opRollback(fc.tx.transHandle)
+	for _, h := range fc.transHandles {
+		fc.wp.opRollback(h)
+	}
+
 	_, _, _, err = fc.wp.opResponse()
 	if err != nil {
 		return

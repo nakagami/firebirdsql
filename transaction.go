@@ -74,6 +74,7 @@ func (tx *firebirdsqlTx) begin() (err error) {
 	}
 	tx.fc.wp.opTransaction(tpb)
 	tx.transHandle, _, _, err = tx.fc.wp.opResponse()
+	tx.fc.transHandles = append(tx.fc.transHandles, tx.transHandle)
 	return
 }
 
