@@ -72,5 +72,5 @@ Optional
 param1, param2... are
 
 - role: Role name.
-- auth_plugin_name: Authentication plugin name for FB3. Srp or Legacy_Auth are available. Default is Srp.
-- wire_crypt: Enable wire data encryption or not. It is for FB3 server. Default is true.
+- auth_plugin_name: Authentication plugin name. "Srp256" or "Srp" or "Legacy_Auth" are available.
+- wire_crypt: Enable wire data encryption or not. It is for FB3+ server. Default is true.
