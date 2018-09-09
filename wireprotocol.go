@@ -45,7 +45,7 @@ import (
 )
 
 const (
-	PLUGIN_LIST       = "Srp,Legacy_Auth"
+	PLUGIN_LIST       = "Srp256,Srp,Legacy_Auth"
 	BUFFER_LEN        = 1024
 	MAX_CHAR_LENGTH   = 32767
 	BLOB_SEGMENT_SIZE = 32000
@@ -215,7 +215,7 @@ func (p *wireProtocol) uid(user string, password string, authPluginName string, 
 	}
 
 	var specific_data []byte
-	if authPluginName == "Srp" {
+	if authPluginName == "Srp" || authPluginName == "Srp256" {
 		specific_data = getSrpClientPublicBytes(clientPublic)
 	} else if authPluginName == "Legacy_Auth" {
 		b := bytes.NewBufferString(crypt.Crypt(password, "9z")[2:]).Bytes()
@@ -615,14 +615,14 @@ func (p *wireProtocol) opAccept(user string, password string, authPluginName str
 		if isAuthenticated == 0 {
 			var authData []byte
 			var sessionKey []byte
-			if p.pluginName == "Srp" && len(data) > 2 {
+			if (p.pluginName == "Srp" || p.pluginName == "Srp256") && len(data) > 2 {
 				ln = int(bytes_to_int16(data[:2]))
 				serverSalt := data[2 : ln+2]
 				serverPublic := bigFromHexString(bytes_to_str(data[4+ln:]))
-				authData, sessionKey = getClientProof(strings.ToUpper(user), password, serverSalt, clientPublic, serverPublic, clientSecret)
+				authData, sessionKey = getClientProof(strings.ToUpper(user), password, serverSalt, clientPublic, serverPublic, clientSecret, p.pluginName)
 				if DEBUG_SRP {
-					fmt.Printf("serverSalt=%s\nserverPublic(bin)=%s\nserverPublic=%s\nauthData=%v,sessionKey=%v\n",
-						serverSalt, data[4+ln:], serverPublic, authData, sessionKey)
+					fmt.Printf("pluginName=%s\nserverSalt=%s\nserverPublic(bin)=%s\nserverPublic=%s\nauthData=%v,sessionKey=%v\n",
+						p.pluginName, serverSalt, data[4+ln:], serverPublic, authData, sessionKey)
 				}
 			} else if p.pluginName == "Legacy_Auth" {
 				authData = bytes.NewBufferString(crypt.Crypt(password, "9z")[2:]).Bytes()

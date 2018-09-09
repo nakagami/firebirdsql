@@ -26,7 +26,9 @@ package firebirdsql
 import (
 	"bytes"
 	"crypto/sha1"
+	"crypto/sha256"
 	"github.com/cznic/mathutil"
+	"hash"
 	"math/big"
 	"math/rand"
 	"time"
@@ -202,7 +204,7 @@ func getServerSession(user string, password string, salt []byte, keyA *big.Int, 
 	return bigToSha1(sessionSecret)
 }
 
-func getClientProof(user string, password string, salt []byte, keyA *big.Int, keyB *big.Int, keya *big.Int) (keyM []byte, keyK []byte) {
+func getClientProof(user string, password string, salt []byte, keyA *big.Int, keyB *big.Int, keya *big.Int, pluginName string) (keyM []byte, keyK []byte) {
 	// M = H(H(N) xor H(g), H(I), s, A, B, K)
 	prime, g, _ := getPrime()
 	keyK = getClientSession(user, password, salt, keyA, keyB, keya)
@@ -211,14 +213,22 @@ func getClientProof(user string, password string, salt []byte, keyA *big.Int, ke
 	n2 := bytesToBig(bigToSha1(g))
 	n3 := mathutil.ModPowBigInt(n1, n2, prime)
 	n4 := getStringHash(user)
-	sha1 := sha1.New()
-	sha1.Write(n3.Bytes())
-	sha1.Write(n4.Bytes())
-	sha1.Write(salt)
-	sha1.Write(keyA.Bytes())
-	sha1.Write(keyB.Bytes())
-	sha1.Write(keyK)
-	keyM = sha1.Sum(nil)
+
+	var digest hash.Hash
+	if pluginName == "Srp" {
+		digest = sha1.New()
+	} else if pluginName == "Srp256" {
+		digest = sha256.New()
+	} else {
+		panic("srp protocol error")
+	}
+	digest.Write(n3.Bytes())
+	digest.Write(n4.Bytes())
+	digest.Write(salt)
+	digest.Write(keyA.Bytes())
+	digest.Write(keyB.Bytes())
+	digest.Write(keyK)
+	keyM = digest.Sum(nil)
 
 	return keyM, keyK
 }
