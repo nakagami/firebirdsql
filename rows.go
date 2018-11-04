@@ -29,6 +29,7 @@ import (
 	"database/sql/driver"
 	"io"
 	"reflect"
+	"strings"
 )
 
 type firebirdsqlRows struct {
@@ -52,6 +53,9 @@ func (rows *firebirdsqlRows) Columns() []string {
 	columns := make([]string, len(rows.stmt.xsqlda))
 	for i, x := range rows.stmt.xsqlda {
 		columns[i] = x.aliasname
+		if rows.stmt.tx.fc.column_name_to_lower {
+			columns[i] = strings.ToLower(columns[i])
+		}
 	}
 	return columns
 }

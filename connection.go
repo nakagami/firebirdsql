@@ -24,8 +24,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
-	"strconv"
 	"context"
+	"strconv"
 
 	"database/sql/driver"
 	"math/big"

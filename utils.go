@@ -240,9 +240,10 @@ func parseDSN(dsn string) (addr string, dbName string, user string, passwd strin
 	m, _ := url.ParseQuery(u.RawQuery)
 
 	var default_options = map[string]string{
-		"role":             "",
-		"auth_plugin_name": "Srp",
-		"wire_crypt":       "true",
+		"role":                 "",
+		"auth_plugin_name":     "Srp",
+		"wire_crypt":           "true",
+		"column_name_to_lower": "false",
 	}
 
 	for k, v := range default_options {
