@@ -71,6 +71,9 @@ Optional
 
 param1, param2... are
 
-- role: Role name.
-- auth_plugin_name: Authentication plugin name. "Srp256" or "Srp" or "Legacy_Auth" are available.
-- wire_crypt: Enable wire data encryption or not. It is for FB3+ server. Default is true.
+.. csv-table::
+   :header: Name,Description,Default value,Note
+
+   role,Role name,
+   auth_plugin_name,Authentication plugin name.,Srp,Srp256 or Srp or Legacy_Auth are available.
+   wire_crypt,Enable wire data encryption or not. It is for FB3+ server.,true,
