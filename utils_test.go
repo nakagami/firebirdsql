@@ -36,20 +36,20 @@ func TestDSNParse(t *testing.T) {
 		passwd         string
 		role           string
 		authPluginName string
-		wireCrypt      bool
+		wireCrypt      string
 	}{
-		{"user:password@localhost:3000/dbname", "localhost:3000", "dbname", "user", "password", "", "Srp", true},
-		{"user:password@localhost/dbname", "localhost:3050", "dbname", "user", "password", "", "Srp", true},
-		{"user:password@localhost/dir/dbname", "localhost:3050", "/dir/dbname", "user", "password", "", "Srp", true},
-		{"user:password@localhost/c:\\fbdata\\database.fdb", "localhost:3050", "c:\\fbdata\\database.fdb", "user", "password", "", "Srp", true},
-		{"user:password@localhost/c:/fbdata/database.fdb", "localhost:3050", "c:/fbdata/database.fdb", "user", "password", "", "Srp", true},
-		{"user:password@localhost/dbname?role=role", "localhost:3050", "dbname", "user", "password", "role", "Srp", true},
-		{"user:password@localhost:3000/c:/fbdata/database.fdb?role=role&wire_crypt=false", "localhost:3000", "c:/fbdata/database.fdb", "user", "password", "role", "Srp", false},
-		{"firebird://user:password@localhost:3000/dbname", "localhost:3000", "dbname", "user", "password", "", "Srp", true},
+		{"user:password@localhost:3000/dbname", "localhost:3000", "dbname", "user", "password", "", "Srp", "true"},
+		{"user:password@localhost/dbname", "localhost:3050", "dbname", "user", "password", "", "Srp", "true"},
+		{"user:password@localhost/dir/dbname", "localhost:3050", "/dir/dbname", "user", "password", "", "Srp", "true"},
+		{"user:password@localhost/c:\\fbdata\\database.fdb", "localhost:3050", "c:\\fbdata\\database.fdb", "user", "password", "", "Srp", "true"},
+		{"user:password@localhost/c:/fbdata/database.fdb", "localhost:3050", "c:/fbdata/database.fdb", "user", "password", "", "Srp", "true"},
+		{"user:password@localhost/dbname?role=role", "localhost:3050", "dbname", "user", "password", "role", "Srp", "true"},
+		{"user:password@localhost:3000/c:/fbdata/database.fdb?role=role&wire_crypt=false", "localhost:3000", "c:/fbdata/database.fdb", "user", "password", "role", "Srp", "false"},
+		{"firebird://user:password@localhost:3000/dbname", "localhost:3000", "dbname", "user", "password", "", "Srp", "true"},
 	}
 
 	for _, d := range testDSNs {
-		addr, dbName, user, passwd, role, authPluginName, wireCrypt, err := parseDSN(d.dsn)
+		addr, dbName, user, passwd, options, err := parseDSN(d.dsn)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -65,22 +65,22 @@ func TestDSNParse(t *testing.T) {
 		if passwd != d.passwd {
 			t.Errorf("parse DSN fail:%s(%s != %s)", d.dsn, passwd, d.passwd)
 		}
-		if role != d.role {
-			t.Errorf("parse DSN fail:%s(%s != %s)", d.dsn, role, d.role)
+		if options["role"] != d.role {
+			t.Errorf("parse DSN fail:%s(%s != %s)", d.dsn, options["role"], d.role)
 		}
-		if authPluginName != d.authPluginName {
-			t.Errorf("parse DSN fail:%s(%s != %s)", d.dsn, authPluginName, d.authPluginName)
+		if options["auth_plugin_name"] != d.authPluginName {
+			t.Errorf("parse DSN fail:%s(%s != %s)", d.dsn, options["auth_plugin_name"], d.authPluginName)
 		}
-		if wireCrypt != d.wireCrypt {
-			t.Errorf("parse DSN fail:%s(%v != %v)", d.dsn, wireCrypt, d.wireCrypt)
+		if options["wire_crypt"] != d.wireCrypt {
+			t.Errorf("parse DSN fail:%s(%v != %v)", d.dsn, options["wire_crypt"], d.wireCrypt)
 		}
 	}
 
-	_, _, _, _, _, _, _, err := parseDSN("something wrong")
+	_, _, _, _, _, err := parseDSN("something wrong")
 	if err == nil {
 		t.Fatalf("Error Not occured")
 	}
-	_, _, _, _, _, _, _, err = parseDSN("SomethingWrongConnectionString")
+	_, _, _, _, _, err = parseDSN("SomethingWrongConnectionString")
 	if err == nil {
 		t.Fatalf("Error Not occured")
 	}

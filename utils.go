@@ -29,7 +29,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -209,7 +208,8 @@ func split1(src string, delm string) (string, string) {
 	return src, ""
 }
 
-func parseDSN(dsn string) (addr string, dbName string, user string, passwd string, role string, authPluginName string, wireCrypt bool, err error) {
+func parseDSN(dsn string) (addr string, dbName string, user string, passwd string, options map[string]string, err error) {
+	options = make(map[string]string)
 	if !strings.HasPrefix(dsn, "firebird://") {
 		dsn = "firebird://" + dsn
 	}
@@ -239,25 +239,19 @@ func parseDSN(dsn string) (addr string, dbName string, user string, passwd strin
 
 	m, _ := url.ParseQuery(u.RawQuery)
 
-	values, ok := m["role"]
-	if ok {
-		role = values[0]
-	} else {
-		role = ""
+	var default_options = map[string]string{
+		"role": "",
+		"auth_plugin_name": "Srp",
+		"wire_crypt": "true",
 	}
 
-	values, ok = m["auth_plugin_name"]
-	if ok {
-		authPluginName = values[0]
-	} else {
-		authPluginName = "Srp"
-	}
-
-	values, ok = m["wire_crypt"]
-	if ok {
-		wireCrypt, _ = strconv.ParseBool(values[0])
-	} else {
-		wireCrypt = true
+	for k, v := range default_options {
+		values, ok := m[k]
+		if ok {
+			options[k] = values[0]
+		} else {
+			options[k] = v
+		}
 	}
 
 	return

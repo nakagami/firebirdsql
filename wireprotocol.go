@@ -510,8 +510,10 @@ func (p *wireProtocol) getBlobSegments(blobId []byte, transHandle int32) ([]byte
 	return blob, err
 }
 
-func (p *wireProtocol) opConnect(dbName string, user string, password string, authPluginName string, wireCrypt bool, clientPublic *big.Int) {
+func (p *wireProtocol) opConnect(dbName string, user string, password string, options map[string]string, clientPublic *big.Int) {
 	p.debugPrint("opConnect")
+	wire_crypt := true
+	wire_crypt, _ = strconv.ParseBool(options["wire_crypt"])
 	protocols := []string{
 		// PROTOCOL_VERSION, Arch type (Generic=1), min, max, weight
 		"0000000a00000001000000000000000500000002", // 10, 1, 0, 5, 2
@@ -525,7 +527,7 @@ func (p *wireProtocol) opConnect(dbName string, user string, password string, au
 	p.packInt(1) // Arch type(GENERIC)
 	p.packString(dbName)
 	p.packInt(int32(len(protocols)))
-	p.packBytes(p.uid(strings.ToUpper(user), password, authPluginName, wireCrypt, clientPublic))
+	p.packBytes(p.uid(strings.ToUpper(user), password, options["auth_plugin_name"], wire_crypt, clientPublic))
 	buf, _ := hex.DecodeString(strings.Join(protocols, ""))
 	p.appendBytes(buf)
 	p.sendPackets()
@@ -567,8 +569,10 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 	p.sendPackets()
 }
 
-func (p *wireProtocol) opAccept(user string, password string, authPluginName string, wireCrypt bool, clientPublic *big.Int, clientSecret *big.Int) (err error) {
+func (p *wireProtocol) opAccept(user string, password string, options map[string]string, clientPublic *big.Int, clientSecret *big.Int) (err error) {
 	p.debugPrint("opAccept")
+	wire_crypt := true
+	wire_crypt, _ = strconv.ParseBool(options["wire_crypt"])
 
 	b, err := p.recvPackets(4)
 	opcode := bytes_to_bint32(b)
@@ -630,11 +634,11 @@ func (p *wireProtocol) opAccept(user string, password string, authPluginName str
 				err = errors.New("opAccept() Unauthorized")
 				return
 			}
-			if wireCrypt {
+			if wire_crypt {
 				// Send op_cont_auth
 				p.packInt(op_cont_auth)
 				p.packString(hex.EncodeToString(authData))
-				p.packString(authPluginName)
+				p.packString(options["auth_plugin_name"])
 				p.packString(PLUGIN_LIST)
 				p.packString("")
 				p.sendPackets()

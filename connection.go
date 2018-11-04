@@ -110,19 +110,19 @@ func (fc *firebirdsqlConn) Query(query string, args []driver.Value) (rows driver
 }
 
 func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
-	addr, dbName, user, password, role, authPluginName, wireCrypt, err := parseDSN(dsn)
+	addr, dbName, user, password, options, err := parseDSN(dsn)
 	wp, err := newWireProtocol(addr)
 	if err != nil {
 		return
 	}
 	clientPublic, clientSecret := getClientSeed()
 
-	wp.opConnect(dbName, user, password, authPluginName, wireCrypt, clientPublic)
-	err = wp.opAccept(user, password, authPluginName, wireCrypt, clientPublic, clientSecret)
+	wp.opConnect(dbName, user, password, options, clientPublic)
+	err = wp.opAccept(user, password, options, clientPublic, clientSecret)
 	if err != nil {
 		return
 	}
-	wp.opAttach(dbName, user, password, role)
+	wp.opAttach(dbName, user, password, options["role"])
 	wp.dbHandle, _, _, err = wp.opResponse()
 	if err != nil {
 		return
@@ -144,7 +144,7 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 
 func createFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	// Create Database
-	addr, dbName, user, password, role, authPluginName, wireCrypt, err := parseDSN(dsn)
+	addr, dbName, user, password, options, err := parseDSN(dsn)
 	wp, err := newWireProtocol(addr)
 	if err != nil {
 		return
@@ -152,12 +152,12 @@ func createFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 
 	clientPublic, clientSecret := getClientSeed()
 
-	wp.opConnect(dbName, user, password, authPluginName, wireCrypt, clientPublic)
-	err = wp.opAccept(user, password, authPluginName, wireCrypt, clientPublic, clientSecret)
+	wp.opConnect(dbName, user, password, options, clientPublic)
+	err = wp.opAccept(user, password, options, clientPublic, clientSecret)
 	if err != nil {
 		return
 	}
-	wp.opCreate(dbName, user, password, role)
+	wp.opCreate(dbName, user, password, options["role"])
 	wp.dbHandle, _, _, err = wp.opResponse()
 	if err != nil {
 		return
