@@ -37,6 +37,7 @@ type firebirdsqlConn struct {
 	dbName       string
 	user         string
 	password     string
+	options      map[string]string
 	isAutocommit bool
 	clientPublic *big.Int
 	clientSecret *big.Int
@@ -134,6 +135,7 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	fc.dbName = dbName
 	fc.user = user
 	fc.password = password
+	fc.options = options
 	fc.isAutocommit = true
 	fc.tx, err = newFirebirdsqlTx(fc, ISOLATION_LEVEL_READ_COMMITED, fc.isAutocommit)
 	fc.clientPublic = clientPublic
@@ -169,6 +171,7 @@ func createFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	fc.dbName = dbName
 	fc.user = user
 	fc.password = password
+	fc.options = options
 	fc.isAutocommit = true
 	fc.tx, err = newFirebirdsqlTx(fc, ISOLATION_LEVEL_READ_COMMITED, fc.isAutocommit)
 	fc.clientPublic = clientPublic
