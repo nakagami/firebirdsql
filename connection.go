@@ -24,24 +24,25 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
+	"strconv"
+	"context"
+
 	"database/sql/driver"
 	"math/big"
-
-	"context"
 )
 
 type firebirdsqlConn struct {
-	wp           *wireProtocol
-	tx           *firebirdsqlTx
-	addr         string
-	dbName       string
-	user         string
-	password     string
-	options      map[string]string
-	isAutocommit bool
-	clientPublic *big.Int
-	clientSecret *big.Int
-	transHandles []int32
+	wp                   *wireProtocol
+	tx                   *firebirdsqlTx
+	addr                 string
+	dbName               string
+	user                 string
+	password             string
+	column_name_to_lower bool
+	isAutocommit         bool
+	clientPublic         *big.Int
+	clientSecret         *big.Int
+	transHandles         []int32
 }
 
 func (fc *firebirdsqlConn) begin(isolationLevel int) (driver.Tx, error) {
@@ -112,10 +113,15 @@ func (fc *firebirdsqlConn) Query(query string, args []driver.Value) (rows driver
 
 func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	addr, dbName, user, password, options, err := parseDSN(dsn)
+
 	wp, err := newWireProtocol(addr)
 	if err != nil {
 		return
 	}
+
+	column_name_to_lower := true
+	column_name_to_lower, _ = strconv.ParseBool(options["column_name_to_lower"])
+
 	clientPublic, clientSecret := getClientSeed()
 
 	wp.opConnect(dbName, user, password, options, clientPublic)
@@ -135,7 +141,7 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	fc.dbName = dbName
 	fc.user = user
 	fc.password = password
-	fc.options = options
+	fc.column_name_to_lower = column_name_to_lower
 	fc.isAutocommit = true
 	fc.tx, err = newFirebirdsqlTx(fc, ISOLATION_LEVEL_READ_COMMITED, fc.isAutocommit)
 	fc.clientPublic = clientPublic
@@ -147,10 +153,14 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 func createFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	// Create Database
 	addr, dbName, user, password, options, err := parseDSN(dsn)
+
 	wp, err := newWireProtocol(addr)
 	if err != nil {
 		return
 	}
+
+	column_name_to_lower := true
+	column_name_to_lower, _ = strconv.ParseBool(options["column_name_to_lower"])
 
 	clientPublic, clientSecret := getClientSeed()
 
@@ -171,7 +181,7 @@ func createFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	fc.dbName = dbName
 	fc.user = user
 	fc.password = password
-	fc.options = options
+	fc.column_name_to_lower = column_name_to_lower
 	fc.isAutocommit = true
 	fc.tx, err = newFirebirdsqlTx(fc, ISOLATION_LEVEL_READ_COMMITED, fc.isAutocommit)
 	fc.clientPublic = clientPublic
