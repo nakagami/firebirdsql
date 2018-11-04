@@ -72,8 +72,8 @@ Optional
 param1, param2... are
 
 .. csv-table::
-   :header: Name,Description,Default value,Note
+   :header: Name,Description,Default,Note
 
    role,Role name,
-   auth_plugin_name,Authentication plugin name.,Srp,Srp256 or Srp or Legacy_Auth are available.
-   wire_crypt,Enable wire data encryption or not. It is for FB3+ server.,true,
+   auth_plugin_name,Authentication plugin name.,Srp,Srp256/Srp/Legacy_Auth are available.
+   wire_crypt,Enable wire data encryption or not.,true,For Firebird 3.0+
