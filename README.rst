@@ -77,4 +77,4 @@ param1, param2... are
    role,Role name,
    auth_plugin_name,Authentication plugin name.,Srp,Srp256/Srp/Legacy_Auth are available.
    wire_crypt,Enable wire data encryption or not.,true,For Firebird 3.0+
-   column_name_to_lower,column name to lower,false,Experimental
+   column_name_to_lower,column name to lower,false,Experimental for "github.com/jmoiron/sqlx"
