@@ -29,6 +29,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -256,6 +257,14 @@ func parseDSN(dsn string) (addr string, dbName string, user string, passwd strin
 	}
 
 	return
+}
+
+func convertToBool(s string, defaultValue bool) bool {
+	v, err := strconv.ParseBool(s)
+	if err != nil {
+		v = defaultValue
+	}
+	return v
 }
 
 func calcBlr(xsqlda []xSQLVAR) []byte {

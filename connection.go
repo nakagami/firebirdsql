@@ -25,8 +25,6 @@ package firebirdsql
 
 import (
 	"context"
-	"strconv"
-
 	"database/sql/driver"
 	"math/big"
 )
@@ -119,8 +117,7 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 		return
 	}
 
-	column_name_to_lower := true
-	column_name_to_lower, _ = strconv.ParseBool(options["column_name_to_lower"])
+	column_name_to_lower := convertToBool(options["column_name_to_lower"], true)
 
 	clientPublic, clientSecret := getClientSeed()
 
@@ -158,9 +155,7 @@ func createFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	if err != nil {
 		return
 	}
-
-	column_name_to_lower := true
-	column_name_to_lower, _ = strconv.ParseBool(options["column_name_to_lower"])
+	column_name_to_lower := convertToBool(options["column_name_to_lower"], true)
 
 	clientPublic, clientSecret := getClientSeed()
 
