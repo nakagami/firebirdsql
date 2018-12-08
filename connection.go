@@ -30,18 +30,18 @@ import (
 )
 
 type firebirdsqlConn struct {
-	wp                   *wireProtocol
-	tx                   *firebirdsqlTx
-	addr                 string
-	dbName               string
-	user                 string
-	password             string
-	column_name_to_lower bool
-	isAutocommit         bool
-	clientPublic         *big.Int
-	clientSecret         *big.Int
-	transHandles         []int32
-	timeZoneIds          map[int]string
+	wp                *wireProtocol
+	tx                *firebirdsqlTx
+	addr              string
+	dbName            string
+	user              string
+	password          string
+	columnNameToLower bool
+	isAutocommit      bool
+	clientPublic      *big.Int
+	clientSecret      *big.Int
+	transHandles      []int32
+	timeZoneIds       map[int]string
 }
 
 func (fc *firebirdsqlConn) begin(isolationLevel int) (driver.Tx, error) {
@@ -777,7 +777,7 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	fc.dbName = dbName
 	fc.user = user
 	fc.password = password
-	fc.column_name_to_lower = column_name_to_lower
+	fc.columnNameToLower = column_name_to_lower
 	fc.isAutocommit = true
 	fc.tx, err = newFirebirdsqlTx(fc, ISOLATION_LEVEL_READ_COMMITED, fc.isAutocommit)
 	fc.clientPublic = clientPublic
@@ -817,7 +817,7 @@ func createFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	fc.dbName = dbName
 	fc.user = user
 	fc.password = password
-	fc.column_name_to_lower = column_name_to_lower
+	fc.columnNameToLower = column_name_to_lower
 	fc.isAutocommit = true
 	fc.tx, err = newFirebirdsqlTx(fc, ISOLATION_LEVEL_READ_COMMITED, fc.isAutocommit)
 	fc.clientPublic = clientPublic
