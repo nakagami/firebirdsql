@@ -765,7 +765,7 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	if err != nil {
 		return
 	}
-	wp.opAttach(dbName, user, password, options["role"])
+	wp.opAttach(dbName, user, password, options["role"], options["tzname"])
 	wp.dbHandle, _, _, err = wp.opResponse()
 	if err != nil {
 		return
@@ -805,7 +805,7 @@ func createFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	if err != nil {
 		return
 	}
-	wp.opCreate(dbName, user, password, options["role"])
+	wp.opCreate(dbName, user, password, options["role"], options["tzname"])
 	wp.dbHandle, _, _, err = wp.opResponse()
 	if err != nil {
 		return

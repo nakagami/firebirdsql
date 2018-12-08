@@ -533,7 +533,7 @@ func (p *wireProtocol) opConnect(dbName string, user string, password string, op
 	p.sendPackets()
 }
 
-func (p *wireProtocol) opCreate(dbName string, user string, password string, role string) {
+func (p *wireProtocol) opCreate(dbName string, user string, password string, role string, tzname string) {
 	p.debugPrint("opCreate")
 	var page_size int32
 	page_size = 4096
@@ -560,6 +560,12 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 		dpb = bytes.Join([][]byte{
 			dpb,
 			[]byte{isc_dpb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)
+	}
+	if tzname != "" {
+		tznameBytes := []byte(tzname)
+		dpb = bytes.Join([][]byte{
+			dpb,
+			[]byte{isc_dpb_session_time_zone, byte(len(tznameBytes))}, tznameBytes}, nil)
 	}
 
 	p.packInt(op_create)
@@ -673,7 +679,7 @@ func (p *wireProtocol) opAccept(user string, password string, options map[string
 	return
 }
 
-func (p *wireProtocol) opAttach(dbName string, user string, password string, role string) {
+func (p *wireProtocol) opAttach(dbName string, user string, password string, role string, tzname string) {
 	p.debugPrint("opAttach")
 	encode := bytes.NewBufferString("UTF8").Bytes()
 	userBytes := bytes.NewBufferString(strings.ToUpper(user)).Bytes()
@@ -709,6 +715,13 @@ func (p *wireProtocol) opAttach(dbName string, user string, password string, rol
 			dpb,
 			[]byte{isc_dpb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)
 	}
+	if tzname != "" {
+		tznameBytes := []byte(tzname)
+		dpb = bytes.Join([][]byte{
+			dpb,
+			[]byte{isc_dpb_session_time_zone, byte(len(tznameBytes))}, tznameBytes}, nil)
+	}
+
 	p.packInt(op_attach)
 	p.packInt(0) // Database Object ID
 	p.packString(dbName)
