@@ -105,6 +105,7 @@ var xsqlvarTypeName = map[int]string{
 }
 
 type xSQLVAR struct {
+	wp         *wireProtocol
 	sqltype    int
 	sqlscale   int
 	sqlsubtype int
@@ -190,6 +191,12 @@ func (x *xSQLVAR) scantype() reflect.Type {
 	return reflect.TypeOf(nil)
 }
 
+func (x *xSQLVAR) _parseTimezone(raw_value []byte) *time.Location {
+	timezone := x.wp.tzNameById[int(bytes_to_bint32(raw_value))]
+	tz, _ := time.LoadLocation(timezone)
+	return tz
+}
+
 func (x *xSQLVAR) _parseDate(raw_value []byte) (int, int, int) {
 	nday := int(bytes_to_bint32(raw_value)) + 678882
 	century := (4*nday - 1) / 146097
@@ -224,19 +231,45 @@ func (x *xSQLVAR) _parseTime(raw_value []byte) (int, int, int, int) {
 }
 
 func (x *xSQLVAR) parseDate(raw_value []byte) time.Time {
+	tz := time.Local
+	if x.wp.timezone != "" {
+		tz, _ = time.LoadLocation(x.wp.timezone)
+	}
 	year, month, day := x._parseDate(raw_value)
-	return time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
+	return time.Date(year, time.Month(month), day, 0, 0, 0, 0, tz)
 }
 
 func (x *xSQLVAR) parseTime(raw_value []byte) time.Time {
+	tz := time.Local
+	if x.wp.timezone != "" {
+		tz, _ = time.LoadLocation(x.wp.timezone)
+	}
 	h, m, s, n := x._parseTime(raw_value)
-	return time.Date(0, time.Month(1), 1, h, m, s, n, time.UTC)
+	return time.Date(0, time.Month(1), 1, h, m, s, n, tz)
 }
 
 func (x *xSQLVAR) parseTimestamp(raw_value []byte) time.Time {
+	tz := time.Local
+	if x.wp.timezone != "" {
+		tz, _ = time.LoadLocation(x.wp.timezone)
+	}
+
 	year, month, day := x._parseDate(raw_value[:4])
 	h, m, s, n := x._parseTime(raw_value[4:])
-	return time.Date(year, time.Month(month), day, h, m, s, n, time.UTC)
+	return time.Date(year, time.Month(month), day, h, m, s, n, tz)
+}
+
+func (x *xSQLVAR) parseTimeTz(raw_value []byte) time.Time {
+	h, m, s, n := x._parseTime(raw_value[:4])
+	tz := x._parseTimezone(raw_value[4:])
+	return time.Date(0, time.Month(1), 1, h, m, s, n, tz)
+}
+
+func (x *xSQLVAR) parseTimestampTz(raw_value []byte) time.Time {
+	year, month, day := x._parseDate(raw_value[:4])
+	h, m, s, n := x._parseTime(raw_value[4:8])
+	tz := x._parseTimezone(raw_value[8:])
+	return time.Date(year, time.Month(month), day, h, m, s, n, tz)
 }
 
 func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
@@ -289,6 +322,10 @@ func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
 		v = x.parseTime(raw_value)
 	case SQL_TYPE_TIMESTAMP:
 		v = x.parseTimestamp(raw_value)
+	case SQL_TYPE_TIME_TZ:
+		v = x.parseTimeTz(raw_value)
+	case SQL_TYPE_TIMESTAMP_TZ:
+		v = x.parseTimestampTz(raw_value)
 	case SQL_TYPE_FLOAT:
 		var f32 float32
 		b := bytes.NewReader(raw_value)

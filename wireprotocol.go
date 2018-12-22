@@ -146,9 +146,14 @@ type wireProtocol struct {
 	user       string
 	password   string
 	authData   []byte
+
+	// Time Zone
+	timezone   string
+	tzNameById map[int]string
+	tzIdByName map[string]int
 }
 
-func newWireProtocol(addr string) (*wireProtocol, error) {
+func newWireProtocol(addr string, timezone string) (*wireProtocol, error) {
 	p := new(wireProtocol)
 	p.buf = make([]byte, 0, BUFFER_LEN)
 
@@ -159,6 +164,7 @@ func newWireProtocol(addr string) (*wireProtocol, error) {
 	}
 
 	p.conn, err = newWireChannel(conn)
+	p.timezone = timezone
 
 	return p, err
 }
@@ -472,6 +478,10 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
 			break
 		}
 	}
+
+	for i, _ := range xsqlda {
+		xsqlda[i].wp = p
+	}
 	return stmt_type, xsqlda, err
 }
 
@@ -533,7 +543,7 @@ func (p *wireProtocol) opConnect(dbName string, user string, password string, op
 	p.sendPackets()
 }
 
-func (p *wireProtocol) opCreate(dbName string, user string, password string, role string, tzname string) {
+func (p *wireProtocol) opCreate(dbName string, user string, password string, role string) {
 	p.debugPrint("opCreate")
 	var page_size int32
 	page_size = 4096
@@ -561,8 +571,8 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 			dpb,
 			[]byte{isc_dpb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)
 	}
-	if tzname != "" {
-		tznameBytes := []byte(tzname)
+	if p.timezone != "" {
+		tznameBytes := []byte(p.timezone)
 		dpb = bytes.Join([][]byte{
 			dpb,
 			[]byte{isc_dpb_session_time_zone, byte(len(tznameBytes))}, tznameBytes}, nil)
@@ -679,7 +689,7 @@ func (p *wireProtocol) opAccept(user string, password string, options map[string
 	return
 }
 
-func (p *wireProtocol) opAttach(dbName string, user string, password string, role string, tzname string) {
+func (p *wireProtocol) opAttach(dbName string, user string, password string, role string) {
 	p.debugPrint("opAttach")
 	encode := bytes.NewBufferString("UTF8").Bytes()
 	userBytes := bytes.NewBufferString(strings.ToUpper(user)).Bytes()
@@ -715,8 +725,8 @@ func (p *wireProtocol) opAttach(dbName string, user string, password string, rol
 			dpb,
 			[]byte{isc_dpb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)
 	}
-	if tzname != "" {
-		tznameBytes := []byte(tzname)
+	if p.timezone != "" {
+		tznameBytes := []byte(p.timezone)
 		dpb = bytes.Join([][]byte{
 			dpb,
 			[]byte{isc_dpb_session_time_zone, byte(len(tznameBytes))}, tznameBytes}, nil)

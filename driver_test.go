@@ -123,8 +123,8 @@ func TestBasic(t *testing.T) {
 	}
 
 	stmt, _ := conn.Prepare("select count(*) from foo where a=? and b=? and d=? and e=? and f=? and g=?")
-	ep := time.Date(1967, 8, 11, 0, 0, 0, 0, time.UTC)
-	fp := time.Date(1967, 8, 11, 23, 45, 1, 0, time.UTC)
+	ep := time.Date(1967, 8, 11, 0, 0, 0, 0, time.Local)
+	fp := time.Date(1967, 8, 11, 23, 45, 1, 0, time.Local)
 	gp, err := time.Parse("15:04:05", "23:45:01")
 	err = stmt.QueryRow(1, "a", -0.123, ep, fp, gp).Scan(&n)
 	if err != nil {
@@ -275,7 +275,7 @@ func TestInsertTimestamp(t *testing.T) {
 		t.Fatalf("Error creating table: %v", err)
 	}
 
-	dt1 := time.Date(2015, 2, 9, 19, 25, 50, 740500000, time.UTC)
+	dt1 := time.Date(2015, 2, 9, 19, 25, 50, 740500000, time.Local)
 	dt2 := "2015/2/9 19:25:50.7405"
 	dt3 := "2015-2-9 19:25:50.7405"
 

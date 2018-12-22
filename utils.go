@@ -244,7 +244,7 @@ func parseDSN(dsn string) (addr string, dbName string, user string, passwd strin
 		"auth_plugin_name":     "Srp",
 		"column_name_to_lower": "false",
 		"role":                 "",
-		"tzname":               "",
+		"timezone":             "",
 		"wire_crypt":           "true",
 	}
 
