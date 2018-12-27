@@ -27,9 +27,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"math"
-	//	"math/big"
 	"reflect"
 	"time"
+	"github.com/shopspring/decimal"
 )
 
 const (
@@ -157,20 +157,17 @@ func (x *xSQLVAR) scantype() reflect.Type {
 		return reflect.TypeOf("")
 	case SQL_TYPE_SHORT:
 		if x.sqlscale != 0 {
-			//return reflect.TypeOf(big.NewRat(0, 1))
-			return reflect.TypeOf(float64(0))
+			return reflect.TypeOf(decimal.Zero)
 		}
 		return reflect.TypeOf(int16(0))
 	case SQL_TYPE_LONG:
 		if x.sqlscale != 0 {
-			//return reflect.TypeOf(big.NewRat(0, 1))
-			return reflect.TypeOf(float64(0))
+			return reflect.TypeOf(decimal.Zero)
 		}
 		return reflect.TypeOf(int32(0))
 	case SQL_TYPE_INT64:
 		if x.sqlscale != 0 {
-			//return reflect.TypeOf(big.NewRat(0, 1))
-			return reflect.TypeOf(float64(0))
+			return reflect.TypeOf(decimal.Zero)
 		}
 		return reflect.TypeOf(int64(0))
 	case SQL_TYPE_DATE:
@@ -291,8 +288,7 @@ func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
 		if x.sqlscale > 0 {
 			v = int64(i16) * int64(math.Pow10(x.sqlscale))
 		} else if x.sqlscale < 0 {
-			//v = big.NewRat(int64(i16), int64(math.Pow10(x.sqlscale*-1)))
-			v = float64(i16) / float64(math.Pow10(x.sqlscale*-1))
+			v = decimal.New(int64(i16), int32(x.sqlscale))
 		} else {
 			v = i16
 		}
@@ -301,8 +297,7 @@ func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
 		if x.sqlscale > 0 {
 			v = int64(i32) * int64(math.Pow10(x.sqlscale))
 		} else if x.sqlscale < 0 {
-			//v = big.NewRat(int64(i32), int64(math.Pow10(x.sqlscale*-1)))
-			v = float64(i32) / float64(math.Pow10(x.sqlscale*-1))
+			v = decimal.New(int64(i32), int32(x.sqlscale))
 		} else {
 			v = i32
 		}
@@ -311,8 +306,7 @@ func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
 		if x.sqlscale > 0 {
 			v = i64 * int64(math.Pow10(x.sqlscale))
 		} else if x.sqlscale < 0 {
-			//v = big.NewRat(i64, int64(math.Pow10(x.sqlscale*-1)))
-			v = float64(i64) / float64(math.Pow10(x.sqlscale*-1))
+			v = decimal.New(int64(i64), int32(x.sqlscale))
 		} else {
 			v = i64
 		}
