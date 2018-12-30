@@ -362,7 +362,6 @@ func TestBoolean(t *testing.T) {
 
 	conn.Close()
 }
-*/
 
 func TestDecFloat(t *testing.T) {
 	temppath := TempFileName("test_decfloat_")
@@ -406,6 +405,7 @@ func TestDecFloat(t *testing.T) {
 
 	conn.Close()
 }
+*/
 
 func TestLegacyAuthWireCrypt(t *testing.T) {
 	temppath := TempFileName("test_legacy_atuh_")
