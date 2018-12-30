@@ -41,18 +41,6 @@ const (
 	DEBUG_SRP         = false
 )
 
-func bigFromHexString(s string) *big.Int {
-	ret := new(big.Int)
-	ret.SetString(s, 16)
-	return ret
-}
-
-func bigFromString(s string) *big.Int {
-	ret := new(big.Int)
-	ret.SetString(s, 10)
-	return ret
-}
-
 func bigToSha1(n *big.Int) []byte {
 	sha1 := sha1.New()
 	sha1.Write(n.Bytes())
@@ -82,30 +70,6 @@ func pad(v *big.Int) []byte {
 	for i = 0; buf[i] == 0; i++ {
 	}
 	return buf[i:]
-}
-
-func bigToBytes(v *big.Int) []byte {
-	buf := pad(v)
-	for i, _ := range buf {
-		if buf[i] != 0 {
-			return buf[i:]
-		}
-	}
-
-	return buf[:1] // 0
-}
-
-func bytesToBig(v []byte) (r *big.Int) {
-	m := new(big.Int)
-	m.SetInt64(256)
-	a := new(big.Int)
-	r = new(big.Int)
-	r.SetInt64(0)
-	for _, b := range v {
-		r = r.Mul(r, m)
-		r = r.Add(r, a.SetInt64(int64(b)))
-	}
-	return r
 }
 
 func getPrime() (prime *big.Int, g *big.Int, k *big.Int) {

@@ -28,6 +28,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"github.com/shopspring/decimal"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -110,7 +111,7 @@ func TestBasic(t *testing.T) {
 	}
 	var a int
 	var b, c string
-	var d float64
+	var d decimal.Decimal
 	var e time.Time
 	var f time.Time
 	var g time.Time
@@ -120,6 +121,7 @@ func TestBasic(t *testing.T) {
 
 	for rows.Next() {
 		rows.Scan(&a, &b, &c, &d, &e, &f, &g, &h, &i, &j)
+		//		fmt.Println(a, b, c, d, e, f, g, h, i, j)
 	}
 
 	stmt, _ := conn.Prepare("select count(*) from foo where a=? and b=? and d=? and e=? and f=? and g=?")
@@ -307,7 +309,9 @@ func TestInsertTimestamp(t *testing.T) {
 
 /*
 func TestBoolean(t *testing.T) {
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_fb3.fdb")
+	temppath := TempFileName("test_boolean_")
+
+	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
@@ -359,6 +363,49 @@ func TestBoolean(t *testing.T) {
 	conn.Close()
 }
 */
+
+func TestDecFloat(t *testing.T) {
+	temppath := TempFileName("test_decfloat_")
+
+	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+
+	sql := `
+        CREATE TABLE test_decfloat (
+            i integer,
+            d DECIMAL(20, 2),
+            df64 DECFLOAT(16),
+            df128 DECFLOAT(34)
+        )
+    `
+	conn.Exec(sql)
+	conn.Exec("insert into test_decfloat(i, d, df64, df128) values (1, 0.0, 0.0, 0.0)")
+	conn.Exec("insert into test_decfloat(i, d, df64, df128) values (2, 1.0, 1.0, 1.0)")
+	conn.Exec("insert into test_decfloat(i, d, df64, df128) values (3, 20.0, 20.0, 20.0)")
+	conn.Exec("insert into test_decfloat(i, d, df64, df128) values (4, -1.0, -1.0, -1.0)")
+	conn.Exec("insert into test_decfloat(i, d, df64, df128) values (5, -20.0, -20.0, -20.0)")
+
+	var n int
+	err = conn.QueryRow("select count(*) cnt from test_decfloat").Scan(&n)
+	if err != nil {
+		t.Fatalf("Error QueryRow: %v", err)
+	}
+	if n != 5 {
+		t.Fatalf("Error bad record count: %v", n)
+	}
+
+	rows, err := conn.Query("select d, df64, df128 from test_decfloat order by i")
+
+	var d, df64, df128 decimal.Decimal
+	for rows.Next() {
+		rows.Scan(&d, &df64, &df128)
+		fmt.Println(d, df64, df128)
+	}
+
+	conn.Close()
+}
 
 func TestLegacyAuthWireCrypt(t *testing.T) {
 	temppath := TempFileName("test_legacy_atuh_")

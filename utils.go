@@ -28,6 +28,7 @@ import (
 	"container/list"
 	"encoding/binary"
 	"errors"
+	"math/big"
 	"net/url"
 	"strconv"
 	"strings"
@@ -93,6 +94,61 @@ func bytes_to_int64(b []byte) int64 {
 	return int64(binary.LittleEndian.Uint64(b))
 }
 
+func bigFromHexString(s string) *big.Int {
+	ret := new(big.Int)
+	ret.SetString(s, 16)
+	return ret
+}
+
+func bigFromString(s string) *big.Int {
+	ret := new(big.Int)
+	ret.SetString(s, 10)
+	return ret
+}
+
+func bigToBytes(v *big.Int) []byte {
+	buf := pad(v)
+	for i, _ := range buf {
+		if buf[i] != 0 {
+			return buf[i:]
+		}
+	}
+
+	return buf[:1] // 0
+}
+
+func bytesToBig(v []byte) (r *big.Int) {
+	m := new(big.Int)
+	m.SetInt64(256)
+	a := new(big.Int)
+	r = new(big.Int)
+	r.SetInt64(0)
+	for _, b := range v {
+		r = r.Mul(r, m)
+		r = r.Add(r, a.SetInt64(int64(b)))
+	}
+	return r
+}
+
+func flattenBytes(l *list.List) []byte {
+	n := 0
+	for e := l.Front(); e != nil; e = e.Next() {
+		n += len((e.Value).([]byte))
+	}
+
+	bs := make([]byte, n)
+
+	n = 0
+	for e := l.Front(); e != nil; e = e.Next() {
+		for i, b := range (e.Value).([]byte) {
+			bs[n+i] = b
+		}
+		n += len((e.Value).([]byte))
+	}
+
+	return bs
+}
+
 func xdrBytes(bs []byte) []byte {
 	// XDR encoding bytes
 	n := len(bs)
@@ -115,25 +171,6 @@ func xdrString(s string) []byte {
 	// XDR encoding string
 	bs := bytes.NewBufferString(s).Bytes()
 	return xdrBytes(bs)
-}
-
-func flattenBytes(l *list.List) []byte {
-	n := 0
-	for e := l.Front(); e != nil; e = e.Next() {
-		n += len((e.Value).([]byte))
-	}
-
-	bs := make([]byte, n)
-
-	n = 0
-	for e := l.Front(); e != nil; e = e.Next() {
-		for i, b := range (e.Value).([]byte) {
-			bs[n+i] = b
-		}
-		n += len((e.Value).([]byte))
-	}
-
-	return bs
 }
 
 func _int32ToBlr(i32 int32) ([]byte, []byte) {

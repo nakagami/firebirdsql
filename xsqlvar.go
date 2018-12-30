@@ -26,10 +26,10 @@ package firebirdsql
 import (
 	"bytes"
 	"encoding/binary"
+	"github.com/shopspring/decimal"
 	"math"
 	"reflect"
 	"time"
-	"github.com/shopspring/decimal"
 )
 
 const (
@@ -57,51 +57,67 @@ const (
 )
 
 var xsqlvarTypeLength = map[int]int{
-	SQL_TYPE_VARYING:   -1,
-	SQL_TYPE_SHORT:     4,
-	SQL_TYPE_LONG:      4,
-	SQL_TYPE_FLOAT:     4,
-	SQL_TYPE_TIME:      4,
-	SQL_TYPE_DATE:      4,
-	SQL_TYPE_DOUBLE:    8,
-	SQL_TYPE_TIMESTAMP: 8,
-	SQL_TYPE_BLOB:      8,
-	SQL_TYPE_ARRAY:     8,
-	SQL_TYPE_QUAD:      8,
-	SQL_TYPE_INT64:     8,
-	SQL_TYPE_BOOLEAN:   1,
+	SQL_TYPE_VARYING:      -1,
+	SQL_TYPE_SHORT:        4,
+	SQL_TYPE_LONG:         4,
+	SQL_TYPE_FLOAT:        4,
+	SQL_TYPE_TIME:         4,
+	SQL_TYPE_DATE:         4,
+	SQL_TYPE_DOUBLE:       8,
+	SQL_TYPE_TIMESTAMP:    8,
+	SQL_TYPE_BLOB:         8,
+	SQL_TYPE_ARRAY:        8,
+	SQL_TYPE_QUAD:         8,
+	SQL_TYPE_INT64:        8,
+	SQL_TYPE_TIMESTAMP_TZ: 10,
+	SQL_TYPE_TIME_TZ:      6,
+	SQL_TYPE_DEC64:        8,
+	SQL_TYPE_DEC128:       16,
+	SQL_TYPE_DEC_FIXED:    16,
+	SQL_TYPE_BOOLEAN:      1,
 }
 
 var xsqlvarTypeDisplayLength = map[int]int{
-	SQL_TYPE_VARYING:   -1,
-	SQL_TYPE_SHORT:     6,
-	SQL_TYPE_LONG:      11,
-	SQL_TYPE_FLOAT:     17,
-	SQL_TYPE_TIME:      11,
-	SQL_TYPE_DATE:      10,
-	SQL_TYPE_DOUBLE:    17,
-	SQL_TYPE_TIMESTAMP: 22,
-	SQL_TYPE_BLOB:      0,
-	SQL_TYPE_ARRAY:     -1,
-	SQL_TYPE_QUAD:      20,
-	SQL_TYPE_INT64:     20,
-	SQL_TYPE_BOOLEAN:   5,
+	SQL_TYPE_VARYING:      -1,
+	SQL_TYPE_SHORT:        6,
+	SQL_TYPE_LONG:         11,
+	SQL_TYPE_FLOAT:        17,
+	SQL_TYPE_TIME:         11,
+	SQL_TYPE_DATE:         10,
+	SQL_TYPE_DOUBLE:       17,
+	SQL_TYPE_TIMESTAMP:    22,
+	SQL_TYPE_BLOB:         0,
+	SQL_TYPE_ARRAY:        -1,
+	SQL_TYPE_QUAD:         20,
+	SQL_TYPE_INT64:        20,
+	SQL_TYPE_TIMESTAMP_TZ: 28,
+	SQL_TYPE_TIME_TZ:      17,
+	SQL_TYPE_DEC64:        16,
+	SQL_TYPE_DEC128:       34,
+	SQL_TYPE_DEC_FIXED:    34,
+
+	SQL_TYPE_BOOLEAN: 5,
 }
 
 var xsqlvarTypeName = map[int]string{
-	SQL_TYPE_VARYING:   "VARYING",
-	SQL_TYPE_SHORT:     "SHORT",
-	SQL_TYPE_LONG:      "LONG",
-	SQL_TYPE_FLOAT:     "FLOAT",
-	SQL_TYPE_TIME:      "TIME",
-	SQL_TYPE_DATE:      "DATE",
-	SQL_TYPE_DOUBLE:    "DOUBLE",
-	SQL_TYPE_TIMESTAMP: "TIMESTAMP",
-	SQL_TYPE_BLOB:      "BLOB",
-	SQL_TYPE_ARRAY:     "ARRAY",
-	SQL_TYPE_QUAD:      "QUAD",
-	SQL_TYPE_INT64:     "INT64",
-	SQL_TYPE_BOOLEAN:   "BOOLEAN",
+	SQL_TYPE_VARYING:      "VARYING",
+	SQL_TYPE_SHORT:        "SHORT",
+	SQL_TYPE_LONG:         "LONG",
+	SQL_TYPE_FLOAT:        "FLOAT",
+	SQL_TYPE_TIME:         "TIME",
+	SQL_TYPE_DATE:         "DATE",
+	SQL_TYPE_DOUBLE:       "DOUBLE",
+	SQL_TYPE_TIMESTAMP:    "TIMESTAMP",
+	SQL_TYPE_BLOB:         "BLOB",
+	SQL_TYPE_ARRAY:        "ARRAY",
+	SQL_TYPE_QUAD:         "QUAD",
+	SQL_TYPE_INT64:        "INT64",
+	SQL_TYPE_TIMESTAMP_TZ: "TIMESTAMP WITH TIMEZONE",
+	SQL_TYPE_TIME_TZ:      "TIME WITH TIMEZONE",
+	SQL_TYPE_DEC64:        "DECFLOAT(16)",
+	SQL_TYPE_DEC128:       "DECFLOAT(34)",
+	SQL_TYPE_DEC_FIXED:    "DECFIXED",
+	SQL_TYPE_BOOLEAN:      "BOOLEAN",
 }
 
 type xSQLVAR struct {
@@ -142,7 +158,7 @@ func (x *xSQLVAR) scale() int {
 }
 
 func (x *xSQLVAR) hasPrecisionScale() bool {
-	return (x.sqltype == SQL_TYPE_SHORT || x.sqltype == SQL_TYPE_LONG || x.sqltype == SQL_TYPE_QUAD || x.sqltype == SQL_TYPE_INT64) && x.sqlscale != 0
+	return (x.sqltype == SQL_TYPE_SHORT || x.sqltype == SQL_TYPE_LONG || x.sqltype == SQL_TYPE_QUAD || x.sqltype == SQL_TYPE_INT64 || x.sqltype == SQL_TYPE_DEC64 || x.sqltype == SQL_TYPE_DEC128 || x.sqltype == SQL_TYPE_DEC_FIXED) && x.sqlscale != 0
 }
 
 func (x *xSQLVAR) typename() string {
@@ -184,6 +200,16 @@ func (x *xSQLVAR) scantype() reflect.Type {
 		return reflect.TypeOf(false)
 	case SQL_TYPE_BLOB:
 		return reflect.TypeOf([]byte{})
+	case SQL_TYPE_TIMESTAMP_TZ:
+		return reflect.TypeOf(time.Time{})
+	case SQL_TYPE_TIME_TZ:
+		return reflect.TypeOf(time.Time{})
+	case SQL_TYPE_DEC64:
+		return reflect.TypeOf(decimal.Zero)
+	case SQL_TYPE_DEC128:
+		return reflect.TypeOf(decimal.Zero)
+	case SQL_TYPE_DEC_FIXED:
+		return reflect.TypeOf(decimal.Zero)
 	}
 	return reflect.TypeOf(nil)
 }
@@ -334,6 +360,12 @@ func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
 		v = raw_value[0] != 0
 	case SQL_TYPE_BLOB:
 		v = raw_value
+	case SQL_TYPE_DEC_FIXED:
+		v = decimalFixedToDecimal(raw_value, int32(x.sqlscale))
+	case SQL_TYPE_DEC64:
+		v = decimal64ToDecimal(raw_value)
+	case SQL_TYPE_DEC128:
+		v = decimal128ToDecimal(raw_value)
 	}
 	return
 }
