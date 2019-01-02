@@ -171,7 +171,7 @@ func decimal128ToSignDigitsExponent(b []byte) (v *decimal.Decimal, sign int, dig
 
 	dpdBits := bytesToBig(b)
 	mask := bigFromHexString("3fffffffffffffffffffffffffff")
-	dpdBits.Add(dpdBits, mask)
+	dpdBits.And(dpdBits, mask)
 	digits = calcSignificand(prefix, dpdBits, 110)
 
 	return
