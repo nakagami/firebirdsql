@@ -28,7 +28,6 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
-	"github.com/shopspring/decimal"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -111,7 +110,7 @@ func TestBasic(t *testing.T) {
 	}
 	var a int
 	var b, c string
-	var d decimal.Decimal
+	var d float64
 	var e time.Time
 	var f time.Time
 	var g time.Time
