@@ -349,13 +349,9 @@ func calcBlr(xsqlda []xSQLVAR) []byte {
 			blr[n] = 9
 			blr[n+1] = byte(sqlscale)
 			n += 2
-		case SQL_TYPE_BLOB:
-			blr[n] = 9
-			blr[n+1] = 0
-			n += 2
-		case SQL_TYPE_ARRAY:
-			blr[n] = 9
-			blr[n+1] = 0
+		case SQL_TYPE_DEC_FIXED:
+			blr[n] = 26
+			blr[n+1] = byte(sqlscale)
 			n += 2
 		case SQL_TYPE_DOUBLE:
 			blr[n] = 27
@@ -375,8 +371,28 @@ func calcBlr(xsqlda []xSQLVAR) []byte {
 		case SQL_TYPE_TIMESTAMP:
 			blr[n] = 35
 			n += 1
+		case SQL_TYPE_BLOB:
+			blr[n] = 9
+			blr[n+1] = 0
+			n += 2
+		case SQL_TYPE_ARRAY:
+			blr[n] = 9
+			blr[n+1] = 0
+			n += 2
 		case SQL_TYPE_BOOLEAN:
 			blr[n] = 23
+			n += 1
+		case SQL_TYPE_DEC64:
+			blr[n] = 24
+			n += 1
+		case SQL_TYPE_DEC128:
+			blr[n] = 25
+			n += 1
+		case SQL_TYPE_TIME_TZ:
+			blr[n] = 28
+			n += 1
+		case SQL_TYPE_TIMESTAMP_TZ:
+			blr[n] = 29
 			n += 1
 		}
 		// [blr_short, 0]
