@@ -173,17 +173,17 @@ func (x *xSQLVAR) scantype() reflect.Type {
 		return reflect.TypeOf("")
 	case SQL_TYPE_SHORT:
 		if x.sqlscale != 0 {
-			return reflect.TypeOf(decimal.Zero)
+			return reflect.TypeOf(decimal.Decimal{})
 		}
 		return reflect.TypeOf(int16(0))
 	case SQL_TYPE_LONG:
 		if x.sqlscale != 0 {
-			return reflect.TypeOf(decimal.Zero)
+			return reflect.TypeOf(decimal.Decimal{})
 		}
 		return reflect.TypeOf(int32(0))
 	case SQL_TYPE_INT64:
 		if x.sqlscale != 0 {
-			return reflect.TypeOf(decimal.Zero)
+			return reflect.TypeOf(decimal.Decimal{})
 		}
 		return reflect.TypeOf(int64(0))
 	case SQL_TYPE_DATE:
@@ -205,11 +205,11 @@ func (x *xSQLVAR) scantype() reflect.Type {
 	case SQL_TYPE_TIME_TZ:
 		return reflect.TypeOf(time.Time{})
 	case SQL_TYPE_DEC64:
-		return reflect.TypeOf(decimal.Zero)
+		return reflect.TypeOf(decimal.Decimal{})
 	case SQL_TYPE_DEC128:
-		return reflect.TypeOf(decimal.Zero)
+		return reflect.TypeOf(decimal.Decimal{})
 	case SQL_TYPE_DEC_FIXED:
-		return reflect.TypeOf(decimal.Zero)
+		return reflect.TypeOf(decimal.Decimal{})
 	}
 	return reflect.TypeOf(nil)
 }
