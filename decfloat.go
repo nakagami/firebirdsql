@@ -195,13 +195,12 @@ func decimal64ToDecimal(b []byte) decimal.Decimal {
 	if (b[0] & 0x80) == 0x80 {
 		sign = 1
 	}
-
 	cf := (uint32(b[0]) >> 2) & 0x1f
 	exponent := ((int32(b[0]) & 3) << 6) + ((int32(b[1]) >> 2) & 0x3f)
 
 	dpdBits := bytesToBig(b)
 	mask := bigFromHexString("3ffffffffffff")
-	dpdBits.Add(dpdBits, mask)
+	dpdBits.And(dpdBits, mask)
 
 	if cf == 0x1f {
 		if sign == 1 {
