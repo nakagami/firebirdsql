@@ -37,7 +37,7 @@ func dpdBitToInt(dpd uint, mask uint) int {
 	}
 }
 
-func dpdToInt(dpd uint) int {
+func dpdToInt(dpd uint) int64 {
 	// Convert DPD encodined value to int (0-999)
 	// dpd: DPD encoded value. 10bit unsigned int
 
@@ -90,7 +90,7 @@ func dpdToInt(dpd uint) int {
 		panic("Invalid DPD encoding")
 	}
 
-	return d[2]*100 + d[1]*10 + d[0]
+	return int64(d[2])*100 + int64(d[1])*10 + int64(d[0])
 }
 
 func calcSignificand(prefix int64, dpdBits *big.Int, numBits int) *big.Int {
@@ -113,7 +113,7 @@ func calcSignificand(prefix int64, dpdBits *big.Int, numBits int) *big.Int {
 	bi1000 := big.NewInt(1000)
 	for _, dpd := range segments {
 		v.Mul(v, bi1000)
-		v.Add(v, big.NewInt(int64(dpd)))
+		v.Add(v, big.NewInt(dpdToInt(dpd)))
 	}
 
 	return v
