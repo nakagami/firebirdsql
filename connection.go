@@ -766,7 +766,7 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	clientPublic, clientSecret := getClientSeed()
 
 	wp.opConnect(dbName, user, password, options, clientPublic)
-	err = wp.opAccept(user, password, options, clientPublic, clientSecret)
+	err = wp._parse_connect_response(user, password, options, clientPublic, clientSecret)
 	if err != nil {
 		return
 	}
@@ -806,7 +806,7 @@ func createFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	clientPublic, clientSecret := getClientSeed()
 
 	wp.opConnect(dbName, user, password, options, clientPublic)
-	err = wp.opAccept(user, password, options, clientPublic, clientSecret)
+	err = wp._parse_connect_response(user, password, options, clientPublic, clientSecret)
 	if err != nil {
 		return
 	}
