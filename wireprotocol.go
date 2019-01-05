@@ -40,7 +40,7 @@ import (
 	"time"
 
 	"github.com/kardianos/osext"
-	"github.com/nyarla/go-crypt"
+	"gitlab.com/nyarla/go-crypt"
 	//"unsafe"
 )
 
