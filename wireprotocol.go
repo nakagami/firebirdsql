@@ -1085,7 +1085,10 @@ func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) ([]driver.Value, error) {
 	}
 
 	b, err = p.recvPackets(4)
-	// count := int(bytes_to_bint32(b))
+	count := int(bytes_to_bint32(b))
+	if count == 0 {
+		return nil, nil
+	}
 
 	r := make([]driver.Value, len(xsqlda))
 	var ln int
