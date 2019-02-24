@@ -86,10 +86,14 @@ func (stmt *firebirdsqlStmt) Exec(args []driver.Value) (result driver.Result, er
 	return stmt.exec(context.Background(), args)
 }
 
-func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (rows driver.Rows, err error) {
+func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (driver.Rows, error) {
+	var rows driver.Rows
+	var err error
+	var result []driver.Value
+
 	if stmt.stmtType == isc_info_sql_stmt_exec_procedure {
 		stmt.wp.opExecute2(stmt.stmtHandle, stmt.tx.transHandle, args, stmt.blr)
-		result, _ := stmt.wp.opSqlResponse(stmt.xsqlda)
+		result, err = stmt.wp.opSqlResponse(stmt.xsqlda)
 		rows = newFirebirdsqlRows(stmt, result)
 		_, _, _, err = stmt.wp.opResponse()
 	} else {
@@ -97,7 +101,7 @@ func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (ro
 		_, _, _, err = stmt.wp.opResponse()
 		rows = newFirebirdsqlRows(stmt, nil)
 	}
-	return
+	return rows, err
 }
 
 func (stmt *firebirdsqlStmt) Query(args []driver.Value) (rows driver.Rows, err error) {
