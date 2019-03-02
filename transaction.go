@@ -28,6 +28,7 @@ type firebirdsqlTx struct {
 	isolationLevel int
 	isAutocommit   bool
 	transHandle    int32
+	needBegin      bool
 }
 
 func (tx *firebirdsqlTx) begin() (err error) {
@@ -74,21 +75,31 @@ func (tx *firebirdsqlTx) begin() (err error) {
 	}
 	tx.fc.wp.opTransaction(tpb)
 	tx.transHandle, _, _, err = tx.fc.wp.opResponse()
-	tx.fc.transHandles = append(tx.fc.transHandles, tx.transHandle)
+	tx.needBegin = false
+	tx.fc.transactions = append(tx.fc.transactions, tx)
 	return
 }
 
-func (tx *firebirdsqlTx) Commit() (err error) {
+func (tx *firebirdsqlTx) commitRetainging() (err error) {
 	tx.fc.wp.opCommitRetaining(tx.transHandle)
 	_, _, _, err = tx.fc.wp.opResponse()
 	tx.isAutocommit = tx.fc.isAutocommit
 	return
 }
 
-func (tx *firebirdsqlTx) Rollback() (err error) {
-	tx.fc.wp.opRollbackRetaining(tx.transHandle)
+func (tx *firebirdsqlTx) Commit() (err error) {
+	tx.fc.wp.opCommit(tx.transHandle)
 	_, _, _, err = tx.fc.wp.opResponse()
 	tx.isAutocommit = tx.fc.isAutocommit
+	tx.needBegin = true
+	return
+}
+
+func (tx *firebirdsqlTx) Rollback() (err error) {
+	tx.fc.wp.opRollback(tx.transHandle)
+	_, _, _, err = tx.fc.wp.opResponse()
+	tx.isAutocommit = tx.fc.isAutocommit
+	tx.needBegin = true
 	return
 }
 

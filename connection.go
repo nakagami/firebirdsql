@@ -40,7 +40,7 @@ type firebirdsqlConn struct {
 	isAutocommit      bool
 	clientPublic      *big.Int
 	clientSecret      *big.Int
-	transHandles      []int32
+	transactions      []*firebirdsqlTx
 }
 
 func (fc *firebirdsqlConn) begin(isolationLevel int) (driver.Tx, error) {
@@ -54,14 +54,10 @@ func (fc *firebirdsqlConn) Begin() (driver.Tx, error) {
 }
 
 func (fc *firebirdsqlConn) Close() (err error) {
-	for _, h := range fc.transHandles {
-		fc.wp.opRollback(h)
+	for _, tx := range fc.transactions {
+		tx.Rollback()
 	}
 
-	_, _, _, err = fc.wp.opResponse()
-	if err != nil {
-		return
-	}
 	fc.wp.opDetach()
 	_, _, _, err = fc.wp.opResponse()
 	fc.wp.conn.Close()
@@ -77,16 +73,25 @@ func (fc *firebirdsqlConn) Prepare(query string) (driver.Stmt, error) {
 }
 
 func (fc *firebirdsqlConn) exec(ctx context.Context, query string, args []driver.Value) (result driver.Result, err error) {
+
+	if fc.tx.needBegin {
+		err = fc.tx.begin()
+		if err != nil {
+			return
+		}
+	}
+
 	stmt, err := fc.prepare(ctx, query)
 	if err != nil {
 		return
 	}
+
 	result, err = stmt.(*firebirdsqlStmt).exec(ctx, args)
 	if err != nil {
 		return
 	}
 	if fc.isAutocommit && fc.tx.isAutocommit {
-		fc.tx.Commit()
+		fc.tx.commitRetainging()
 	}
 	stmt.Close()
 	return
@@ -108,7 +113,6 @@ func (fc *firebirdsqlConn) query(ctx context.Context, query string, args []drive
 func (fc *firebirdsqlConn) Query(query string, args []driver.Value) (rows driver.Rows, err error) {
 	return fc.query(context.Background(), query, args)
 }
-
 
 func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	addr, dbName, user, password, options, err := parseDSN(dsn)

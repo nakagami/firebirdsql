@@ -469,7 +469,6 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 	return
 }
 
-
 func (p *wireProtocol) _parse_select_items(buf []byte, xsqlda []xSQLVAR) (int, error) {
 	var err error
 	var ln int
