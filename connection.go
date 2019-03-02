@@ -40,7 +40,7 @@ type firebirdsqlConn struct {
 	isAutocommit      bool
 	clientPublic      *big.Int
 	clientSecret      *big.Int
-	transactions      []*firebirdsqlTx
+	transactionSet    map[*firebirdsqlTx]struct{}
 }
 
 func (fc *firebirdsqlConn) begin(isolationLevel int) (driver.Tx, error) {
@@ -54,7 +54,7 @@ func (fc *firebirdsqlConn) Begin() (driver.Tx, error) {
 }
 
 func (fc *firebirdsqlConn) Close() (err error) {
-	for _, tx := range fc.transactions {
+	for tx, _ := range fc.transactionSet {
 		tx.Rollback()
 	}
 
@@ -138,6 +138,7 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	}
 
 	fc = new(firebirdsqlConn)
+	fc.transactionSet = make(map[*firebirdsqlTx]struct{})
 	fc.wp = wp
 	fc.addr = addr
 	fc.dbName = dbName
@@ -178,6 +179,7 @@ func createFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	}
 
 	fc = new(firebirdsqlConn)
+	fc.transactionSet = make(map[*firebirdsqlTx]struct{})
 	fc.wp = wp
 	fc.addr = addr
 	fc.dbName = dbName

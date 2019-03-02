@@ -76,7 +76,7 @@ func (tx *firebirdsqlTx) begin() (err error) {
 	tx.fc.wp.opTransaction(tpb)
 	tx.transHandle, _, _, err = tx.fc.wp.opResponse()
 	tx.needBegin = false
-	tx.fc.transactions = append(tx.fc.transactions, tx)
+	tx.fc.transactionSet[tx] = struct{}{}
 	return
 }
 
