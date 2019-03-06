@@ -46,6 +46,7 @@ func TestDSNParse(t *testing.T) {
 		{"user:password@localhost/dbname?role=role", "localhost:3050", "dbname", "user", "password", "role", "Srp", "true"},
 		{"user:password@localhost:3000/c:/fbdata/database.fdb?role=role&wire_crypt=false", "localhost:3000", "c:/fbdata/database.fdb", "user", "password", "role", "Srp", "false"},
 		{"firebird://user:password@localhost:3000/dbname", "localhost:3000", "dbname", "user", "password", "", "Srp", "true"},
+		{"firebird://user:%21p%40ssword%3F@localhost:3050/dbname", "localhost:3050", "dbname", "user", "!p@ssword?", "", "Srp", "true"},
 	}
 
 	for _, d := range testDSNs {
