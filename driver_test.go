@@ -1,7 +1,7 @@
 /*******************************************************************************
 The MIT License (MIT)
 
-Copyright (c) 2013-2016 Hajime Nakagami
+Copyright (c) 2013-2019 Hajime Nakagami
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
@@ -120,11 +120,12 @@ func TestBasic(t *testing.T) {
 
 	for rows.Next() {
 		rows.Scan(&a, &b, &c, &d, &e, &f, &g, &h, &i, &j)
+		//		fmt.Println(a, b, c, d, e, f, g, h, i, j)
 	}
 
 	stmt, _ := conn.Prepare("select count(*) from foo where a=? and b=? and d=? and e=? and f=? and g=?")
-	ep := time.Date(1967, 8, 11, 0, 0, 0, 0, time.UTC)
-	fp := time.Date(1967, 8, 11, 23, 45, 1, 0, time.UTC)
+	ep := time.Date(1967, 8, 11, 0, 0, 0, 0, time.Local)
+	fp := time.Date(1967, 8, 11, 23, 45, 1, 0, time.Local)
 	gp, err := time.Parse("15:04:05", "23:45:01")
 	err = stmt.QueryRow(1, "a", -0.123, ep, fp, gp).Scan(&n)
 	if err != nil {
@@ -275,7 +276,7 @@ func TestInsertTimestamp(t *testing.T) {
 		t.Fatalf("Error creating table: %v", err)
 	}
 
-	dt1 := time.Date(2015, 2, 9, 19, 25, 50, 740500000, time.UTC)
+	dt1 := time.Date(2015, 2, 9, 19, 25, 50, 740500000, time.Local)
 	dt2 := "2015/2/9 19:25:50.7405"
 	dt3 := "2015-2-9 19:25:50.7405"
 
@@ -307,7 +308,9 @@ func TestInsertTimestamp(t *testing.T) {
 
 /*
 func TestBoolean(t *testing.T) {
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050/tmp/go_test_fb3.fdb")
+	temppath := TempFileName("test_boolean_")
+
+	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
@@ -354,6 +357,49 @@ func TestBoolean(t *testing.T) {
 	}
 	if b != false{
 		conn.Exec("Invalid boolean value")
+	}
+
+	conn.Close()
+}
+
+func TestDecFloat(t *testing.T) {
+	temppath := TempFileName("test_decfloat_")
+
+	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+
+	sql := `
+        CREATE TABLE test_decfloat (
+            i integer,
+            d DECIMAL(20, 2),
+            df64 DECFLOAT(16),
+            df128 DECFLOAT(34)
+        )
+    `
+	conn.Exec(sql)
+	conn.Exec("insert into test_decfloat(i, d, df64, df128) values (1, 0.0, 0.0, 0.0)")
+	conn.Exec("insert into test_decfloat(i, d, df64, df128) values (2, 1.0, 1.0, 1.0)")
+	conn.Exec("insert into test_decfloat(i, d, df64, df128) values (3, 20.0, 20.0, 20.0)")
+	conn.Exec("insert into test_decfloat(i, d, df64, df128) values (4, -1.0, -1.0, -1.0)")
+	conn.Exec("insert into test_decfloat(i, d, df64, df128) values (5, -20.0, -20.0, -20.0)")
+
+	var n int
+	err = conn.QueryRow("select count(*) cnt from test_decfloat").Scan(&n)
+	if err != nil {
+		t.Fatalf("Error QueryRow: %v", err)
+	}
+	if n != 5 {
+		t.Fatalf("Error bad record count: %v", n)
+	}
+
+	rows, err := conn.Query("select d, df64, df128 from test_decfloat order by i")
+
+	var d, df64, df128 decimal.Decimal
+	for rows.Next() {
+		rows.Scan(&d, &df64, &df128)
+		fmt.Println(d, df64, df128)
 	}
 
 	conn.Close()

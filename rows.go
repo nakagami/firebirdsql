@@ -1,7 +1,7 @@
 /*******************************************************************************
 The MIT License (MIT)
 
-Copyright (c) 2013-2016 Hajime Nakagami
+Copyright (c) 2013-2019 Hajime Nakagami
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
@@ -29,6 +29,7 @@ import (
 	"database/sql/driver"
 	"io"
 	"reflect"
+	"strings"
 )
 
 type firebirdsqlRows struct {
@@ -52,6 +53,9 @@ func (rows *firebirdsqlRows) Columns() []string {
 	columns := make([]string, len(rows.stmt.xsqlda))
 	for i, x := range rows.stmt.xsqlda {
 		columns[i] = x.aliasname
+		if rows.stmt.tx.fc.columnNameToLower {
+			columns[i] = strings.ToLower(columns[i])
+		}
 	}
 	return columns
 }

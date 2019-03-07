@@ -1,7 +1,7 @@
 /*******************************************************************************
 The MIT License (MIT)
 
-Copyright (c) 2014 Hajime Nakagami
+Copyright (c) 2014-2019 Hajime Nakagami
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
@@ -26,7 +26,9 @@ package firebirdsql
 import (
 	"bytes"
 	"crypto/sha1"
+	"crypto/sha256"
 	"github.com/cznic/mathutil"
+	"hash"
 	"math/big"
 	"math/rand"
 	"time"
@@ -38,18 +40,6 @@ const (
 	DEBUG_PRIVATE_KEY = "60975527035CF2AD1989806F0407210BC81EDC04E2762A56AFD529DDDA2D4393"
 	DEBUG_SRP         = false
 )
-
-func bigFromHexString(s string) *big.Int {
-	ret := new(big.Int)
-	ret.SetString(s, 16)
-	return ret
-}
-
-func bigFromString(s string) *big.Int {
-	ret := new(big.Int)
-	ret.SetString(s, 10)
-	return ret
-}
 
 func bigToSha1(n *big.Int) []byte {
 	sha1 := sha1.New()
@@ -80,30 +70,6 @@ func pad(v *big.Int) []byte {
 	for i = 0; buf[i] == 0; i++ {
 	}
 	return buf[i:]
-}
-
-func bigToBytes(v *big.Int) []byte {
-	buf := pad(v)
-	for i, _ := range buf {
-		if buf[i] != 0 {
-			return buf[i:]
-		}
-	}
-
-	return buf[:1] // 0
-}
-
-func bytesToBig(v []byte) (r *big.Int) {
-	m := new(big.Int)
-	m.SetInt64(256)
-	a := new(big.Int)
-	r = new(big.Int)
-	r.SetInt64(0)
-	for _, b := range v {
-		r = r.Mul(r, m)
-		r = r.Add(r, a.SetInt64(int64(b)))
-	}
-	return r
 }
 
 func getPrime() (prime *big.Int, g *big.Int, k *big.Int) {
@@ -202,7 +168,7 @@ func getServerSession(user string, password string, salt []byte, keyA *big.Int, 
 	return bigToSha1(sessionSecret)
 }
 
-func getClientProof(user string, password string, salt []byte, keyA *big.Int, keyB *big.Int, keya *big.Int) (keyM []byte, keyK []byte) {
+func getClientProof(user string, password string, salt []byte, keyA *big.Int, keyB *big.Int, keya *big.Int, pluginName string) (keyM []byte, keyK []byte) {
 	// M = H(H(N) xor H(g), H(I), s, A, B, K)
 	prime, g, _ := getPrime()
 	keyK = getClientSession(user, password, salt, keyA, keyB, keya)
@@ -211,14 +177,22 @@ func getClientProof(user string, password string, salt []byte, keyA *big.Int, ke
 	n2 := bytesToBig(bigToSha1(g))
 	n3 := mathutil.ModPowBigInt(n1, n2, prime)
 	n4 := getStringHash(user)
-	sha1 := sha1.New()
-	sha1.Write(n3.Bytes())
-	sha1.Write(n4.Bytes())
-	sha1.Write(salt)
-	sha1.Write(keyA.Bytes())
-	sha1.Write(keyB.Bytes())
-	sha1.Write(keyK)
-	keyM = sha1.Sum(nil)
+
+	var digest hash.Hash
+	if pluginName == "Srp" {
+		digest = sha1.New()
+	} else if pluginName == "Srp256" {
+		digest = sha256.New()
+	} else {
+		panic("srp protocol error")
+	}
+	digest.Write(n3.Bytes())
+	digest.Write(n4.Bytes())
+	digest.Write(salt)
+	digest.Write(keyA.Bytes())
+	digest.Write(keyB.Bytes())
+	digest.Write(keyK)
+	keyM = digest.Sum(nil)
 
 	return keyM, keyK
 }

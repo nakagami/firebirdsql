@@ -1,7 +1,7 @@
 /*******************************************************************************
 The MIT License (MIT)
 
-Copyright (c) 2013-2016 Hajime Nakagami
+Copyright (c) 2013-2019 Hajime Nakagami
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
@@ -217,6 +217,13 @@ const (
 	isc_dpb_process_name          = 74
 	isc_dpb_utf8_filename         = 77
 	isc_dpb_specific_auth_data    = 84
+	isc_dpb_auth_plugin_list      = 85
+	isc_dpb_auth_plugin_name      = 86
+	isc_dpb_config                = 87
+	isc_dpb_nolinger              = 88
+	isc_dpb_reset_icu             = 89
+	isc_dpb_map_attach            = 90
+	isc_dpb_session_time_zone     = 91
 
 	// backup
 	isc_spb_bkp_file               = 5

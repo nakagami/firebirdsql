@@ -1,7 +1,7 @@
 /*******************************************************************************
 The MIT License (MIT)
 
-Copyright (c) 2013-2016 Hajime Nakagami
+Copyright (c) 2013-2019 Hajime Nakagami
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
@@ -40,12 +40,12 @@ import (
 	"time"
 
 	"github.com/kardianos/osext"
-	"github.com/nyarla/go-crypt"
+	"gitlab.com/nyarla/go-crypt"
 	//"unsafe"
 )
 
 const (
-	PLUGIN_LIST       = "Srp,Legacy_Auth"
+	PLUGIN_LIST       = "Srp256,Srp,Legacy_Auth"
 	BUFFER_LEN        = 1024
 	MAX_CHAR_LENGTH   = 32767
 	BLOB_SEGMENT_SIZE = 32000
@@ -146,9 +146,14 @@ type wireProtocol struct {
 	user       string
 	password   string
 	authData   []byte
+
+	// Time Zone
+	timezone   string
+	tzNameById map[int]string
+	tzIdByName map[string]int
 }
 
-func newWireProtocol(addr string) (*wireProtocol, error) {
+func newWireProtocol(addr string, timezone string) (*wireProtocol, error) {
 	p := new(wireProtocol)
 	p.buf = make([]byte, 0, BUFFER_LEN)
 
@@ -159,6 +164,7 @@ func newWireProtocol(addr string) (*wireProtocol, error) {
 	}
 
 	p.conn, err = newWireChannel(conn)
+	p.timezone = timezone
 
 	return p, err
 }
@@ -215,7 +221,7 @@ func (p *wireProtocol) uid(user string, password string, authPluginName string, 
 	}
 
 	var specific_data []byte
-	if authPluginName == "Srp" {
+	if authPluginName == "Srp" || authPluginName == "Srp256" {
 		specific_data = getSrpClientPublicBytes(clientPublic)
 	} else if authPluginName == "Legacy_Auth" {
 		b := bytes.NewBufferString(crypt.Crypt(password, "9z")[2:]).Bytes()
@@ -359,6 +365,110 @@ func (p *wireProtocol) _parse_op_response() (int32, []byte, []byte, error) {
 	return h, oid, buf, err
 }
 
+func (p *wireProtocol) _parse_connect_response(user string, password string, options map[string]string, clientPublic *big.Int, clientSecret *big.Int) (err error) {
+	p.debugPrint("_parse_connect_response")
+	wire_crypt := true
+	wire_crypt, _ = strconv.ParseBool(options["wire_crypt"])
+
+	b, err := p.recvPackets(4)
+	opcode := bytes_to_bint32(b)
+
+	for opcode == op_dummy {
+		b, _ = p.recvPackets(4)
+		opcode = bytes_to_bint32(b)
+	}
+
+	if opcode == op_reject {
+		err = errors.New("_parse_connect_response() op_reject")
+		return
+	}
+	if opcode == op_response {
+		_, _, _, err = p._parse_op_response() // error occured
+		return
+	}
+
+	b, _ = p.recvPackets(12)
+	p.protocolVersion = int32(b[3])
+	p.acceptArchitecture = bytes_to_bint32(b[4:8])
+	p.acceptType = bytes_to_bint32(b[8:12])
+
+	if opcode == op_cond_accept || opcode == op_accept_data {
+		var readLength, ln int
+
+		b, _ := p.recvPackets(4)
+		ln = int(bytes_to_bint32(b))
+		data, _ := p.recvPacketsAlignment(ln)
+
+		b, _ = p.recvPackets(4)
+		ln = int(bytes_to_bint32(b))
+		pluginName, _ := p.recvPacketsAlignment(ln)
+		p.pluginName = bytes_to_str(pluginName)
+
+		b, _ = p.recvPackets(4)
+		isAuthenticated := bytes_to_bint32(b)
+		readLength += 4
+
+		b, _ = p.recvPackets(4)
+		ln = int(bytes_to_bint32(b))
+		_, _ = p.recvPacketsAlignment(ln) // keys
+
+		if isAuthenticated == 0 {
+			var authData []byte
+			var sessionKey []byte
+			if (p.pluginName == "Srp" || p.pluginName == "Srp256") && len(data) > 2 {
+				ln = int(bytes_to_int16(data[:2]))
+				serverSalt := data[2 : ln+2]
+				serverPublic := bigFromHexString(bytes_to_str(data[4+ln:]))
+				authData, sessionKey = getClientProof(strings.ToUpper(user), password, serverSalt, clientPublic, serverPublic, clientSecret, p.pluginName)
+				if DEBUG_SRP {
+					fmt.Printf("pluginName=%s\nserverSalt=%s\nserverPublic(bin)=%s\nserverPublic=%s\nauthData=%v,sessionKey=%v\n",
+						p.pluginName, serverSalt, data[4+ln:], serverPublic, authData, sessionKey)
+				}
+			} else if p.pluginName == "Legacy_Auth" {
+				authData = bytes.NewBufferString(crypt.Crypt(password, "9z")[2:]).Bytes()
+			} else {
+				err = errors.New("_parse_connect_response() Unauthorized")
+				return
+			}
+			if wire_crypt {
+				// Send op_cont_auth
+				p.packInt(op_cont_auth)
+				p.packString(hex.EncodeToString(authData))
+				p.packString(options["auth_plugin_name"])
+				p.packString(PLUGIN_LIST)
+				p.packString("")
+				p.sendPackets()
+				_, _, _, err = p.opResponse()
+				if err != nil {
+					return
+				}
+
+				// Send op_crypt
+				p.packInt(op_crypt)
+				p.packString("Arc4")
+				p.packString("Symmetric")
+				p.sendPackets()
+				p.conn.setAuthKey(sessionKey)
+
+				_, _, _, err = p.opResponse()
+				if err != nil {
+					return
+				}
+			} else {
+				p.authData = authData // use later opAttach and opCreate
+			}
+
+		}
+	} else {
+		if opcode != op_accept {
+			err = errors.New("_parse_connect_response() protocol error")
+			return
+		}
+	}
+
+	return
+}
+
 func (p *wireProtocol) _parse_select_items(buf []byte, xsqlda []xSQLVAR) (int, error) {
 	var err error
 	var ln int
@@ -472,6 +582,10 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
 			break
 		}
 	}
+
+	for i, _ := range xsqlda {
+		xsqlda[i].wp = p
+	}
 	return stmt_type, xsqlda, err
 }
 
@@ -510,8 +624,10 @@ func (p *wireProtocol) getBlobSegments(blobId []byte, transHandle int32) ([]byte
 	return blob, err
 }
 
-func (p *wireProtocol) opConnect(dbName string, user string, password string, authPluginName string, wireCrypt bool, clientPublic *big.Int) {
+func (p *wireProtocol) opConnect(dbName string, user string, password string, options map[string]string, clientPublic *big.Int) {
 	p.debugPrint("opConnect")
+	wire_crypt := true
+	wire_crypt, _ = strconv.ParseBool(options["wire_crypt"])
 	protocols := []string{
 		// PROTOCOL_VERSION, Arch type (Generic=1), min, max, weight
 		"0000000a00000001000000000000000500000002", // 10, 1, 0, 5, 2
@@ -525,7 +641,7 @@ func (p *wireProtocol) opConnect(dbName string, user string, password string, au
 	p.packInt(1) // Arch type(GENERIC)
 	p.packString(dbName)
 	p.packInt(int32(len(protocols)))
-	p.packBytes(p.uid(strings.ToUpper(user), password, authPluginName, wireCrypt, clientPublic))
+	p.packBytes(p.uid(strings.ToUpper(user), password, options["auth_plugin_name"], wire_crypt, clientPublic))
 	buf, _ := hex.DecodeString(strings.Join(protocols, ""))
 	p.appendBytes(buf)
 	p.sendPackets()
@@ -559,114 +675,18 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 			dpb,
 			[]byte{isc_dpb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)
 	}
+	if p.timezone != "" {
+		tznameBytes := []byte(p.timezone)
+		dpb = bytes.Join([][]byte{
+			dpb,
+			[]byte{isc_dpb_session_time_zone, byte(len(tznameBytes))}, tznameBytes}, nil)
+	}
 
 	p.packInt(op_create)
 	p.packInt(0) // Database Object ID
 	p.packString(dbName)
 	p.packBytes(dpb)
 	p.sendPackets()
-}
-
-func (p *wireProtocol) opAccept(user string, password string, authPluginName string, wireCrypt bool, clientPublic *big.Int, clientSecret *big.Int) (err error) {
-	p.debugPrint("opAccept")
-
-	b, err := p.recvPackets(4)
-	opcode := bytes_to_bint32(b)
-
-	for opcode == op_dummy {
-		b, _ = p.recvPackets(4)
-		opcode = bytes_to_bint32(b)
-	}
-
-	if opcode == op_reject {
-		err = errors.New("opAccept() op_reject")
-		return
-	}
-	if opcode == op_response {
-		_, _, _, err = p._parse_op_response() // error occured
-		return
-	}
-
-	b, _ = p.recvPackets(12)
-	p.protocolVersion = int32(b[3])
-	p.acceptArchitecture = bytes_to_bint32(b[4:8])
-	p.acceptType = bytes_to_bint32(b[8:12])
-
-	if opcode == op_cond_accept || opcode == op_accept_data {
-		var readLength, ln int
-
-		b, _ := p.recvPackets(4)
-		ln = int(bytes_to_bint32(b))
-		data, _ := p.recvPacketsAlignment(ln)
-
-		b, _ = p.recvPackets(4)
-		ln = int(bytes_to_bint32(b))
-		pluginName, _ := p.recvPacketsAlignment(ln)
-		p.pluginName = bytes_to_str(pluginName)
-
-		b, _ = p.recvPackets(4)
-		isAuthenticated := bytes_to_bint32(b)
-		readLength += 4
-
-		b, _ = p.recvPackets(4)
-		ln = int(bytes_to_bint32(b))
-		_, _ = p.recvPacketsAlignment(ln) // keys
-
-		if isAuthenticated == 0 {
-			var authData []byte
-			var sessionKey []byte
-			if p.pluginName == "Srp" && len(data) > 2 {
-				ln = int(bytes_to_int16(data[:2]))
-				serverSalt := data[2 : ln+2]
-				serverPublic := bigFromHexString(bytes_to_str(data[4+ln:]))
-				authData, sessionKey = getClientProof(strings.ToUpper(user), password, serverSalt, clientPublic, serverPublic, clientSecret)
-				if DEBUG_SRP {
-					fmt.Printf("serverSalt=%s\nserverPublic(bin)=%s\nserverPublic=%s\nauthData=%v,sessionKey=%v\n",
-						serverSalt, data[4+ln:], serverPublic, authData, sessionKey)
-				}
-			} else if p.pluginName == "Legacy_Auth" {
-				authData = bytes.NewBufferString(crypt.Crypt(password, "9z")[2:]).Bytes()
-			} else {
-				err = errors.New("opAccept() Unauthorized")
-				return
-			}
-			if wireCrypt {
-				// Send op_cont_auth
-				p.packInt(op_cont_auth)
-				p.packString(hex.EncodeToString(authData))
-				p.packString(authPluginName)
-				p.packString(PLUGIN_LIST)
-				p.packString("")
-				p.sendPackets()
-				_, _, _, err = p.opResponse()
-				if err != nil {
-					return
-				}
-
-				// Send op_crypt
-				p.packInt(op_crypt)
-				p.packString("Arc4")
-				p.packString("Symmetric")
-				p.sendPackets()
-				p.conn.setAuthKey(sessionKey)
-
-				_, _, _, err = p.opResponse()
-				if err != nil {
-					return
-				}
-			} else {
-				p.authData = authData // use later opAttach and opCreate
-			}
-
-		}
-	} else {
-		if opcode != op_accept {
-			err = errors.New("opAccept() protocol error")
-			return
-		}
-	}
-
-	return
 }
 
 func (p *wireProtocol) opAttach(dbName string, user string, password string, role string) {
@@ -705,6 +725,13 @@ func (p *wireProtocol) opAttach(dbName string, user string, password string, rol
 			dpb,
 			[]byte{isc_dpb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)
 	}
+	if p.timezone != "" {
+		tznameBytes := []byte(p.timezone)
+		dpb = bytes.Join([][]byte{
+			dpb,
+			[]byte{isc_dpb_session_time_zone, byte(len(tznameBytes))}, tznameBytes}, nil)
+	}
+
 	p.packInt(op_attach)
 	p.packInt(0) // Database Object ID
 	p.packString(dbName)
@@ -1057,7 +1084,10 @@ func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) ([]driver.Value, error) {
 	}
 
 	b, err = p.recvPackets(4)
-	// count := int(bytes_to_bint32(b))
+	count := int(bytes_to_bint32(b))
+	if count == 0 {
+		return nil, nil
+	}
 
 	r := make([]driver.Value, len(xsqlda))
 	var ln int

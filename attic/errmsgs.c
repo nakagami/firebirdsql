@@ -48,7 +48,7 @@ Software distributed under the License is distributed on an\n\
 \"AS IS\" basis, WITHOUT WARRANTY OF ANY KIND, either express\n\
 or implied. See the License for the specific language governing\n\
 rights and limitations under the License.\n\n\
-*****************************************************************************/\n");
+*****************************************************************************/\n\n");
     fprintf(fp, "package firebirdsql\n\nvar errmsgs = map[int]string{\n");
     for (i = 0; messages[i].code_text; i++) {
         fprintf(fp, "\t%ld: \"%s\\n\",\n", messages[i].code_number, messages[i].code_text);

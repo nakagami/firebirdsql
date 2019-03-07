@@ -1,7 +1,7 @@
 /*******************************************************************************
 The MIT License (MIT)
 
-Copyright (c) 2013-2016 Hajime Nakagami
+Copyright (c) 2013-2019 Hajime Nakagami
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
@@ -28,6 +28,7 @@ import (
 	"container/list"
 	"encoding/binary"
 	"errors"
+	"math/big"
 	"net/url"
 	"strconv"
 	"strings"
@@ -35,7 +36,7 @@ import (
 )
 
 func str_to_bytes(s string) []byte {
-	return bytes.NewBufferString(s).Bytes()
+	return []byte(s)
 }
 
 func int32_to_bytes(i32 int32) []byte {
@@ -66,49 +67,86 @@ func int16_to_bytes(i16 int16) []byte {
 	return bs
 }
 func bytes_to_str(b []byte) string {
-	return bytes.NewBuffer(b).String()
+	return string(b)
 }
 
 func bytes_to_bint32(b []byte) int32 {
-	var i32 int32
-	buffer := bytes.NewBuffer(b)
-	binary.Read(buffer, binary.BigEndian, &i32)
-	return i32
+	return int32(binary.BigEndian.Uint32(b))
 }
 
 func bytes_to_int32(b []byte) int32 {
-	var i32 int32
-	buffer := bytes.NewBuffer(b)
-	binary.Read(buffer, binary.LittleEndian, &i32)
-	return i32
+	return int32(binary.LittleEndian.Uint32(b))
 }
 
 func bytes_to_bint16(b []byte) int16 {
-	var i int16
-	buffer := bytes.NewBuffer(b)
-	binary.Read(buffer, binary.BigEndian, &i)
-	return i
+	return int16(binary.BigEndian.Uint16(b))
 }
 
 func bytes_to_int16(b []byte) int16 {
-	var i int16
-	buffer := bytes.NewBuffer(b)
-	binary.Read(buffer, binary.LittleEndian, &i)
-	return i
+	return int16(binary.LittleEndian.Uint16(b))
 }
 
 func bytes_to_bint64(b []byte) int64 {
-	var i int64
-	buffer := bytes.NewBuffer(b)
-	binary.Read(buffer, binary.BigEndian, &i)
-	return i
+	return int64(binary.BigEndian.Uint64(b))
 }
 
 func bytes_to_int64(b []byte) int64 {
-	var i int64
-	buffer := bytes.NewBuffer(b)
-	binary.Read(buffer, binary.LittleEndian, &i)
-	return i
+	return int64(binary.LittleEndian.Uint64(b))
+}
+
+func bigFromHexString(s string) *big.Int {
+	ret := new(big.Int)
+	ret.SetString(s, 16)
+	return ret
+}
+
+func bigFromString(s string) *big.Int {
+	ret := new(big.Int)
+	ret.SetString(s, 10)
+	return ret
+}
+
+func bigToBytes(v *big.Int) []byte {
+	buf := pad(v)
+	for i, _ := range buf {
+		if buf[i] != 0 {
+			return buf[i:]
+		}
+	}
+
+	return buf[:1] // 0
+}
+
+func bytesToBig(v []byte) (r *big.Int) {
+	m := new(big.Int)
+	m.SetInt64(256)
+	a := new(big.Int)
+	r = new(big.Int)
+	r.SetInt64(0)
+	for _, b := range v {
+		r = r.Mul(r, m)
+		r = r.Add(r, a.SetInt64(int64(b)))
+	}
+	return r
+}
+
+func flattenBytes(l *list.List) []byte {
+	n := 0
+	for e := l.Front(); e != nil; e = e.Next() {
+		n += len((e.Value).([]byte))
+	}
+
+	bs := make([]byte, n)
+
+	n = 0
+	for e := l.Front(); e != nil; e = e.Next() {
+		for i, b := range (e.Value).([]byte) {
+			bs[n+i] = b
+		}
+		n += len((e.Value).([]byte))
+	}
+
+	return bs
 }
 
 func xdrBytes(bs []byte) []byte {
@@ -133,25 +171,6 @@ func xdrString(s string) []byte {
 	// XDR encoding string
 	bs := bytes.NewBufferString(s).Bytes()
 	return xdrBytes(bs)
-}
-
-func flattenBytes(l *list.List) []byte {
-	n := 0
-	for e := l.Front(); e != nil; e = e.Next() {
-		n += len((e.Value).([]byte))
-	}
-
-	bs := make([]byte, n)
-
-	n = 0
-	for e := l.Front(); e != nil; e = e.Next() {
-		for i, b := range (e.Value).([]byte) {
-			bs[n+i] = b
-		}
-		n += len((e.Value).([]byte))
-	}
-
-	return bs
 }
 
 func _int32ToBlr(i32 int32) ([]byte, []byte) {
@@ -227,7 +246,8 @@ func split1(src string, delm string) (string, string) {
 	return src, ""
 }
 
-func parseDSN(dsn string) (addr string, dbName string, user string, passwd string, role string, authPluginName string, wireCrypt bool, err error) {
+func parseDSN(dsn string) (addr string, dbName string, user string, passwd string, options map[string]string, err error) {
+	options = make(map[string]string)
 	if !strings.HasPrefix(dsn, "firebird://") {
 		dsn = "firebird://" + dsn
 	}
@@ -257,28 +277,32 @@ func parseDSN(dsn string) (addr string, dbName string, user string, passwd strin
 
 	m, _ := url.ParseQuery(u.RawQuery)
 
-	values, ok := m["role"]
-	if ok {
-		role = values[0]
-	} else {
-		role = ""
+	var default_options = map[string]string{
+		"auth_plugin_name":     "Srp",
+		"column_name_to_lower": "false",
+		"role":                 "",
+		"timezone":             "",
+		"wire_crypt":           "true",
 	}
 
-	values, ok = m["auth_plugin_name"]
-	if ok {
-		authPluginName = values[0]
-	} else {
-		authPluginName = "Srp"
-	}
-
-	values, ok = m["wire_crypt"]
-	if ok {
-		wireCrypt, _ = strconv.ParseBool(values[0])
-	} else {
-		wireCrypt = true
+	for k, v := range default_options {
+		values, ok := m[k]
+		if ok {
+			options[k] = values[0]
+		} else {
+			options[k] = v
+		}
 	}
 
 	return
+}
+
+func convertToBool(s string, defaultValue bool) bool {
+	v, err := strconv.ParseBool(s)
+	if err != nil {
+		v = defaultValue
+	}
+	return v
 }
 
 func calcBlr(xsqlda []xSQLVAR) []byte {
@@ -325,13 +349,9 @@ func calcBlr(xsqlda []xSQLVAR) []byte {
 			blr[n] = 9
 			blr[n+1] = byte(sqlscale)
 			n += 2
-		case SQL_TYPE_BLOB:
-			blr[n] = 9
-			blr[n+1] = 0
-			n += 2
-		case SQL_TYPE_ARRAY:
-			blr[n] = 9
-			blr[n+1] = 0
+		case SQL_TYPE_DEC_FIXED:
+			blr[n] = 26
+			blr[n+1] = byte(sqlscale)
 			n += 2
 		case SQL_TYPE_DOUBLE:
 			blr[n] = 27
@@ -351,8 +371,28 @@ func calcBlr(xsqlda []xSQLVAR) []byte {
 		case SQL_TYPE_TIMESTAMP:
 			blr[n] = 35
 			n += 1
+		case SQL_TYPE_BLOB:
+			blr[n] = 9
+			blr[n+1] = 0
+			n += 2
+		case SQL_TYPE_ARRAY:
+			blr[n] = 9
+			blr[n+1] = 0
+			n += 2
 		case SQL_TYPE_BOOLEAN:
 			blr[n] = 23
+			n += 1
+		case SQL_TYPE_DEC64:
+			blr[n] = 24
+			n += 1
+		case SQL_TYPE_DEC128:
+			blr[n] = 25
+			n += 1
+		case SQL_TYPE_TIME_TZ:
+			blr[n] = 28
+			n += 1
+		case SQL_TYPE_TIMESTAMP_TZ:
+			blr[n] = 29
 			n += 1
 		}
 		// [blr_short, 0]

@@ -1,7 +1,7 @@
 /*******************************************************************************
 The MIT License (MIT)
 
-Copyright (c) 2016 Hajime Nakagami
+Copyright (c) 2016-2019 Hajime Nakagami
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
@@ -263,4 +263,27 @@ func TestIssue39(t *testing.T) {
 	}
 
 	conn.Close()
+}
+
+func TestIssue67(t *testing.T) {
+	temppath := TempFileName("test_issue67_")
+	conn, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	var n int
+	conn.QueryRow("SELECT Count(*) FROM rdb$relations").Scan(&n)
+	err := conn.Close()
+	if err != nil {
+		t.Fatalf("Error Close: %v", err)
+	}
+
+	conn, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	tx, _ := conn.Begin()
+	tx.QueryRow("SELECT Count(*) FROM rdb$relations").Scan(&n)
+
+	tx.Commit()
+
+	err = conn.Close()
+	if err != nil {
+		t.Fatalf("Error Close: %v", err)
+	}
+
 }
