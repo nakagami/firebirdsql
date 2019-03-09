@@ -412,9 +412,9 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 		ln = int(bytes_to_bint32(b))
 		_, _ = p.recvPacketsAlignment(ln) // keys
 
+		var authData []byte
+		var sessionKey []byte
 		if isAuthenticated == 0 {
-			var authData []byte
-			var sessionKey []byte
 			if (p.pluginName == "Srp" || p.pluginName == "Srp256") && len(data) > 2 {
 				ln = int(bytes_to_int16(data[:2]))
 				serverSalt := data[2 : ln+2]
@@ -430,35 +430,35 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 				err = errors.New("_parse_connect_response() Unauthorized")
 				return
 			}
-			if wire_crypt {
-				// Send op_cont_auth
-				p.packInt(op_cont_auth)
-				p.packString(hex.EncodeToString(authData))
-				p.packString(options["auth_plugin_name"])
-				p.packString(PLUGIN_LIST)
-				p.packString("")
-				p.sendPackets()
-				_, _, _, err = p.opResponse()
-				if err != nil {
-					return
-				}
-
-				// Send op_crypt
-				p.packInt(op_crypt)
-				p.packString("Arc4")
-				p.packString("Symmetric")
-				p.sendPackets()
-				p.conn.setAuthKey(sessionKey)
-
-				_, _, _, err = p.opResponse()
-				if err != nil {
-					return
-				}
-			} else {
-				p.authData = authData // use later opAttach and opCreate
+		}
+		if wire_crypt && sessionKey != nil {
+			// Send op_cont_auth
+			p.packInt(op_cont_auth)
+			p.packString(hex.EncodeToString(authData))
+			p.packString(options["auth_plugin_name"])
+			p.packString(PLUGIN_LIST)
+			p.packString("")
+			p.sendPackets()
+			_, _, _, err = p.opResponse()
+			if err != nil {
+				return
 			}
 
+			// Send op_crypt
+			p.packInt(op_crypt)
+			p.packString("Arc4")
+			p.packString("Symmetric")
+			p.sendPackets()
+			p.conn.setAuthKey(sessionKey)
+
+			_, _, _, err = p.opResponse()
+			if err != nil {
+				return
+			}
+		} else {
+			p.authData = authData // use later opAttach and opCreate
 		}
+
 	} else {
 		if opcode != op_accept {
 			err = errors.New("_parse_connect_response() protocol error")
