@@ -415,7 +415,34 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 		var authData []byte
 		var sessionKey []byte
 		if isAuthenticated == 0 {
-			if (p.pluginName == "Srp" || p.pluginName == "Srp256") && len(data) > 2 {
+			if p.pluginName == "Srp" || p.pluginName == "Srp256" {
+
+				// TODO: normalize user
+
+				if len(data) == 0 {
+					p.opContAuth(bigToBytes(clientPublic), p.pluginName, PLUGIN_LIST, "")
+					b, _ := p.recvPackets(4)
+					if DEBUG_SRP && bytes_to_bint32(b) == op_cont_auth {
+						panic("auth error")
+					}
+
+					b, _ = p.recvPackets(4)
+					ln = int(bytes_to_bint32(b))
+					data, _ = p.recvPacketsAlignment(ln)
+
+					b, _ = p.recvPackets(4)
+					ln = int(bytes_to_bint32(b))
+					_, _ = p.recvPacketsAlignment(ln) // pluginName
+
+					b, _ = p.recvPackets(4)
+					ln = int(bytes_to_bint32(b))
+					_, _ = p.recvPacketsAlignment(ln) // pluginList
+
+					b, _ = p.recvPackets(4)
+					ln = int(bytes_to_bint32(b))
+					_, _ = p.recvPacketsAlignment(ln) // keys
+				}
+
 				ln = int(bytes_to_int16(data[:2]))
 				serverSalt := data[2 : ln+2]
 				serverPublic := bigFromHexString(bytes_to_str(data[4+ln:]))
