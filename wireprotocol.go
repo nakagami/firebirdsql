@@ -431,19 +431,14 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 				return
 			}
 		}
-		if wire_crypt && sessionKey != nil {
-			// Send op_cont_auth
-			p.packInt(op_cont_auth)
-			p.packString(hex.EncodeToString(authData))
-			p.packString(options["auth_plugin_name"])
-			p.packString(PLUGIN_LIST)
-			p.packString("")
-			p.sendPackets()
+		if opcode == op_cond_accept {
+			p.opContAuth(authData, options["auth_plugin_name"], PLUGIN_LIST, "")
 			_, _, _, err = p.opResponse()
 			if err != nil {
 				return
 			}
-
+		}
+		if wire_crypt && sessionKey != nil {
 			// Send op_crypt
 			p.packInt(op_crypt)
 			p.packString("Arc4")
@@ -736,6 +731,16 @@ func (p *wireProtocol) opAttach(dbName string, user string, password string, rol
 	p.packInt(0) // Database Object ID
 	p.packString(dbName)
 	p.packBytes(dpb)
+	p.sendPackets()
+}
+
+func (p *wireProtocol) opContAuth(authData []byte, authPluginName string, authPluginList string, keys string) {
+	p.debugPrint("opContAuth")
+	p.packInt(op_cont_auth)
+	p.packString(hex.EncodeToString(authData))
+	p.packString(authPluginName)
+	p.packString(authPluginList)
+	p.packString(keys)
 	p.sendPackets()
 }
 
