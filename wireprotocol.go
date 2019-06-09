@@ -310,7 +310,7 @@ func (p *wireProtocol) _parse_status_vector() (*list.List, int, string, error) {
 		switch {
 		case n == isc_arg_gds:
 			b, err = p.recvPackets(4)
-			gds_code := int(bytes_to_bint32(b))
+			gds_code = int(bytes_to_bint32(b))
 			if gds_code != 0 {
 				gds_codes.PushBack(gds_code)
 				message += errmsgs[gds_code]
