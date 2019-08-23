@@ -89,6 +89,13 @@ func (fc *firebirdsqlConn) Ping(ctx context.Context) error {
 	if fc == nil {
 		return errors.New("Connection was closed")
 	}
+
+	rows, err := fc.query(ctx, "SELECT 1 from rdb$database", nil)
+	if err != nil {
+		return driver.ErrBadConn
+	}
+	rows.Close()
+
 	return nil
 }
 
