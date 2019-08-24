@@ -1230,7 +1230,7 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 		}
 		for i := 0; i < n; i++ {
 			valuesList.PushBack([]byte{byte(nullIndicator.Mod(nullIndicator, bi256).Int64())})
-			nullIndicator = nullIndicator.Div(nullIndicator, bi256)
+			//			nullIndicator = nullIndicator.Div(nullIndicator, bi256)
 		}
 	}
 

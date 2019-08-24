@@ -776,3 +776,44 @@ func TestGoIssue65(t *testing.T) {
 		t.Fatalf(field01)
 	}*/
 }
+
+func TestGoIssue80(t *testing.T) {
+	temppath := TempFileName("test_issue80_")
+	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	if err != nil {
+		t.Fatalf("Error occured at sql.Open()")
+	}
+	defer conn.Close()
+
+	query := `
+        CREATE TABLE foo (
+            a INT,
+            b INT,
+            c INT,
+            d INT,
+            e INT,
+            f INT,
+            g INT,
+            h INT,
+            i INT,
+            j INT
+        )
+    `
+
+	_, err = conn.Exec(query)
+	if err != nil {
+		t.Error(err)
+	}
+	_, err = conn.Exec(
+		"insert into foo(a) values (?)",
+		nil)
+
+	_, err = conn.Exec(
+		"insert into foo(a, b, c, d, e, f, g, h, i, j) values (?, ?, ? ,?, ?, ?, ?, ?, ?, ?)",
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+
+	if err != nil {
+		t.Error(err)
+	}
+
+}
