@@ -1229,8 +1229,9 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 			n += 4 - n%4
 		}
 		for i := 0; i < n; i++ {
-			valuesList.PushBack([]byte{byte(nullIndicator.Mod(nullIndicator, bi256).Int64())})
-			//			nullIndicator = nullIndicator.Div(nullIndicator, bi256)
+			var modres *big.Int = new(big.Int)
+			valuesList.PushBack([]byte{byte(modres.Mod(nullIndicator, bi256).Int64())})
+			nullIndicator = nullIndicator.Div(nullIndicator, bi256)
 		}
 	}
 

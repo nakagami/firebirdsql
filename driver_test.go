@@ -787,16 +787,20 @@ func TestGoIssue80(t *testing.T) {
 
 	query := `
         CREATE TABLE foo (
-            a INT,
-            b INT,
-            c INT,
+            a VARCHAR(10),
+            b VARCHAR(10),
+            c BIGINT,
             d INT,
             e INT,
             f INT,
             g INT,
             h INT,
             i INT,
-            j INT
+            j INT,
+            k INT,
+            l INT,
+            m INT,
+            n INT
         )
     `
 
@@ -804,13 +808,10 @@ func TestGoIssue80(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	_, err = conn.Exec(
-		"insert into foo(a) values (?)",
-		nil)
 
 	_, err = conn.Exec(
-		"insert into foo(a, b, c, d, e, f, g, h, i, j) values (?, ?, ? ,?, ?, ?, ?, ?, ?, ?)",
-		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+		"insert into foo(a, b, c, d, e, f, g, h, i, j, k, l, m, n) values (?, ?, ? ,?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		" ", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	if err != nil {
 		t.Error(err)
