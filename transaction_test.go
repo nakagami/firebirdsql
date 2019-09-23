@@ -420,6 +420,11 @@ func TestIssue89(t *testing.T) {
 
 	tx.Commit()
 
+	err = conn1.QueryRow("select mon$attachment_id from mon$attachments where mon$attachment_id = current_connection").Scan(&noconn1)
+	if err != nil {
+		t.Fatalf("Error opening new transaction after last one committed or rollback: %v", err)
+	}
+
 	conn2, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
 	conn2.QueryRow("select count(*) from mon$transactions where mon$attachment_id <> current_connection").Scan(&numberTrans)
 
