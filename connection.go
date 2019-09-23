@@ -44,7 +44,7 @@ type firebirdsqlConn struct {
 }
 
 func (fc *firebirdsqlConn) begin(isolationLevel int) (driver.Tx, error) {
-	tx, err := newFirebirdsqlTx(fc, isolationLevel, false)
+	tx, err := newFirebirdsqlTx(fc, isolationLevel, false, true)
 	fc.tx = tx
 	return driver.Tx(tx), err
 }
@@ -65,6 +65,13 @@ func (fc *firebirdsqlConn) Close() (err error) {
 }
 
 func (fc *firebirdsqlConn) prepare(ctx context.Context, query string) (driver.Stmt, error) {
+	if fc.tx.needBegin {
+		err := fc.tx.begin()
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return newFirebirdsqlStmt(fc, query)
 }
 
@@ -73,13 +80,6 @@ func (fc *firebirdsqlConn) Prepare(query string) (driver.Stmt, error) {
 }
 
 func (fc *firebirdsqlConn) exec(ctx context.Context, query string, args []driver.Value) (result driver.Result, err error) {
-
-	if fc.tx.needBegin {
-		err = fc.tx.begin()
-		if err != nil {
-			return
-		}
-	}
 
 	stmt, err := fc.prepare(ctx, query)
 	if err != nil {
@@ -90,10 +90,13 @@ func (fc *firebirdsqlConn) exec(ctx context.Context, query string, args []driver
 	if err != nil {
 		return
 	}
-	if fc.isAutocommit && fc.tx.isAutocommit {
-		fc.tx.commitRetainging()
-	}
+
 	stmt.Close()
+
+	if fc.isAutocommit && fc.tx.isAutocommit {
+		fc.tx.Commit()
+	}
+
 	return
 }
 
@@ -102,6 +105,7 @@ func (fc *firebirdsqlConn) Exec(query string, args []driver.Value) (result drive
 }
 
 func (fc *firebirdsqlConn) query(ctx context.Context, query string, args []driver.Value) (rows driver.Rows, err error) {
+
 	stmt, err := fc.prepare(ctx, query)
 	if err != nil {
 		return
@@ -146,7 +150,7 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	fc.password = password
 	fc.columnNameToLower = column_name_to_lower
 	fc.isAutocommit = true
-	fc.tx, err = newFirebirdsqlTx(fc, ISOLATION_LEVEL_READ_COMMITED, fc.isAutocommit)
+	fc.tx, err = newFirebirdsqlTx(fc, ISOLATION_LEVEL_READ_COMMITED, fc.isAutocommit, false)
 	fc.clientPublic = clientPublic
 	fc.clientSecret = clientSecret
 
@@ -187,7 +191,7 @@ func createFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	fc.password = password
 	fc.columnNameToLower = column_name_to_lower
 	fc.isAutocommit = true
-	fc.tx, err = newFirebirdsqlTx(fc, ISOLATION_LEVEL_READ_COMMITED, fc.isAutocommit)
+	fc.tx, err = newFirebirdsqlTx(fc, ISOLATION_LEVEL_READ_COMMITED, fc.isAutocommit, false)
 	fc.clientPublic = clientPublic
 	fc.clientSecret = clientSecret
 

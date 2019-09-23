@@ -31,20 +31,41 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 )
 
 func TempFileName(prefix string) string {
+	var tmppath string
 	randBytes := make([]byte, 16)
 	rand.Read(randBytes)
-	return filepath.Join(os.TempDir(), prefix+hex.EncodeToString(randBytes)+".fdb")
+
+	tmppath = filepath.Join(os.TempDir(), prefix+hex.EncodeToString(randBytes)+".fdb")
+	if runtime.GOOS == "windows" {
+		tmppath = "/" + tmppath
+	}
+
+	return tmppath
+}
+
+func GetTestDSN(file string) string {
+
+	retorno := "sysdba:masterkey@localhost:3050"
+
+	if runtime.GOOS == "windows" {
+		retorno = retorno + "/"
+	}
+
+	retorno = retorno + TempFileName(file)
+
+	return retorno
 }
 
 func TestBasic(t *testing.T) {
 	temppath := TempFileName("test_basic_")
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	conn, err := sql.Open("firebirdsql_createdb", "SYSDBA:masterkey@localhost:3050"+temppath)
 
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
@@ -81,7 +102,7 @@ func TestBasic(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn, err = sql.Open("firebirdsql", "SYSDBA:masterkey@localhost:3050"+temppath)
 	_, err = conn.Exec("CREATE TABLE foo (a INTEGER)")
 	if err == nil {
 		t.Fatalf("Need metadata update error")
@@ -179,13 +200,13 @@ func TestReturning(t *testing.T) {
 
 func TestInsertBlobsWithParams(t *testing.T) {
 	temppath := TempFileName("test_insert_blobs_with_params")
-	conn, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	conn, _ := sql.Open("firebirdsql_createdb", "SYSDBA:masterkey@localhost:3050"+temppath)
 	conn.Exec("CREATE TABLE test_blobs (f1 BLOB SUB_TYPE 0, f2 BLOB SUB_TYPE 1)")
 	conn.Close()
 
 	time.Sleep(1 * time.Second)
 
-	conn, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn, _ = sql.Open("firebirdsql", "SYSDBA:masterkey@localhost:3050"+temppath)
 
 	s0 := "Test Text"
 	b0 := []byte{0, 1, 2, 3, 4, 13, 10, 5, 6, 7}
@@ -211,7 +232,7 @@ func TestInsertBlobsWithParams(t *testing.T) {
 
 func TestError(t *testing.T) {
 	temppath := TempFileName("test_error_")
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	conn, err := sql.Open("firebirdsql_createdb", "SYSDBA:masterkey@localhost:3050"+temppath)
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
@@ -226,7 +247,7 @@ func TestError(t *testing.T) {
 
 func TestRole(t *testing.T) {
 	temppath := TempFileName("test_role_")
-	conn1, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	conn1, err := sql.Open("firebirdsql_createdb", "SYSDBA:masterkey@localhost:3050"+temppath)
 	if err != nil {
 		t.Fatalf("Error creating: %v", err)
 	}
@@ -248,7 +269,7 @@ func TestRole(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	conn2, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/"+temppath+"?role=driverrole")
+	conn2, err := sql.Open("firebirdsql", "SYSDBA:masterkey@localhost:3050"+temppath+"?role=driverrole")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
@@ -266,7 +287,7 @@ func TestRole(t *testing.T) {
 func TestInsertTimestamp(t *testing.T) {
 	temppath := TempFileName("test_timestamp_")
 
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	conn, err := sql.Open("firebirdsql_createdb", "SYSDBA:masterkey@localhost:3050"+temppath)
 	if err != nil {
 		t.Fatalf("Error creating: %v", err)
 	}
@@ -310,7 +331,7 @@ func TestInsertTimestamp(t *testing.T) {
 func TestBoolean(t *testing.T) {
 	temppath := TempFileName("test_boolean_")
 
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	conn, err := sql.Open("firebirdsql_createdb", "SYSDBA:masterkey@localhost:3050"+temppath)
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
@@ -365,7 +386,7 @@ func TestBoolean(t *testing.T) {
 func TestDecFloat(t *testing.T) {
 	temppath := TempFileName("test_decfloat_")
 
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	conn, err := sql.Open("firebirdsql_createdb", "SYSDBA:masterkey@localhost:3050"+temppath)
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
@@ -409,7 +430,7 @@ func TestDecFloat(t *testing.T) {
 func TestLegacyAuthWireCrypt(t *testing.T) {
 	temppath := TempFileName("test_legacy_atuh_")
 	var n int
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	conn, err := sql.Open("firebirdsql_createdb", "SYSDBA:masterkey@localhost:3050"+temppath)
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
@@ -421,7 +442,7 @@ func TestLegacyAuthWireCrypt(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath+"?auth_plugin_anme=Legacy_Auth")
+	conn, err = sql.Open("firebirdsql", "SYSDBA:masterkey@localhost:3050"+temppath+"?auth_plugin_anme=Legacy_Auth")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
@@ -431,7 +452,7 @@ func TestLegacyAuthWireCrypt(t *testing.T) {
 	}
 	conn.Close()
 
-	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath+"?wire_crypt=false")
+	conn, err = sql.Open("firebirdsql", "SYSDBA:masterkey@localhost:3050"+temppath+"?wire_crypt=false")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
@@ -441,7 +462,7 @@ func TestLegacyAuthWireCrypt(t *testing.T) {
 	}
 	conn.Close()
 
-	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath+"?auth_plugin_name=Legacy_Auth&wire_auth=true")
+	conn, err = sql.Open("firebirdsql", "SYSDBA:masterkey@localhost:3050"+temppath+"?auth_plugin_name=Legacy_Auth&wire_auth=true")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
@@ -451,7 +472,7 @@ func TestLegacyAuthWireCrypt(t *testing.T) {
 	}
 	conn.Close()
 
-	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath+"?auth_plugin_name=Legacy_Auth&wire_auth=false")
+	conn, err = sql.Open("firebirdsql", "SYSDBA:masterkey@localhost:3050"+temppath+"?auth_plugin_name=Legacy_Auth&wire_auth=false")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
@@ -487,7 +508,7 @@ func TestGoIssue44(t *testing.T) {
 
 func TestGoIssue45(t *testing.T) {
 	temppath := TempFileName("test_issue45_")
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	conn, err := sql.Open("firebirdsql_createdb", "SYSDBA:masterkey@localhost:3050"+temppath)
 	if err != nil {
 		t.Fatalf("Error occured at sql.Open()")
 	}
@@ -507,7 +528,7 @@ func TestGoIssue45(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn, err = sql.Open("firebirdsql", "SYSDBA:masterkey@localhost:3050"+temppath)
 
 	// select null value
 	type response struct {
@@ -558,7 +579,7 @@ func TestGoIssue45(t *testing.T) {
 
 func TestGoIssue49(t *testing.T) {
 	temppath := TempFileName("test_issue49_")
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	conn, err := sql.Open("firebirdsql_createdb", "SYSDBA:masterkey@localhost:3050"+temppath)
 	if err != nil {
 		t.Fatalf("Error occured at sql.Open()")
 	}
@@ -619,7 +640,7 @@ func TestGoIssue49(t *testing.T) {
 func TestGoIssue53(t *testing.T) {
 	timeout := time.Second * 40
 	temppath := TempFileName("test_issue53_")
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	conn, err := sql.Open("firebirdsql_createdb", "SYSDBA:masterkey@localhost:3050"+temppath)
 	if err != nil {
 		t.Fatalf("Error occured at sql.Open()")
 	}
@@ -685,34 +706,9 @@ func TestGoIssue53(t *testing.T) {
 	}
 }
 func TestGoIssue65(t *testing.T) {
-	/*var field01 string
-	var field02 int
-	var field03 int
-	var field04 string
-	var field05 int
-	var field06 int
-	var field07 string
-	var field08 string
-	var field09 string
-	var field10 string
-	var field11 string
-	var field12 float32
-	var field13 float32
-	var field14 float32
-	var field15 float32
-	var field16 float32
-	var field17 float32
-	var field18 float32
-	var field19 float32
-	var field20 string
-	var field21 string
-	var field22 string
-	var field23 string
-	var field24 float32
-	var field25 float32
-	*/
+
 	temppath := TempFileName("test_issue65_")
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	conn, err := sql.Open("firebirdsql_createdb", "SYSDBA:masterkey@localhost:3050"+temppath)
 	if err != nil {
 		t.Fatalf("Error occured at sql.Open()")
 	}
@@ -769,17 +765,12 @@ func TestGoIssue65(t *testing.T) {
 	existData := movtos.Next()
 	if existData == false {
 		t.Fatalf("Expecting Data")
-	} /*else {
-		movtos.Scan(&field01, &field02, &field03, &field04, &field05, &field06, &field07, &field08, &field09, &field10,
-			&field11, &field12, &field13, &field14, &field15, &field16, &field17, &field18, &field19, &field20, &field21,
-			&field22, &field23, &field24, &field25)
-		t.Fatalf(field01)
-	}*/
+	}
 }
 
 func TestGoIssue80(t *testing.T) {
 	temppath := TempFileName("test_issue80_")
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	conn, err := sql.Open("firebirdsql_createdb", "SYSDBA:masterkey@localhost:3050"+temppath)
 	if err != nil {
 		t.Fatalf("Error occured at sql.Open()")
 	}
