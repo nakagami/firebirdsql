@@ -93,10 +93,6 @@ func (fc *firebirdsqlConn) exec(ctx context.Context, query string, args []driver
 
 	stmt.Close()
 
-	if fc.isAutocommit && fc.tx.isAutocommit {
-		fc.tx.Commit()
-	}
-
 	return
 }
 
