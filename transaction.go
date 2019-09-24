@@ -80,7 +80,7 @@ func (tx *firebirdsqlTx) begin() (err error) {
 	return
 }
 
-func (tx *firebirdsqlTx) commitRetainging() (err error) {
+func (tx *firebirdsqlTx) commitRetaining() (err error) {
 	tx.fc.wp.opCommitRetaining(tx.transHandle)
 	_, _, _, err = tx.fc.wp.opResponse()
 	tx.isAutocommit = tx.fc.isAutocommit
@@ -103,11 +103,18 @@ func (tx *firebirdsqlTx) Rollback() (err error) {
 	return
 }
 
-func newFirebirdsqlTx(fc *firebirdsqlConn, isolationLevel int, isAutocommit bool) (tx *firebirdsqlTx, err error) {
+func newFirebirdsqlTx(fc *firebirdsqlConn, isolationLevel int, isAutocommit bool, withBegin bool) (tx *firebirdsqlTx, err error) {
 	tx = new(firebirdsqlTx)
 	tx.fc = fc
 	tx.isolationLevel = isolationLevel
 	tx.isAutocommit = isAutocommit
-	tx.begin()
+	tx.needBegin = false
+
+	if withBegin {
+		tx.begin()
+	} else {
+		tx.needBegin = true
+	}
+
 	return
 }

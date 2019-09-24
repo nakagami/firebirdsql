@@ -33,6 +33,7 @@ import (
 	"time"
 )
 
+
 func TestGo18(t *testing.T) {
 	temppath := TempFileName("test_go18_")
 	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)

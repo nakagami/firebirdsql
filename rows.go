@@ -62,6 +62,7 @@ func (rows *firebirdsqlRows) Columns() []string {
 
 func (rows *firebirdsqlRows) Close() (er error) {
 	rows.stmt.Close()
+
 	return
 }
 

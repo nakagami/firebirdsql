@@ -46,6 +46,9 @@ func (stmt *firebirdsqlStmt) Close() (err error) {
 		_, _, _, err = stmt.wp.opResponse()
 	}
 
+	if stmt.tx.isAutocommit {
+		stmt.tx.Commit()
+	}
 	return
 }
 
