@@ -2,7 +2,6 @@ package firebirdsql
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"strconv"
 	"sync"
@@ -56,8 +55,8 @@ func newSubscription(dsn string, events []string, cb EventHandler, chEvent chan 
 	newSubscription.manager = manager
 
 	remoteEvent := newRemoteEvent()
-	if err:=remoteEvent.QueueEvents(events...);err!=nil{
-		return nil,err
+	if err := remoteEvent.QueueEvents(events...); err != nil {
+		return nil, err
 	}
 
 	newSubscription.revent = remoteEvent
@@ -68,40 +67,41 @@ func newSubscription(dsn string, events []string, cb EventHandler, chEvent chan 
 
 	return newSubscription, nil
 }
-func (s *Subscription) CancelEvents() {
+func (s *Subscription) cancelEvents() error {
 	if atomic.LoadInt32(&s.closed) == 0 {
-		return
+		return nil
 	}
-	s.mu.Lock()
 	id := atomic.LoadInt32(&s.revent.id)
+	s.mu.Lock()
 	s.fc.wp.opCancelEvents(id)
 	_, _, _, err := s.fc.wp.opResponse()
 	s.mu.Unlock()
 	if err != nil {
-		log.Println(err)
+		return err
 	}
 	s.revent.CancelEvents()
+	return nil
 }
 
-func (e *Subscription) queueEvents(eventID int32) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
+func (s *Subscription) queueEvents(eventID int32) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	id := eventID + 1
-	epbData := e.revent.buildEpb()
+	epbData := s.revent.buildEpb()
 
-	e.fc.wp.opQueEvents(e.auxHandle, epbData, id)
-	rid, _, _, err := e.fc.wp.opResponse()
+	s.fc.wp.opQueEvents(s.auxHandle, epbData, id)
+	rid, _, _, err := s.fc.wp.opResponse()
 	if err != nil {
 		return err
 	}
 
-	atomic.StoreInt32(&e.revent.id,id)
-	atomic.StoreInt32(&e.revent.rid,rid)
+	atomic.StoreInt32(&s.revent.id, id)
+	atomic.StoreInt32(&s.revent.rid, rid)
 	return nil
 }
 
-func (e *Subscription) getEventManager() (*eventManager, error) {
-	auxHandle, addr, port, err := e.connAuxRequest()
+func (s *Subscription) getEventManager() (*eventManager, error) {
+	auxHandle, addr, port, err := s.connAuxRequest()
 	if err != nil {
 		return nil, err
 	}
@@ -135,33 +135,33 @@ func (s *Subscription) doEventCounts(e Event) {
 	s.chEvent <- e
 }
 
-func (e *Subscription) Unsubscribe() error {
-	if e.IsClose() {
+func (s *Subscription) Unsubscribe() error {
+	if s.IsClose() {
 		return nil
 	}
-
-	e.CancelEvents()
-	if e.manager != nil {
-		if err := e.manager.Close(); err != nil {
+	if s.manager != nil {
+		if err := s.manager.Close(); err != nil {
 			return err
 		}
-		e.manager = nil
+		s.manager = nil
 	}
-
-	return e.Close()
+	if err := s.cancelEvents(); err != nil {
+		return err
+	}
+	return s.Close()
 }
 
 func (s *Subscription) unsubscribeNoNotify() error {
-	atomic.StoreInt32(&s.noNotify,1)
+	atomic.StoreInt32(&s.noNotify, 1)
 	return s.Unsubscribe()
 }
 
 // returns network, address, error
-func (e *Subscription) connAuxRequest() (int32, *net.IP, int, error) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.fc.wp.opConnectRequest()
-	auxHandle, _, buf, err := e.fc.wp.opResponse()
+func (s *Subscription) connAuxRequest() (int32, *net.IP, int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.fc.wp.opConnectRequest()
+	auxHandle, _, buf, err := s.fc.wp.opResponse()
 	if err != nil {
 		return -1, nil, 0, err
 	}
@@ -176,50 +176,50 @@ func (e *Subscription) connAuxRequest() (int32, *net.IP, int, error) {
 	return auxHandle, &ip, int(port), nil
 }
 
-func (e *Subscription) NotifyClose(receiver chan error) {
-	e.muClose.Lock()
-	defer e.muClose.Unlock()
-	e.closes = append(e.closes, receiver)
+func (s *Subscription) NotifyClose(receiver chan error) {
+	s.muClose.Lock()
+	defer s.muClose.Unlock()
+	s.closes = append(s.closes, receiver)
 }
 
-func (e *Subscription) IsClose() bool {
-	return atomic.LoadInt32(&e.closed) == 1
+func (s *Subscription) IsClose() bool {
+	return atomic.LoadInt32(&s.closed) == 1
 }
 
-func (e *Subscription) Close() error {
-	if e.IsClose() {
+func (s *Subscription) Close() error {
+	if s.IsClose() {
 		return ErrClosed
 	}
-	return e.doClose(nil)
+	return s.doClose(nil)
 }
 
-func (e *Subscription) closeWithError(err error) error {
-	if e.IsClose() {
+func (s *Subscription) closeWithError(err error) error {
+	if s.IsClose() {
 		return ErrClosed
 	}
-	return e.doClose(err)
+	return s.doClose(err)
 }
 
-func (e *Subscription) doClose(err error) (errResult error) {
-	atomic.StoreInt32(&e.closed, 1)
-	e.closer.Do(func() {
+func (s *Subscription) doClose(err error) (errResult error) {
+	atomic.StoreInt32(&s.closed, 1)
+	s.closer.Do(func() {
 
-		close(e.doneSubscription)
+		close(s.doneSubscription)
 
-		e.muClose.Lock()
-		defer e.muClose.Unlock()
+		s.muClose.Lock()
+		defer s.muClose.Unlock()
 		if err != nil {
-			for _, c := range e.closes {
+			for _, c := range s.closes {
 				c <- err
 			}
 		}
 
-		e.mu.RLock()
-		errResult = e.fc.Close()
-		e.mu.RUnlock()
+		s.mu.RLock()
+		errResult = s.fc.Close()
+		s.mu.RUnlock()
 
-		if atomic.LoadInt32(&e.noNotify)==0 {
-			e.chDoneEvent <- e
+		if atomic.LoadInt32(&s.noNotify) == 0 {
+			s.chDoneEvent <- s
 		}
 	})
 	return
