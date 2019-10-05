@@ -183,6 +183,9 @@ func (s *Subscription) NotifyClose(receiver chan error) {
 }
 
 func (s *Subscription) IsClose() bool {
+	if s==nil {
+		return true
+	}
 	return atomic.LoadInt32(&s.closed) == 1
 }
 
