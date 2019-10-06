@@ -11,14 +11,15 @@ import (
 
 func TestEventsCallback(t *testing.T) {
 	tempPathDB := TempFileName("test_events_")
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+tempPathDB)
+	dsn := "sysdba:masterkey@localhost:3050" + tempPathDB
+	conn, err := sql.Open("firebirdsql_createdb", dsn)
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
 	conn.Ping()
 	conn.Close()
 
-	fbevent, err := NewFBEvent("sysdba:masterkey@localhost:3050" + tempPathDB)
+	fbevent, err := NewFBEvent(dsn)
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
@@ -45,7 +46,6 @@ func TestEventsCallback(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			time.Sleep(time.Millisecond * 5)
 			events[name]--
 			if events[name] <= 0 {
 				delete(events, name)
@@ -64,7 +64,6 @@ func TestEventsCallback(t *testing.T) {
 			"event_1": 12,
 			"event_2": 15,
 			"event_3": 23,
-			"event_4": 0,
 		}
 		events := make([]string, 0, len(wantEvents))
 		for event := range wantEvents {
@@ -79,9 +78,10 @@ func TestEventsCallback(t *testing.T) {
 			muEvents.Lock()
 			gotEvents[e.Name] += e.Count
 			muEvents.Unlock()
+			time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
 		})
 		if err != nil {
-			t.Error(err)
+			t.Fatal(err)
 		}
 		defer subscribe.Unsubscribe()
 
@@ -111,7 +111,6 @@ func TestEventsCallback(t *testing.T) {
 			"event_ch_1": 31,
 			"event_ch_2": 21,
 			"event_ch_3": 15,
-			"event_ch_4": 0,
 		}
 		events := make([]string, 0, len(wantEvents))
 		for event := range wantEvents {
@@ -124,8 +123,7 @@ func TestEventsCallback(t *testing.T) {
 		chEvent := make(chan Event)
 		subscribe, err := fbevent.SubscribeChan(events, chEvent)
 		if err != nil {
-			t.Error(err)
-
+			t.Fatal(err)
 		}
 		chClose := make(chan error)
 		subscribe.NotifyClose(chClose)
@@ -136,7 +134,7 @@ func TestEventsCallback(t *testing.T) {
 					muEvents.Lock()
 					gotEvents[e.Name] += e.Count
 					muEvents.Unlock()
-
+					time.Sleep(time.Millisecond * time.Duration(rand.Intn(10)))
 				case err := <-chClose:
 					if err != nil {
 						if _, ok := err.(*net.OpError); !ok {
@@ -168,4 +166,55 @@ func TestEventsCallback(t *testing.T) {
 		}
 		muEvents.Unlock()
 	})
+}
+
+func TestSubscribe(t *testing.T) {
+	tempPathDB := TempFileName("test_subscribe_")
+	dsn := "sysdba:masterkey@localhost:3050" + tempPathDB
+	conn, err := sql.Open("firebirdsql_createdb", dsn)
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	conn.Ping()
+	conn.Close()
+
+	fbevent, err := NewFBEvent(dsn)
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	defer fbevent.Close()
+	events := []string{"event1", "event2"}
+	subscriber1, err := fbevent.Subscribe(events, func(Event) {
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	subscriber2, err := fbevent.Subscribe(events, func(Event) {
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if l := len(fbevent.Subscribers()); l != 2 {
+		t.Errorf("expected len subscribers %d, got %d", 2, l)
+	}
+
+	subscriber2.Unsubscribe()
+	time.Sleep(time.Millisecond * 50)
+
+	if l := len(fbevent.Subscribers()); l != 1 {
+		t.Errorf("expected len subscribers %d, got %d", 1, l)
+	}
+	if fbevent.Subscribers()[0] != subscriber1 {
+		t.Errorf("expected subscriber1")
+	}
+
+	fbevent.Close()
+	if l := len(fbevent.Subscribers()); l != 0 {
+		t.Errorf("unexpected subscribers %d", l)
+	}
+
+	if !subscriber2.IsClose() {
+		t.Errorf("expected closed subscriber")
+	}
 }
