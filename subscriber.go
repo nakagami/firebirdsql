@@ -1,6 +1,7 @@
 package firebirdsql
 
 import (
+	"encoding/binary"
 	"fmt"
 	"net"
 	"strconv"
@@ -159,7 +160,7 @@ func (s *Subscription) connAuxRequest() (int32, *net.IP, int, error) {
 		return -1, nil, 0, err
 	}
 	family := bytes_to_int16(buf[0:2])
-	port := bytes_to_bint16(buf[2:4])
+	port := binary.BigEndian.Uint16(buf[2:4])
 	ip := net.IPv4(buf[4], buf[5], buf[6], buf[7])
 
 	if syscall.AF_INET != family {
