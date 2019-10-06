@@ -199,6 +199,10 @@ func TestSubscribe(t *testing.T) {
 		t.Errorf("expected len subscribers %d, got %d", 2, l)
 	}
 
+	if l := len(fbevent.Subscribers()); l != fbevent.Count() {
+		t.Errorf("expected len subscribers %d, got %d", fbevent.Count(), l)
+	}
+
 	subscriber2.Unsubscribe()
 	time.Sleep(time.Millisecond * 50)
 
@@ -209,12 +213,16 @@ func TestSubscribe(t *testing.T) {
 		t.Errorf("expected subscriber1")
 	}
 
+	if subscriber1.IsClose() {
+		t.Errorf("unexpected closed subscriber")
+	}
+
 	fbevent.Close()
 	if l := len(fbevent.Subscribers()); l != 0 {
 		t.Errorf("unexpected subscribers %d", l)
 	}
 
-	if !subscriber2.IsClose() {
+	if !subscriber1.IsClose() {
 		t.Errorf("expected closed subscriber")
 	}
 }

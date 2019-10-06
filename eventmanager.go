@@ -22,7 +22,7 @@ func newEventManager(address string, auxHandle int32) (*eventManager, error) {
 	return newManager, nil
 }
 
-func (e *eventManager) Wait(event *remoteEvent, eventCounts chan<- Event) <-chan error {
+func (e *eventManager) wait(event *remoteEvent, eventCounts chan<- Event) <-chan error {
 	chErr := make(chan error, 1)
 	go func() {
 		for {
@@ -43,7 +43,7 @@ func (e *eventManager) Wait(event *remoteEvent, eventCounts chan<- Event) <-chan
 				b, _ = e.wp.recvPackets(4)
 				eventId := bytes_to_bint32(b)
 				e.wp.debugPrint("op_event:%v: event id: %v", buffer, eventId)
-				for _, count := range event.GetEventCounts(buffer) {
+				for _, count := range event.getEventCounts(buffer) {
 					eventCounts <- count
 				}
 			default:
@@ -54,7 +54,7 @@ func (e *eventManager) Wait(event *remoteEvent, eventCounts chan<- Event) <-chan
 	return chErr
 }
 
-func (e *eventManager) Close() (err error) {
+func (e *eventManager) close() (err error) {
 	e.destructor.Do(func() {
 		err = e.wp.conn.Close()
 	})

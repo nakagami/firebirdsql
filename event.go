@@ -8,15 +8,19 @@ import (
 	"sync/atomic"
 )
 
+// Errors
 var (
 	ErrAlreadySubscribe = errors.New("already subscribe")
-	ErrClosed           = errors.New("fbevent already closed")
+	ErrFbEventClosed    = errors.New("fbevent already closed")
 )
 
+//SQLs
 const (
 	sqlPostEvent = `execute block as begin post_event '%s'; end`
 )
 
+// FbEvent allows you to subscribe to events, also stores subscribers.
+// It is possible to send events to the database.
 type FbEvent struct {
 	mu               sync.RWMutex
 	dsn              string
@@ -28,6 +32,7 @@ type FbEvent struct {
 	subscribers      []*Subscription
 }
 
+// Event stores event data: the amount since the last time the event was received and id
 type Event struct {
 	Name     string
 	Count    int
@@ -35,8 +40,10 @@ type Event struct {
 	RemoteID int32
 }
 
+// EventHandler callback function type
 type EventHandler func(e Event)
 
+// NewFBEvent returns FbEvent for event subscription
 func NewFBEvent(dsn string) (*FbEvent, error) {
 	conn, err := sql.Open("firebirdsql", dsn)
 	if err != nil {
@@ -52,6 +59,7 @@ func NewFBEvent(dsn string) (*FbEvent, error) {
 	return fbEvent, nil
 }
 
+// PostEvent posts an event to the database
 func (e *FbEvent) PostEvent(name string) error {
 	_, err := e.conn.Exec(fmt.Sprintf(sqlPostEvent, name))
 	if err != nil {
@@ -71,22 +79,26 @@ func (e *FbEvent) newSubscriber(events []string, cb EventHandler, chEvent chan E
 	return subscriber, nil
 }
 
+// Subscribers returns slice of all subscribers
 func (e *FbEvent) Subscribers() []*Subscription {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.subscribers[:]
 }
 
-func (e *FbEvent) CountSubscriber() int {
+// Count returns the number of subscribers
+func (e *FbEvent) Count() int {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return len(e.subscribers)
 }
 
+// Subscribe subscribe to events using the callback function
 func (e *FbEvent) Subscribe(events []string, cb EventHandler) (*Subscription, error) {
 	return e.newSubscriber(events, cb, nil)
 }
 
+// SubscribeChan subscribe to events using the channel
 func (e *FbEvent) SubscribeChan(events []string, chEvent chan Event) (*Subscription, error) {
 	return e.newSubscriber(events, nil, chEvent)
 }
@@ -116,20 +128,22 @@ func (e *FbEvent) shutdownSubscriber(subscriber *Subscription) {
 	}
 }
 
-func (e *FbEvent) IsClose() bool {
+// IsClosed returns a close flag
+func (e *FbEvent) IsClosed() bool {
 	return atomic.LoadInt32(&e.closed) == 1
 }
 
+// Close closes FbEvent and all subscribers
 func (e *FbEvent) Close() error {
-	if e.IsClose() {
-		return ErrClosed
+	if e.IsClosed() {
+		return ErrFbEventClosed
 	}
 	return e.doClose(nil)
 }
 
 func (e *FbEvent) closeWithError(err error) error {
-	if e.IsClose() {
-		return ErrClosed
+	if e.IsClosed() {
+		return ErrFbEventClosed
 	}
 	return e.doClose(err)
 }

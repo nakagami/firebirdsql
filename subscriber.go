@@ -10,29 +10,21 @@ import (
 )
 
 type Subscription struct {
-	mu sync.RWMutex
-
-	revent      *remoteEvent
-	auxHandle   int32
-	callback    EventHandler
-	chEvent     chan Event
-	eventCounts chan Event
-
-	closed      int32
-	muClose     sync.Mutex
-	closes      []chan error
-	closer      sync.Once
-	chDoneEvent chan *Subscription
-
+	mu               sync.RWMutex
+	revent           *remoteEvent
+	auxHandle        int32
+	callback         EventHandler
+	chEvent          chan Event
+	eventCounts      chan Event
+	closed           int32
+	muClose          sync.Mutex
+	closes           []chan error
+	closer           sync.Once
+	chDoneEvent      chan *Subscription
 	doneSubscription chan struct{}
-
-	//fbeventer *FbEvent
-
-	manager *eventManager
-
-	fc *firebirdsqlConn
-
-	noNotify int32
+	manager          *eventManager
+	fc               *firebirdsqlConn
+	noNotify         int32
 }
 
 func newSubscription(dsn string, events []string, cb EventHandler, chEvent chan Event, chDoneEvent chan *Subscription) (*Subscription, error) {
@@ -55,14 +47,14 @@ func newSubscription(dsn string, events []string, cb EventHandler, chEvent chan 
 	newSubscription.manager = manager
 
 	remoteEvent := newRemoteEvent()
-	if err := remoteEvent.QueueEvents(events...); err != nil {
+	if err := remoteEvent.queueEvents(events...); err != nil {
 		return nil, err
 	}
 
 	newSubscription.revent = remoteEvent
 
 	newSubscription.queueEvents(0)
-	chErrManager := manager.Wait(remoteEvent, newSubscription.eventCounts)
+	chErrManager := manager.wait(remoteEvent, newSubscription.eventCounts)
 	go newSubscription.wait(chErrManager)
 
 	return newSubscription, nil
@@ -79,7 +71,7 @@ func (s *Subscription) cancelEvents() error {
 	if err != nil {
 		return err
 	}
-	s.revent.CancelEvents()
+	s.revent.cancelEvents()
 	return nil
 }
 
@@ -110,6 +102,7 @@ func (s *Subscription) getEventManager() (*eventManager, error) {
 	if err != nil {
 		return nil, err
 	}
+	s.auxHandle = auxHandle
 	return newManager, nil
 }
 
@@ -140,7 +133,7 @@ func (s *Subscription) Unsubscribe() error {
 		return nil
 	}
 	if s.manager != nil {
-		if err := s.manager.Close(); err != nil {
+		if err := s.manager.close(); err != nil {
 			return err
 		}
 		s.manager = nil
@@ -183,7 +176,7 @@ func (s *Subscription) NotifyClose(receiver chan error) {
 }
 
 func (s *Subscription) IsClose() bool {
-	if s==nil {
+	if s == nil {
 		return true
 	}
 	return atomic.LoadInt32(&s.closed) == 1
@@ -191,14 +184,14 @@ func (s *Subscription) IsClose() bool {
 
 func (s *Subscription) Close() error {
 	if s.IsClose() {
-		return ErrClosed
+		return ErrFbEventClosed
 	}
 	return s.doClose(nil)
 }
 
 func (s *Subscription) closeWithError(err error) error {
 	if s.IsClose() {
-		return ErrClosed
+		return ErrFbEventClosed
 	}
 	return s.doClose(err)
 }

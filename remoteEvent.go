@@ -36,7 +36,7 @@ func newRemoteEvent() *remoteEvent {
 	return newEvent
 }
 
-func (e *remoteEvent) QueueEvents(events ...string) error {
+func (e *remoteEvent) queueEvents(events ...string) error {
 	if atomic.LoadInt32(&e.running) == 1 {
 		return ErrEventAlreadyRunning
 	}
@@ -66,7 +66,7 @@ func (e *remoteEvent) QueueEvents(events ...string) error {
 	return nil
 }
 
-func (e *remoteEvent) CancelEvents() {
+func (e *remoteEvent) cancelEvents() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.events = make([]string, 0)
@@ -75,7 +75,7 @@ func (e *remoteEvent) CancelEvents() {
 	atomic.StoreInt32(&e.running, 0)
 }
 
-func (e *remoteEvent) GetEventCounts(data []byte) []Event {
+func (e *remoteEvent) getEventCounts(data []byte) []Event {
 	e.mu.Lock()
 	e.prevCounts = make(map[string]int, len(e.events))
 	for k, v := range e.counts {
