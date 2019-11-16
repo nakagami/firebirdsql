@@ -26,10 +26,11 @@ package firebirdsql
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/shopspring/decimal"
 	"math"
 	"reflect"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 const (
@@ -347,11 +348,23 @@ func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
 		low := decimal.New(int64(bytes_to_bint64(raw_value[8:])), int32(x.sqlscale))
 		v = high.Mul(low)
 	case SQL_TYPE_DATE:
-		v = x.parseDate(raw_value)
+		if ReturnCasteableDate {
+			v = parseDateType(x.parseDate(raw_value), SQL_TYPE_DATE)
+		} else {
+			v = x.parseDate(raw_value)
+		}
 	case SQL_TYPE_TIME:
-		v = x.parseTime(raw_value)
+		if ReturnCasteableDate {
+			v = parseDateType(x.parseTime(raw_value), SQL_TYPE_TIME)
+		} else {
+			v = x.parseTime(raw_value)
+		}
 	case SQL_TYPE_TIMESTAMP:
-		v = x.parseTimestamp(raw_value)
+		if ReturnCasteableDate {
+			v = parseDateType(x.parseTimestamp(raw_value), SQL_TYPE_TIMESTAMP)
+		} else {
+			v = x.parseTimestamp(raw_value)
+		}
 	case SQL_TYPE_TIME_TZ:
 		v = x.parseTimeTz(raw_value)
 	case SQL_TYPE_TIMESTAMP_TZ:
@@ -378,4 +391,55 @@ func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
 		v = decimal128ToDecimal(raw_value)
 	}
 	return
+}
+
+/*ReturnCasteableDate Date Types Date, Time and Timestamp like should be returned for casting
+because driver's dates are only parseable in Go and we need a universal casteable date
+*/
+var ReturnCasteableDate = false
+
+//Layouts for date, time and timestamp types
+var layoutDate = "2006-01-02"
+var layoutTime = "15:04:05.000"
+var layoutTimestamp = "2006-01-02 15:04:05.000"
+
+//All layouts that a date can be, note milliseconds with 3,2,1 and 0 integers value
+var layout1 = "2006-01-02 15:04:05.000 -0700 -07"
+var layout2 = "2006-01-02 15:04:05.00 -0700 -07"
+var layout3 = "2006-01-02 15:04:05.0 -0700 -07"
+var layout4 = "2006-01-02 15:04:05 -0700 -07"
+
+func parseDateType(date time.Time, dateType int) string {
+
+	switch dateType {
+	case SQL_TYPE_DATE:
+		return _parseDateType(layoutDate, date)
+	case SQL_TYPE_TIMESTAMP:
+		return _parseDateType(layoutTimestamp, date)
+	case SQL_TYPE_TIME:
+		return _parseDateType(layoutTime, date)
+	}
+
+	return ""
+}
+
+func _parseDateType(destLayout string, date time.Time) string {
+
+	if t, err := time.Parse(layout1, date.String()); err == nil {
+		return t.Format(destLayout)
+	}
+
+	if t, err := time.Parse(layout2, date.String()); err == nil {
+		return t.Format(destLayout)
+	}
+
+	if t, err := time.Parse(layout3, date.String()); err == nil {
+		return t.Format(destLayout)
+	}
+
+	if t, err := time.Parse(layout4, date.String()); err == nil {
+		return t.Format(destLayout)
+	}
+
+	return ""
 }
