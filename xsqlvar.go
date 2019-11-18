@@ -26,10 +26,11 @@ package firebirdsql
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/shopspring/decimal"
 	"math"
 	"reflect"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 const (
@@ -347,11 +348,23 @@ func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
 		low := decimal.New(int64(bytes_to_bint64(raw_value[8:])), int32(x.sqlscale))
 		v = high.Mul(low)
 	case SQL_TYPE_DATE:
-		v = x.parseDate(raw_value)
+		if ReturnCasteableDate {
+			v = parseDateType(x.parseDate(raw_value), SQL_TYPE_DATE)
+		} else {
+			v = x.parseDate(raw_value)
+		}
 	case SQL_TYPE_TIME:
-		v = x.parseTime(raw_value)
+		if ReturnCasteableDate {
+			v = parseDateType(x.parseTime(raw_value), SQL_TYPE_TIME)
+		} else {
+			v = x.parseTime(raw_value)
+		}
 	case SQL_TYPE_TIMESTAMP:
-		v = x.parseTimestamp(raw_value)
+		if ReturnCasteableDate {
+			v = parseDateType(x.parseTimestamp(raw_value), SQL_TYPE_TIMESTAMP)
+		} else {
+			v = x.parseTimestamp(raw_value)
+		}
 	case SQL_TYPE_TIME_TZ:
 		v = x.parseTimeTz(raw_value)
 	case SQL_TYPE_TIMESTAMP_TZ:
@@ -378,4 +391,29 @@ func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
 		v = decimal128ToDecimal(raw_value)
 	}
 	return
+}
+
+//ReturnCasteableDate Date Types Date, Time and Timestamp like should be returned for casting
+var ReturnCasteableDate = false
+
+//Layouts for casteable dates
+const (
+	layoutDate      = "2006-01-02"
+	layoutTime      = "15:04:05.000"
+	layoutTimestamp = "2006-01-02 15:04:05.000"
+)
+
+//Parse the date for a casteable date string
+func parseDateType(date time.Time, dateType int) string {
+
+	switch dateType {
+	case SQL_TYPE_DATE:
+		return date.Format(layoutDate)
+	case SQL_TYPE_TIMESTAMP:
+		return date.Format(layoutTimestamp)
+	case SQL_TYPE_TIME:
+		return date.Format(layoutTime)
+	}
+
+	return ""
 }
