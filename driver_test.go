@@ -809,3 +809,39 @@ func TestGoIssue80(t *testing.T) {
 	}
 
 }
+
+func TestIssue96(t *testing.T) {
+	temppath := TempFileName("test_issue96_")
+
+	conn, err := sql.Open("firebirdsql_createdb", "SYSDBA:masterkey@localhost:3050"+temppath)
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+
+	conn.Exec(`CREATE EXCEPTION EX_DATA_ERROR ''`)
+	conn.Exec(`CREATE PROCEDURE EXCEPTION_PROC(in1 INTEGER)
+        RETURNS (out1 INTEGER)
+        AS
+        BEGIN
+          IF (IN1=1) THEN
+          BEGIN
+            EXCEPTION EX_DATA_ERROR 'data error';
+          END
+          out1 = in1;
+          SUSPEND;
+        END`)
+
+	query := "SELECT * FROM exception_proc(1)"
+	rows, err := conn.Query(query)
+	if err != nil {
+		t.Fatalf("Error Query: %v", err)
+	}
+	rows.Next()
+	var n int
+	err = rows.Scan(&n)
+	if err == nil {
+		t.Error("Error not occured")
+	}
+
+	conn.Close()
+}
