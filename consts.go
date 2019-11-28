@@ -440,8 +440,8 @@ const (
 
 //Event
 const (
-	p_req_async  = 1 // Auxiliary asynchronous port
-	EPB_version1 = 1
+	p_req_async             = 1 // Auxiliary asynchronous port
+	EPB_version1            = 1
 	partner_identification  = 0
 	address_of_ast_routine  = 0
 	argument_to_ast_routine = 0
