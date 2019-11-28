@@ -47,6 +47,7 @@ const (
 	SQL_TYPE_TIME         = 560
 	SQL_TYPE_DATE         = 570
 	SQL_TYPE_INT64        = 580
+	SQL_TYPE_INT128       = 32752
 	SQL_TYPE_TIMESTAMP_TZ = 32754
 	SQL_TYPE_TIME_TZ      = 32756
 	SQL_TYPE_DEC_FIXED    = 32758
@@ -69,6 +70,7 @@ var xsqlvarTypeLength = map[int]int{
 	SQL_TYPE_ARRAY:        8,
 	SQL_TYPE_QUAD:         8,
 	SQL_TYPE_INT64:        8,
+	SQL_TYPE_INT128:       16,
 	SQL_TYPE_TIMESTAMP_TZ: 10,
 	SQL_TYPE_TIME_TZ:      6,
 	SQL_TYPE_DEC64:        8,
@@ -90,6 +92,7 @@ var xsqlvarTypeDisplayLength = map[int]int{
 	SQL_TYPE_ARRAY:        -1,
 	SQL_TYPE_QUAD:         20,
 	SQL_TYPE_INT64:        20,
+	SQL_TYPE_INT128:       20,
 	SQL_TYPE_TIMESTAMP_TZ: 28,
 	SQL_TYPE_TIME_TZ:      17,
 	SQL_TYPE_DEC64:        16,
@@ -112,6 +115,7 @@ var xsqlvarTypeName = map[int]string{
 	SQL_TYPE_ARRAY:        "ARRAY",
 	SQL_TYPE_QUAD:         "QUAD",
 	SQL_TYPE_INT64:        "INT64",
+	SQL_TYPE_INT128:       "INT128",
 	SQL_TYPE_TIMESTAMP_TZ: "TIMESTAMP WITH TIMEZONE",
 	SQL_TYPE_TIME_TZ:      "TIME WITH TIMEZONE",
 	SQL_TYPE_DEC64:        "DECFLOAT(16)",
@@ -158,7 +162,7 @@ func (x *xSQLVAR) scale() int {
 }
 
 func (x *xSQLVAR) hasPrecisionScale() bool {
-	return (x.sqltype == SQL_TYPE_SHORT || x.sqltype == SQL_TYPE_LONG || x.sqltype == SQL_TYPE_QUAD || x.sqltype == SQL_TYPE_INT64 || x.sqltype == SQL_TYPE_DEC64 || x.sqltype == SQL_TYPE_DEC128 || x.sqltype == SQL_TYPE_DEC_FIXED) && x.sqlscale != 0
+	return (x.sqltype == SQL_TYPE_SHORT || x.sqltype == SQL_TYPE_LONG || x.sqltype == SQL_TYPE_QUAD || x.sqltype == SQL_TYPE_INT64 || x.sqltype == SQL_TYPE_INT128 || x.sqltype == SQL_TYPE_DEC64 || x.sqltype == SQL_TYPE_DEC128 || x.sqltype == SQL_TYPE_DEC_FIXED) && x.sqlscale != 0
 }
 
 func (x *xSQLVAR) typename() string {
@@ -186,6 +190,8 @@ func (x *xSQLVAR) scantype() reflect.Type {
 			return reflect.TypeOf(decimal.Decimal{})
 		}
 		return reflect.TypeOf(int64(0))
+	case SQL_TYPE_INT128:
+		return reflect.TypeOf(decimal.Decimal{})
 	case SQL_TYPE_DATE:
 		return reflect.TypeOf(time.Time{})
 	case SQL_TYPE_TIME:
@@ -336,6 +342,10 @@ func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
 		} else {
 			v = i64
 		}
+	case SQL_TYPE_INT128:
+		high := decimal.New(int64(bytes_to_bint64(raw_value[:8])), 64)
+		low := decimal.New(int64(bytes_to_bint64(raw_value[8:])), int32(x.sqlscale))
+		v = high.Mul(low)
 	case SQL_TYPE_DATE:
 		v = x.parseDate(raw_value)
 	case SQL_TYPE_TIME:
