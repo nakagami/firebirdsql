@@ -26,10 +26,11 @@ package firebirdsql
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/shopspring/decimal"
 	"math"
 	"reflect"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 const (
@@ -58,6 +59,7 @@ const (
 )
 
 var xsqlvarTypeLength = map[int]int{
+	SQL_TYPE_TEXT:         -1,
 	SQL_TYPE_VARYING:      -1,
 	SQL_TYPE_SHORT:        4,
 	SQL_TYPE_LONG:         4,
@@ -80,6 +82,7 @@ var xsqlvarTypeLength = map[int]int{
 }
 
 var xsqlvarTypeDisplayLength = map[int]int{
+	SQL_TYPE_TEXT:         -1,
 	SQL_TYPE_VARYING:      -1,
 	SQL_TYPE_SHORT:        6,
 	SQL_TYPE_LONG:         11,
@@ -98,11 +101,11 @@ var xsqlvarTypeDisplayLength = map[int]int{
 	SQL_TYPE_DEC64:        16,
 	SQL_TYPE_DEC128:       34,
 	SQL_TYPE_DEC_FIXED:    34,
-
-	SQL_TYPE_BOOLEAN: 5,
+	SQL_TYPE_BOOLEAN:      5,
 }
 
 var xsqlvarTypeName = map[int]string{
+	SQL_TYPE_TEXT:         "TEXT",
 	SQL_TYPE_VARYING:      "VARYING",
 	SQL_TYPE_SHORT:        "SHORT",
 	SQL_TYPE_LONG:         "LONG",
