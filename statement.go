@@ -39,7 +39,11 @@ type firebirdsqlStmt struct {
 }
 
 func (stmt *firebirdsqlStmt) Close() (err error) {
-	stmt.wp.opFreeStatement(stmt.stmtHandle, 2) // DSQL_drop
+	err = stmt.wp.opFreeStatement(stmt.stmtHandle, 2) // DSQL_drop
+	if err != nil {
+		return err
+	}
+
 	if stmt.wp.acceptType == ptype_lazy_send {
 		stmt.wp.lazyResponseCount++
 	} else {
@@ -54,12 +58,21 @@ func (stmt *firebirdsqlStmt) NumInput() int {
 }
 
 func (stmt *firebirdsqlStmt) exec(ctx context.Context, args []driver.Value) (result driver.Result, err error) {
-	stmt.wp.opExecute(stmt.stmtHandle, stmt.tx.transHandle, args)
+	err = stmt.wp.opExecute(stmt.stmtHandle, stmt.tx.transHandle, args)
+	if err != nil {
+		return
+	}
+
 	_, _, _, err = stmt.wp.opResponse()
 	if err != nil {
 		return
 	}
-	stmt.wp.opInfoSql(stmt.stmtHandle, []byte{isc_info_sql_records})
+
+	err = stmt.wp.opInfoSql(stmt.stmtHandle, []byte{isc_info_sql_records})
+	if err != nil {
+		return
+	}
+
 	_, _, buf, err := stmt.wp.opResponse()
 	if err != nil {
 		return
@@ -92,13 +105,33 @@ func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (dr
 	var result []driver.Value
 
 	if stmt.stmtType == isc_info_sql_stmt_exec_procedure {
-		stmt.wp.opExecute2(stmt.stmtHandle, stmt.tx.transHandle, args, stmt.blr)
+		err = stmt.wp.opExecute2(stmt.stmtHandle, stmt.tx.transHandle, args, stmt.blr)
+		if err != nil {
+			return nil, err
+		}
+
 		result, err = stmt.wp.opSqlResponse(stmt.xsqlda)
+		if err != nil {
+			return nil, err
+		}
+
 		rows = newFirebirdsqlRows(stmt, result)
+
 		_, _, _, err = stmt.wp.opResponse()
+		if err != nil {
+			return nil, err
+		}
 	} else {
-		stmt.wp.opExecute(stmt.stmtHandle, stmt.tx.transHandle, args)
+		err := stmt.wp.opExecute(stmt.stmtHandle, stmt.tx.transHandle, args)
+		if err != nil {
+			return nil, err
+		}
+
 		_, _, _, err = stmt.wp.opResponse()
+		if err != nil {
+			return nil, err
+		}
+
 		rows = newFirebirdsqlRows(stmt, nil)
 	}
 	return rows, err
@@ -113,16 +146,25 @@ func newFirebirdsqlStmt(fc *firebirdsqlConn, query string) (stmt *firebirdsqlStm
 	stmt.wp = fc.wp
 	stmt.tx = fc.tx
 
-	fc.wp.opAllocateStatement()
+	err = fc.wp.opAllocateStatement()
+	if err != nil {
+		return nil, err
+	}
 
 	if fc.wp.acceptType == ptype_lazy_send {
 		fc.wp.lazyResponseCount++
 		stmt.stmtHandle = -1
 	} else {
 		stmt.stmtHandle, _, _, err = fc.wp.opResponse()
+		if err != nil {
+			return
+		}
 	}
 
-	fc.wp.opPrepareStatement(stmt.stmtHandle, stmt.tx.transHandle, query)
+	err = fc.wp.opPrepareStatement(stmt.stmtHandle, stmt.tx.transHandle, query)
+	if err != nil {
+		return nil, err
+	}
 
 	if fc.wp.acceptType == ptype_lazy_send && fc.wp.lazyResponseCount > 0 {
 		fc.wp.lazyResponseCount--
@@ -135,6 +177,10 @@ func newFirebirdsqlStmt(fc *firebirdsqlConn, query string) (stmt *firebirdsqlStm
 	}
 
 	stmt.stmtType, stmt.xsqlda, err = fc.wp.parse_xsqlda(buf, stmt.stmtHandle)
+	if err != nil {
+		return nil, err
+	}
+
 	stmt.blr = calcBlr(stmt.xsqlda)
 
 	return

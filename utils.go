@@ -27,11 +27,8 @@ import (
 	"bytes"
 	"container/list"
 	"encoding/binary"
-	"errors"
 	"math/big"
-	"net/url"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -244,57 +241,6 @@ func split1(src string, delm string) (string, string) {
 		}
 	}
 	return src, ""
-}
-
-func parseDSN(dsn string) (addr string, dbName string, user string, passwd string, options map[string]string, err error) {
-	options = make(map[string]string)
-	if !strings.HasPrefix(dsn, "firebird://") {
-		dsn = "firebird://" + dsn
-	}
-	u, err := url.Parse(dsn)
-	if err != nil {
-		return
-	}
-	if u.User == nil {
-		err = errors.New("User unknown")
-		return
-	}
-	user = u.User.Username()
-	passwd, _ = u.User.Password()
-	addr = u.Host
-	if !strings.ContainsRune(addr, ':') {
-		addr += ":3050"
-	}
-	dbName = u.Path
-	if !strings.ContainsRune(dbName[1:], '/') {
-		dbName = dbName[1:]
-	}
-
-	//Windows Path
-	if strings.ContainsRune(dbName[2:], ':') {
-		dbName = dbName[1:]
-	}
-
-	m, _ := url.ParseQuery(u.RawQuery)
-
-	var default_options = map[string]string{
-		"auth_plugin_name":     "Srp",
-		"column_name_to_lower": "false",
-		"role":                 "",
-		"timezone":             "",
-		"wire_crypt":           "true",
-	}
-
-	for k, v := range default_options {
-		values, ok := m[k]
-		if ok {
-			options[k] = values[0]
-		} else {
-			options[k] = v
-		}
-	}
-
-	return
 }
 
 func convertToBool(s string, defaultValue bool) bool {

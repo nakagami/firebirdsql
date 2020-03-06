@@ -85,13 +85,6 @@ func (fc *firebirdsqlConn) ExecContext(ctx context.Context, query string, nameda
 	return fc.exec(ctx, query, args)
 }
 
-func (fc *firebirdsqlConn) Ping(ctx context.Context) error {
-	if fc == nil {
-		return errors.New("Connection was closed")
-	}
-	return nil
-}
-
 func (fc *firebirdsqlConn) QueryContext(ctx context.Context, query string, namedargs []driver.NamedValue) (rows driver.Rows, err error) {
 	args := make([]driver.Value, len(namedargs))
 	for i, nv := range namedargs {

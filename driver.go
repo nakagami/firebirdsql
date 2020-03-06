@@ -25,23 +25,54 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
+	"context"
 	"database/sql"
 	"database/sql/driver"
 )
 
 type firebirdsqlDriver struct{}
 
-func (d *firebirdsqlDriver) Open(dsn string) (driver.Conn, error) {
+func (d *firebirdsqlDriver) Open(dsns string) (driver.Conn, error) {
+	dsn, err := parseDSN(dsns)
+	if err != nil {
+		return nil, err
+	}
 	return newFirebirdsqlConn(dsn)
 }
 
 type firebirdsqlCreateDbDriver struct{}
 
-func (d *firebirdsqlCreateDbDriver) Open(dsn string) (driver.Conn, error) {
+func (d *firebirdsqlCreateDbDriver) Open(dsns string) (driver.Conn, error) {
+	dsn, err := parseDSN(dsns)
+	if err != nil {
+		return nil, err
+	}
 	return createFirebirdsqlConn(dsn)
 }
 
 func init() {
 	sql.Register("firebirdsql", &firebirdsqlDriver{})
 	sql.Register("firebirdsql_createdb", &firebirdsqlCreateDbDriver{})
+}
+
+// ================== Implementation of the Connector interface ====================
+
+type firebirdConnector struct {
+	dsn *firebirdDsn
+}
+
+func (d *firebirdConnector) OpenConnector(dsns string) (driver.Connector, error) {
+	dsn, err := parseDSN(dsns)
+	if err != nil {
+		return nil, err
+	}
+	return &firebirdConnector{dsn: dsn}, nil
+}
+
+func (fc *firebirdConnector) Driver() driver.Driver {
+	return &firebirdsqlDriver{}
+}
+
+func (fc *firebirdConnector) Connect(ctx context.Context) (driver.Conn, error) {
+	return newFirebirdsqlConn(fc.dsn)
 }

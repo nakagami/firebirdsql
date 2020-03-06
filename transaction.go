@@ -23,9 +23,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 package firebirdsql
 
+import (
+	"database/sql/driver"
+)
+
 type firebirdsqlTx struct {
 	fc             *firebirdsqlConn
-	isolationLevel int
+	isolationLevel driver.IsolationLevel
 	isAutocommit   bool
 	transHandle    int32
 	needBegin      bool
@@ -73,7 +77,10 @@ func (tx *firebirdsqlTx) begin() (err error) {
 			byte(isc_tpb_rec_version),
 		}
 	}
-	tx.fc.wp.opTransaction(tpb)
+	err = tx.fc.wp.opTransaction(tpb)
+	if err != nil {
+		return
+	}
 	tx.transHandle, _, _, err = tx.fc.wp.opResponse()
 	tx.needBegin = false
 	tx.fc.transactionSet[tx] = struct{}{}
@@ -81,14 +88,20 @@ func (tx *firebirdsqlTx) begin() (err error) {
 }
 
 func (tx *firebirdsqlTx) commitRetainging() (err error) {
-	tx.fc.wp.opCommitRetaining(tx.transHandle)
+	err = tx.fc.wp.opCommitRetaining(tx.transHandle)
+	if err != nil {
+		return
+	}
 	_, _, _, err = tx.fc.wp.opResponse()
 	tx.isAutocommit = tx.fc.isAutocommit
 	return
 }
 
 func (tx *firebirdsqlTx) Commit() (err error) {
-	tx.fc.wp.opCommit(tx.transHandle)
+	err = tx.fc.wp.opCommit(tx.transHandle)
+	if err != nil {
+		return err
+	}
 	_, _, _, err = tx.fc.wp.opResponse()
 	tx.isAutocommit = tx.fc.isAutocommit
 	tx.needBegin = true
@@ -96,18 +109,27 @@ func (tx *firebirdsqlTx) Commit() (err error) {
 }
 
 func (tx *firebirdsqlTx) Rollback() (err error) {
-	tx.fc.wp.opRollback(tx.transHandle)
+	err = tx.fc.wp.opRollback(tx.transHandle)
+	if err != nil {
+		return nil
+	}
 	_, _, _, err = tx.fc.wp.opResponse()
 	tx.isAutocommit = tx.fc.isAutocommit
 	tx.needBegin = true
 	return
 }
 
-func newFirebirdsqlTx(fc *firebirdsqlConn, isolationLevel int, isAutocommit bool) (tx *firebirdsqlTx, err error) {
-	tx = new(firebirdsqlTx)
+func newFirebirdsqlTx(fc *firebirdsqlConn, isolationLevel driver.IsolationLevel, isAutocommit bool) (*firebirdsqlTx, error) {
+	tx := new(firebirdsqlTx)
 	tx.fc = fc
 	tx.isolationLevel = isolationLevel
 	tx.isAutocommit = isAutocommit
-	tx.begin()
-	return
+
+	err := tx.begin()
+
+	if err != nil {
+		return nil, err
+	}
+
+	return tx, nil
 }
