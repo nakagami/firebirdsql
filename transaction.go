@@ -119,17 +119,23 @@ func (tx *firebirdsqlTx) Rollback() (err error) {
 	return
 }
 
-func newFirebirdsqlTx(fc *firebirdsqlConn, isolationLevel driver.IsolationLevel, isAutocommit bool) (*firebirdsqlTx, error) {
-	tx := new(firebirdsqlTx)
+func newFirebirdsqlTx(fc *firebirdsqlConn, isolationLevel driver.IsolationLevel, isAutocommit bool, withBegin bool) (tx *firebirdsqlTx, err error) {
+	tx = new(firebirdsqlTx)
 	tx.fc = fc
 	tx.isolationLevel = isolationLevel
 	tx.isAutocommit = isAutocommit
+	tx.needBegin = false
 
-	err := tx.begin()
+	if withBegin {
+		err = tx.begin()
 
-	if err != nil {
-		return nil, err
+		if err != nil {
+			return nil, err
+		}
+
+	} else {
+		tx.needBegin = true
 	}
 
-	return tx, nil
+	return
 }

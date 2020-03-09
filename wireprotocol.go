@@ -1261,7 +1261,8 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 			n += 4 - n%4
 		}
 		for i := 0; i < n; i++ {
-			valuesList.PushBack([]byte{byte(nullIndicator.Mod(nullIndicator, bi256).Int64())})
+			var modres *big.Int = new(big.Int)
+			valuesList.PushBack([]byte{byte(modres.Mod(nullIndicator, bi256).Int64())})
 			nullIndicator = nullIndicator.Div(nullIndicator, bi256)
 		}
 	}
@@ -1341,4 +1342,32 @@ func (p *wireProtocol) debugPrint(s string, a ...interface{}) {
 	//	s = fmt.Sprintf(s, a...)
 	//}
 	//fmt.Printf("[%x] %s\n", uintptr(unsafe.Pointer(p)), s)
+}
+
+func (p *wireProtocol) opConnectRequest() {
+	p.debugPrint("opConnectRequest()")
+	p.packInt(op_connect_request)
+	p.packInt(p_req_async)
+	p.packInt(p.dbHandle)
+	p.packInt(partner_identification)
+	p.sendPackets()
+}
+
+func (p *wireProtocol) opQueEvents(auxHandle int32, epb []byte, eventId int32) {
+	p.debugPrint("opQueEvents():%d %d", auxHandle, eventId)
+	p.packInt(op_que_events)
+	p.packInt(auxHandle)
+	p.packBytes(epb)
+	p.packInt(address_of_ast_routine)
+	p.packInt(argument_to_ast_routine)
+	p.packInt(eventId)
+	p.sendPackets()
+}
+
+func (p *wireProtocol) opCancelEvents(eventID int32) {
+	p.debugPrint("opCancelEvents():%d", eventID)
+	p.packInt(op_cancel_events)
+	p.packInt(p.dbHandle)
+	p.packInt(eventID)
+	p.sendPackets()
 }

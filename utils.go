@@ -291,11 +291,15 @@ func calcBlr(xsqlda []xSQLVAR) []byte {
 			blr[n] = 16
 			blr[n+1] = byte(sqlscale)
 			n += 2
+		case SQL_TYPE_INT128:
+			blr[n] = 26
+			blr[n+1] = byte(sqlscale)
+			n += 2
 		case SQL_TYPE_QUAD:
 			blr[n] = 9
 			blr[n+1] = byte(sqlscale)
 			n += 2
-		case SQL_TYPE_DEC_FIXED:
+		case SQL_TYPE_DEC_FIXED: // OBSOLATED
 			blr[n] = 26
 			blr[n+1] = byte(sqlscale)
 			n += 2

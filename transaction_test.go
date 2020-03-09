@@ -287,3 +287,152 @@ func TestIssue67(t *testing.T) {
 	}
 
 }
+
+func TestIssue89(t *testing.T) {
+
+	var noconn1, numberTrans, numberrelations int
+
+	temppath := TempFileName("test_issue89_")
+
+	//	test transaction open on connection open
+	conn1, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	conn2, _ := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+
+	conn2.QueryRow("select count(*) from mon$transactions where mon$attachment_id <> current_connection").Scan(&numberTrans)
+
+	if numberTrans > 0 {
+		t.Fatalf("Transaction open without query runned")
+	}
+
+	conn2.Close()
+
+	//	test if are more than 1 transaction open on first query
+	conn1.QueryRow("select mon$attachment_id from mon$attachments where mon$attachment_id = current_connection").Scan(&noconn1)
+
+	conn2, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/"+temppath)
+	conn2.QueryRow("select count(*) from mon$transactions where mon$attachment_id <> current_connection").Scan(&numberTrans)
+
+	if numberTrans > 1 {
+		t.Fatalf("More than 1 transaction open")
+	}
+
+	conn1.Close()
+	conn2.Close()
+
+	//	test autocommit when rows is closed
+	conn1, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+
+	rows, _ := conn1.Query("select first 3 rdb$relation_id from rdb$relations")
+
+	rows.Next()
+	rows.Next()
+
+	rows.Close()
+
+	conn2, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn2.QueryRow("select count(*) from mon$transactions where mon$attachment_id <> current_connection").Scan(&numberTrans)
+
+	if numberTrans > 0 {
+		t.Fatalf("Autocommit don't work")
+	}
+
+	conn1.Close()
+	conn2.Close()
+
+	//	test autocommit on prepare statement
+	conn1, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	stmt, _ := conn1.Prepare("select count(*) from rdb$relations")
+	err := stmt.QueryRow().Scan(&numberrelations)
+
+	if err != nil {
+		t.Fatalf("Error QueryRow of Prepare: %v", err)
+	}
+
+	stmt.Close()
+
+	stmt, _ = conn1.Prepare("select count(*) from rdb$relations")
+
+	rows, _ = stmt.Query("select first 3 rdb$relation_id from rdb$relations")
+
+	rows.Next()
+	rows.Next()
+
+	rows.Close()
+
+	conn2, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn2.QueryRow("select count(*) from mon$transactions where mon$attachment_id <> current_connection").Scan(&numberTrans)
+
+	if numberTrans > 0 {
+		t.Fatalf("Autocommit in prepare don't work")
+	}
+
+	//	test autocommit on prepare statement
+	conn1, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn1.Exec("create table testprepareinsert (id integer)")
+
+	stmt, _ = conn1.Prepare("insert into testprepareinsert (id) values (?)")
+
+	stmt.Exec(1)
+	/*	_, err = stmt.Exec(2)
+		if err == nil {
+			t.Fatalf("Autocommit in prepare don't work")
+		}
+	*/
+	stmt.Close()
+
+	conn2, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn2.QueryRow("select count(*) from mon$transactions where mon$attachment_id <> current_connection").Scan(&numberTrans)
+
+	if numberTrans > 0 {
+		t.Fatalf("Autocommit in prepare don't work")
+	}
+
+	conn1, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	txp, _ := conn1.Begin()
+	stmt, _ = txp.Prepare("insert into testprepareinsert (id) values (?)")
+
+	for i := 1; i <= 6; i++ {
+		_, err = stmt.Exec(i)
+		if err != nil {
+			t.Fatalf("Multiple execute of a prepared statement in same transaction don't work: %v", err)
+		}
+	}
+
+	txp.Commit()
+	conn2, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn2.QueryRow("select count(*) from mon$transactions where mon$attachment_id <> current_connection").Scan(&numberTrans)
+
+	if numberTrans > 0 {
+		t.Fatalf("Autocommit in prepare don't work")
+	}
+
+	// test transaction open after a commit of another transaction
+	conn1, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn2, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+
+	tx, err := conn1.Begin()
+
+	if err != nil {
+		t.Fatalf("Error opening new transaction: %v", err)
+	}
+
+	tx.QueryRow("select mon$attachment_id from mon$attachments where mon$attachment_id = current_connection").Scan(&noconn1)
+
+	tx.Commit()
+
+	err = conn1.QueryRow("select mon$attachment_id from mon$attachments where mon$attachment_id = current_connection").Scan(&noconn1)
+	if err != nil {
+		t.Fatalf("Error opening new transaction after last one committed or rollback: %v", err)
+	}
+
+	conn2, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn2.QueryRow("select count(*) from mon$transactions where mon$attachment_id <> current_connection").Scan(&numberTrans)
+
+	if numberTrans > 0 {
+		t.Fatalf("Transaction leaved open until close connection")
+	}
+
+	conn1.Close()
+	conn2.Close()
+
+}
