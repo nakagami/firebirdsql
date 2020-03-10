@@ -107,3 +107,25 @@ func (fc *firebirdsqlConn) QueryContext(ctx context.Context, query string, named
 	}
 	return fc.query(ctx, query, args)
 }
+
+// ================== Implementation of the Connector interface ====================
+
+type firebirdConnector struct {
+	dsn *firebirdDsn
+}
+
+func (d *firebirdConnector) OpenConnector(dsns string) (driver.Connector, error) {
+	dsn, err := parseDSN(dsns)
+	if err != nil {
+		return nil, err
+	}
+	return &firebirdConnector{dsn: dsn}, nil
+}
+
+func (fc *firebirdConnector) Driver() driver.Driver {
+	return &firebirdsqlDriver{}
+}
+
+func (fc *firebirdConnector) Connect(ctx context.Context) (driver.Conn, error) {
+	return newFirebirdsqlConn(fc.dsn)
+}

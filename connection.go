@@ -42,7 +42,7 @@ type firebirdsqlConn struct {
 
 // ============ driver.Conn implementation
 
-func (fc *firebirdsqlConn) begin(isolationLevel driver.IsolationLevel) (driver.Tx, error) {
+func (fc *firebirdsqlConn) begin(isolationLevel int) (driver.Tx, error) {
 	tx, err := newFirebirdsqlTx(fc, isolationLevel, false, true)
 	fc.tx = tx
 	return driver.Tx(tx), err

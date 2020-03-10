@@ -23,13 +23,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 package firebirdsql
 
-import (
-	"database/sql/driver"
-)
-
 type firebirdsqlTx struct {
 	fc             *firebirdsqlConn
-	isolationLevel driver.IsolationLevel
+	isolationLevel int
 	isAutocommit   bool
 	transHandle    int32
 	needBegin      bool
@@ -119,7 +115,7 @@ func (tx *firebirdsqlTx) Rollback() (err error) {
 	return
 }
 
-func newFirebirdsqlTx(fc *firebirdsqlConn, isolationLevel driver.IsolationLevel, isAutocommit bool, withBegin bool) (tx *firebirdsqlTx, err error) {
+func newFirebirdsqlTx(fc *firebirdsqlConn, isolationLevel int, isAutocommit bool, withBegin bool) (tx *firebirdsqlTx, err error) {
 	tx = new(firebirdsqlTx)
 	tx.fc = fc
 	tx.isolationLevel = isolationLevel
