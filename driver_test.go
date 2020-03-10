@@ -687,6 +687,7 @@ func TestGoIssue53(t *testing.T) {
 			rows, err := conn.Query(sqlget)
 			if err != nil {
 				t.Error(err)
+				return
 			}
 
 			for rows.Next() {
@@ -760,6 +761,7 @@ func TestGoIssue65(t *testing.T) {
 	movtos, err := conn.Query(sqlTest2)
 	if err != nil {
 		t.Error(err)
+		return
 	}
 
 	existData := movtos.Next()

@@ -50,38 +50,41 @@ func TestDSNParse(t *testing.T) {
 	}
 
 	for _, d := range testDSNs {
-		addr, dbName, user, passwd, options, err := parseDSN(d.dsn)
+		dsn, err := parseDSN(d.dsn)
+		if dsn == nil {
+			t.Fatal("parse DSN fail. firebirdDsn is nil.")
+		}
 		if err != nil {
 			t.Fatal(err)
 		}
-		if addr != d.addr {
-			t.Errorf("parse DSN fail:%s(%s != %s)", d.dsn, addr, d.addr)
+		if dsn.addr != d.addr {
+			t.Errorf("parse DSN fail:%s(%s != %s)", d.dsn, dsn.addr, d.addr)
 		}
-		if dbName != d.dbName {
-			t.Errorf("parse DSN fail:%s(%s != %s)", d.dsn, dbName, d.dbName)
+		if dsn.dbName != d.dbName {
+			t.Errorf("parse DSN fail:%s(%s != %s)", d.dsn, dsn.dbName, d.dbName)
 		}
-		if user != d.user {
-			t.Errorf("parse DSN fail:%s(%s != %s)", d.dsn, user, d.user)
+		if dsn.user != d.user {
+			t.Errorf("parse DSN fail:%s(%s != %s)", d.dsn, dsn.user, d.user)
 		}
-		if passwd != d.passwd {
-			t.Errorf("parse DSN fail:%s(%s != %s)", d.dsn, passwd, d.passwd)
+		if dsn.passwd != d.passwd {
+			t.Errorf("parse DSN fail:%s(%s != %s)", d.dsn, dsn.passwd, d.passwd)
 		}
-		if options["role"] != d.role {
-			t.Errorf("parse DSN fail:%s(%s != %s)", d.dsn, options["role"], d.role)
+		if dsn.options["role"] != d.role {
+			t.Errorf("parse DSN fail:%s(%s != %s)", d.dsn, dsn.options["role"], d.role)
 		}
-		if options["auth_plugin_name"] != d.authPluginName {
-			t.Errorf("parse DSN fail:%s(%s != %s)", d.dsn, options["auth_plugin_name"], d.authPluginName)
+		if dsn.options["auth_plugin_name"] != d.authPluginName {
+			t.Errorf("parse DSN fail:%s(%s != %s)", d.dsn, dsn.options["auth_plugin_name"], d.authPluginName)
 		}
-		if options["wire_crypt"] != d.wireCrypt {
-			t.Errorf("parse DSN fail:%s(%v != %v)", d.dsn, options["wire_crypt"], d.wireCrypt)
+		if dsn.options["wire_crypt"] != d.wireCrypt {
+			t.Errorf("parse DSN fail:%s(%v != %v)", d.dsn, dsn.options["wire_crypt"], d.wireCrypt)
 		}
 	}
 
-	_, _, _, _, _, err := parseDSN("something wrong")
+	_, err := parseDSN("something wrong")
 	if err == nil {
 		t.Fatalf("Error Not occured")
 	}
-	_, _, _, _, _, err = parseDSN("SomethingWrongConnectionString")
+	_, err = parseDSN("SomethingWrongConnectionString")
 	if err == nil {
 		t.Fatalf("Error Not occured")
 	}
