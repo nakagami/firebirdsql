@@ -30,16 +30,17 @@ import (
 	"crypto/rc4"
 	"database/sql/driver"
 	"encoding/hex"
-	"errors"
 	"fmt"
-	"github.com/kardianos/osext"
-	"gitlab.com/nyarla/go-crypt"
 	"math/big"
 	"net"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/kardianos/osext"
+	"github.com/pkg/errors"
+	"gitlab.com/nyarla/go-crypt"
 	//"unsafe"
 )
 
@@ -249,6 +250,8 @@ func (p *wireProtocol) sendPackets() (written int, err error) {
 	for written < len(p.buf) {
 		n, err = p.conn.Write(p.buf[written:])
 		if err != nil {
+			// error while sending the package....
+			err = driver.ErrBadConn
 			break
 		}
 		written += n
@@ -469,7 +472,7 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 			p.packInt(op_crypt)
 			p.packString("Arc4")
 			p.packString("Symmetric")
-			p.sendPackets()
+			_, err = p.sendPackets()
 			p.conn.setAuthKey(sessionKey)
 
 			_, _, _, err = p.opResponse()
@@ -645,7 +648,7 @@ func (p *wireProtocol) getBlobSegments(blobId []byte, transHandle int32) ([]byte
 	return blob, err
 }
 
-func (p *wireProtocol) opConnect(dbName string, user string, password string, options map[string]string, clientPublic *big.Int) {
+func (p *wireProtocol) opConnect(dbName string, user string, password string, options map[string]string, clientPublic *big.Int) error {
 	p.debugPrint("opConnect")
 	wire_crypt := true
 	wire_crypt, _ = strconv.ParseBool(options["wire_crypt"])
@@ -665,10 +668,11 @@ func (p *wireProtocol) opConnect(dbName string, user string, password string, op
 	p.packBytes(p.uid(strings.ToUpper(user), password, options["auth_plugin_name"], wire_crypt, clientPublic))
 	buf, _ := hex.DecodeString(strings.Join(protocols, ""))
 	p.appendBytes(buf)
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opCreate(dbName string, user string, password string, role string) {
+func (p *wireProtocol) opCreate(dbName string, user string, password string, role string) error {
 	p.debugPrint("opCreate")
 	var page_size int32
 	page_size = 4096
@@ -707,10 +711,11 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 	p.packInt(0) // Database Object ID
 	p.packString(dbName)
 	p.packBytes(dpb)
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opAttach(dbName string, user string, password string, role string) {
+func (p *wireProtocol) opAttach(dbName string, user string, password string, role string) error {
 	p.debugPrint("opAttach")
 	encode := bytes.NewBufferString("UTF8").Bytes()
 	userBytes := bytes.NewBufferString(strings.ToUpper(user)).Bytes()
@@ -757,98 +762,110 @@ func (p *wireProtocol) opAttach(dbName string, user string, password string, rol
 	p.packInt(0) // Database Object ID
 	p.packString(dbName)
 	p.packBytes(dpb)
-	p.sendPackets()
+	_, err = p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opContAuth(authData []byte, authPluginName string, authPluginList string, keys string) {
+func (p *wireProtocol) opContAuth(authData []byte, authPluginName string, authPluginList string, keys string) error {
 	p.debugPrint("opContAuth")
 	p.packInt(op_cont_auth)
 	p.packString(hex.EncodeToString(authData))
 	p.packString(authPluginName)
 	p.packString(authPluginList)
 	p.packString(keys)
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opDropDatabase() {
+func (p *wireProtocol) opDropDatabase() error {
 	p.debugPrint("opDropDatabase")
 	p.packInt(op_drop_database)
 	p.packInt(p.dbHandle)
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opTransaction(tpb []byte) {
+func (p *wireProtocol) opTransaction(tpb []byte) error {
 	p.debugPrint("opTransaction")
 	p.packInt(op_transaction)
 	p.packInt(p.dbHandle)
 	p.packBytes(tpb)
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opCommit(transHandle int32) {
+func (p *wireProtocol) opCommit(transHandle int32) error {
 	p.debugPrint("opCommit():%d", transHandle)
 	p.packInt(op_commit)
 	p.packInt(transHandle)
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opCommitRetaining(transHandle int32) {
+func (p *wireProtocol) opCommitRetaining(transHandle int32) error {
 	p.debugPrint("opCommitRetaining():%d", transHandle)
 	p.packInt(op_commit_retaining)
 	p.packInt(transHandle)
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opRollback(transHandle int32) {
+func (p *wireProtocol) opRollback(transHandle int32) error {
 	p.debugPrint("opRollback():%d", transHandle)
 	p.packInt(op_rollback)
 	p.packInt(transHandle)
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opRollbackRetaining(transHandle int32) {
+func (p *wireProtocol) opRollbackRetaining(transHandle int32) error {
 	p.debugPrint("opRollbackRetaining():%d", transHandle)
 	p.packInt(op_rollback_retaining)
 	p.packInt(transHandle)
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opAllocateStatement() {
+func (p *wireProtocol) opAllocateStatement() error {
 	p.debugPrint("opAllocateStatement")
 	p.packInt(op_allocate_statement)
 	p.packInt(p.dbHandle)
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opInfoTransaction(transHandle int32, b []byte) {
+func (p *wireProtocol) opInfoTransaction(transHandle int32, b []byte) error {
 	p.debugPrint("opInfoTransaction")
 	p.packInt(op_info_transaction)
 	p.packInt(transHandle)
 	p.packInt(0)
 	p.packBytes(b)
 	p.packInt(int32(BUFFER_LEN))
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opInfoDatabase(bs []byte) {
+func (p *wireProtocol) opInfoDatabase(bs []byte) error {
 	p.debugPrint("opInfoDatabase")
 	p.packInt(op_info_database)
 	p.packInt(p.dbHandle)
 	p.packInt(0)
 	p.packBytes(bs)
 	p.packInt(int32(BUFFER_LEN))
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opFreeStatement(stmtHandle int32, mode int32) {
+func (p *wireProtocol) opFreeStatement(stmtHandle int32, mode int32) error {
 	p.debugPrint("opFreeStatement:<%v>", stmtHandle)
 	p.packInt(op_free_statement)
 	p.packInt(stmtHandle)
 	p.packInt(mode)
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opPrepareStatement(stmtHandle int32, transHandle int32, query string) {
+func (p *wireProtocol) opPrepareStatement(stmtHandle int32, transHandle int32, query string) error {
 	p.debugPrint("opPrepareStatement():%d,%d,%v", transHandle, stmtHandle, query)
 
 	bs := bytes.Join([][]byte{
@@ -862,20 +879,22 @@ func (p *wireProtocol) opPrepareStatement(stmtHandle int32, transHandle int32, q
 	p.packString(query)
 	p.packBytes(bs)
 	p.packInt(int32(BUFFER_LEN))
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opInfoSql(stmtHandle int32, vars []byte) {
+func (p *wireProtocol) opInfoSql(stmtHandle int32, vars []byte) error {
 	p.debugPrint("opInfoSql")
 	p.packInt(op_info_sql)
 	p.packInt(stmtHandle)
 	p.packInt(0)
 	p.packBytes(vars)
 	p.packInt(int32(BUFFER_LEN))
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opExecute(stmtHandle int32, transHandle int32, params []driver.Value) {
+func (p *wireProtocol) opExecute(stmtHandle int32, transHandle int32, params []driver.Value) error {
 	p.debugPrint("opExecute():%d,%d,%v", transHandle, stmtHandle, params)
 	p.packInt(op_execute)
 	p.packInt(stmtHandle)
@@ -885,18 +904,18 @@ func (p *wireProtocol) opExecute(stmtHandle int32, transHandle int32, params []d
 		p.packInt(0) // packBytes([])
 		p.packInt(0)
 		p.packInt(0)
-		p.sendPackets()
 	} else {
 		blr, values := p.paramsToBlr(transHandle, params, p.protocolVersion)
 		p.packBytes(blr)
 		p.packInt(0)
 		p.packInt(1)
 		p.appendBytes(values)
-		p.sendPackets()
 	}
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opExecute2(stmtHandle int32, transHandle int32, params []driver.Value, outputBlr []byte) {
+func (p *wireProtocol) opExecute2(stmtHandle int32, transHandle int32, params []driver.Value, outputBlr []byte) error {
 	p.debugPrint("opExecute2")
 	p.packInt(op_execute2)
 	p.packInt(stmtHandle)
@@ -916,17 +935,19 @@ func (p *wireProtocol) opExecute2(stmtHandle int32, transHandle int32, params []
 
 	p.packBytes(outputBlr)
 	p.packInt(0)
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opFetch(stmtHandle int32, blr []byte) {
+func (p *wireProtocol) opFetch(stmtHandle int32, blr []byte) error {
 	p.debugPrint("opFetch")
 	p.packInt(op_fetch)
 	p.packInt(stmtHandle)
 	p.packBytes(blr)
 	p.packInt(0)
 	p.packInt(400)
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
 func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsqlda []xSQLVAR) (*list.List, bool, error) {
@@ -1013,41 +1034,45 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsql
 	return rows, status != 100, err
 }
 
-func (p *wireProtocol) opDetach() {
+func (p *wireProtocol) opDetach() error {
 	p.debugPrint("opDetach")
 	p.packInt(op_detach)
 	p.packInt(p.dbHandle)
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opOpenBlob(blobId []byte, transHandle int32) {
+func (p *wireProtocol) opOpenBlob(blobId []byte, transHandle int32) error {
 	p.debugPrint("opOpenBlob")
 	p.packInt(op_open_blob)
 	p.packInt(transHandle)
 	p.appendBytes(blobId)
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opCreateBlob2(transHandle int32) {
+func (p *wireProtocol) opCreateBlob2(transHandle int32) error {
 	p.debugPrint("opCreateBlob2")
 	p.packInt(op_create_blob2)
 	p.packInt(0)
 	p.packInt(transHandle)
 	p.packInt(0)
 	p.packInt(0)
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opGetSegment(blobHandle int32) {
+func (p *wireProtocol) opGetSegment(blobHandle int32) error {
 	p.debugPrint("opGetSegment")
 	p.packInt(op_get_segment)
 	p.packInt(blobHandle)
 	p.packInt(int32(BUFFER_LEN))
 	p.packInt(0)
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opPutSegment(blobHandle int32, seg_data []byte) {
+func (p *wireProtocol) opPutSegment(blobHandle int32, seg_data []byte) error {
 	p.debugPrint("opPutSegment")
 	ln := len(seg_data)
 	p.packInt(op_put_segment)
@@ -1057,10 +1082,11 @@ func (p *wireProtocol) opPutSegment(blobHandle int32, seg_data []byte) {
 	p.appendBytes(seg_data)
 	padding := [3]byte{0x0, 0x0, 0x0}
 	p.appendBytes(padding[:((4 - ln) & 3)])
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opBatchSegments(blobHandle int32, seg_data []byte) {
+func (p *wireProtocol) opBatchSegments(blobHandle int32, seg_data []byte) error {
 	p.debugPrint("opBatchSegments")
 	ln := len(seg_data)
 	p.packInt(op_batch_segments)
@@ -1072,19 +1098,24 @@ func (p *wireProtocol) opBatchSegments(blobHandle int32, seg_data []byte) {
 	p.packBytes([]byte{byte(ln & 255), byte(ln >> 8)}) // little endian int16
 	p.packBytes(seg_data)
 	p.packBytes(padding)
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opCloseBlob(blobHandle int32) {
+func (p *wireProtocol) opCloseBlob(blobHandle int32) error {
 	p.debugPrint("opCloseBlob")
 	p.packInt(op_close_blob)
 	p.packInt(blobHandle)
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
 func (p *wireProtocol) opResponse() (int32, []byte, []byte, error) {
 	p.debugPrint("opResponse")
-	b, _ := p.recvPackets(4)
+	b, err := p.recvPackets(4)
+	if err != nil {
+		return 0, nil, nil, err
+	}
 	for bytes_to_bint32(b) == op_dummy {
 		b, _ = p.recvPackets(4)
 	}
@@ -1098,7 +1129,7 @@ func (p *wireProtocol) opResponse() (int32, []byte, []byte, error) {
 		if DEBUG_SRP && bytes_to_bint32(b) == op_cont_auth {
 			panic("auth error")
 		}
-		return 0, nil, nil, errors.New(fmt.Sprintf("Error op_response:%d", bytes_to_bint32(b)))
+		return 0, nil, nil, NewErrOpResonse(bytes_to_bint32(b))
 	}
 	return p._parse_op_response()
 }
@@ -1196,7 +1227,9 @@ func (p *wireProtocol) createBlob(value []byte, transHandle int32) ([]byte, erro
 		return blobId, err
 	}
 
-	p.opCloseBlob(blobHandle)
+	if err = p.opCloseBlob(blobHandle); err != nil {
+		return nil, err
+	}
 	_, _, _, err = p.opResponse()
 
 	p.resumeBuffer(buf)

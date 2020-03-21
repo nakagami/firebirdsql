@@ -85,7 +85,8 @@ func (fc *firebirdsqlConn) ExecContext(ctx context.Context, query string, nameda
 	return fc.exec(ctx, query, args)
 }
 
-func (fc *firebirdsqlConn) Ping(ctx context.Context) error {
+// This file implements the optional pinger interface for the database/sql package
+func (fc *firebirdsqlConn) Ping(ctx context.Context) (err error) {
 	if fc == nil {
 		return errors.New("Connection was closed")
 	}
@@ -105,4 +106,26 @@ func (fc *firebirdsqlConn) QueryContext(ctx context.Context, query string, named
 		args[i] = nv.Value
 	}
 	return fc.query(ctx, query, args)
+}
+
+// ================== Implementation of the Connector interface ====================
+
+type firebirdConnector struct {
+	dsn *firebirdDsn
+}
+
+func (d *firebirdConnector) OpenConnector(dsns string) (driver.Connector, error) {
+	dsn, err := parseDSN(dsns)
+	if err != nil {
+		return nil, err
+	}
+	return &firebirdConnector{dsn: dsn}, nil
+}
+
+func (fc *firebirdConnector) Driver() driver.Driver {
+	return &firebirdsqlDriver{}
+}
+
+func (fc *firebirdConnector) Connect(ctx context.Context) (driver.Conn, error) {
+	return newFirebirdsqlConn(fc.dsn)
 }

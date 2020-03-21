@@ -28,7 +28,7 @@ type Subscription struct {
 	noNotify         int32
 }
 
-func newSubscription(dsn string, events []string, cb EventHandler, chEvent chan Event, chDoneEvent chan *Subscription) (*Subscription, error) {
+func newSubscription(dsn *firebirdDsn, events []string, cb EventHandler, chEvent chan Event, chDoneEvent chan *Subscription) (*Subscription, error) {
 	fc, err := newFirebirdsqlConn(dsn)
 	if err != nil {
 		return nil, err

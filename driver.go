@@ -31,13 +31,21 @@ import (
 
 type firebirdsqlDriver struct{}
 
-func (d *firebirdsqlDriver) Open(dsn string) (driver.Conn, error) {
+func (d *firebirdsqlDriver) Open(dsns string) (driver.Conn, error) {
+	dsn, err := parseDSN(dsns)
+	if err != nil {
+		return nil, err
+	}
 	return newFirebirdsqlConn(dsn)
 }
 
 type firebirdsqlCreateDbDriver struct{}
 
-func (d *firebirdsqlCreateDbDriver) Open(dsn string) (driver.Conn, error) {
+func (d *firebirdsqlCreateDbDriver) Open(dsns string) (driver.Conn, error) {
+	dsn, err := parseDSN(dsns)
+	if err != nil {
+		return nil, err
+	}
 	return createFirebirdsqlConn(dsn)
 }
 

@@ -32,10 +32,7 @@ import (
 type firebirdsqlConn struct {
 	wp                *wireProtocol
 	tx                *firebirdsqlTx
-	addr              string
-	dbName            string
-	user              string
-	password          string
+	dsn               *firebirdDsn
 	columnNameToLower bool
 	isAutocommit      bool
 	clientPublic      *big.Int
@@ -43,22 +40,39 @@ type firebirdsqlConn struct {
 	transactionSet    map[*firebirdsqlTx]struct{}
 }
 
+// ============ driver.Conn implementation
+
 func (fc *firebirdsqlConn) begin(isolationLevel int) (driver.Tx, error) {
 	tx, err := newFirebirdsqlTx(fc, isolationLevel, false, true)
 	fc.tx = tx
 	return driver.Tx(tx), err
 }
 
+// Begin starts and returns a new transaction.
+//
+// Deprecated: Drivers should implement ConnBeginTx instead (or additionally).
+// -> is implemented in driver_go18.go with BeginTx()
 func (fc *firebirdsqlConn) Begin() (driver.Tx, error) {
 	return fc.begin(ISOLATION_LEVEL_READ_COMMITED)
 }
 
+// Close invalidates and potentially stops any current
+// prepared statements and transactions, marking this
+// connection as no longer in use.
+//
+// Because the sql package maintains a free pool of
+// connections and only calls Close when there's a surplus of
+// idle connections, it shouldn't be necessary for drivers to
+// do their own connection caching.
 func (fc *firebirdsqlConn) Close() (err error) {
 	for tx, _ := range fc.transactionSet {
 		tx.Rollback()
 	}
 
-	fc.wp.opDetach()
+	err = fc.wp.opDetach()
+	if err != nil {
+		return
+	}
 	_, _, _, err = fc.wp.opResponse()
 	fc.wp.conn.Close()
 	return
@@ -75,9 +89,12 @@ func (fc *firebirdsqlConn) prepare(ctx context.Context, query string) (driver.St
 	return newFirebirdsqlStmt(fc, query)
 }
 
+// Prepare returns a prepared statement, bound to this connection.
 func (fc *firebirdsqlConn) Prepare(query string) (driver.Stmt, error) {
 	return fc.prepare(context.Background(), query)
 }
+
+// ============ driver.Tx implementation
 
 func (fc *firebirdsqlConn) exec(ctx context.Context, query string, args []driver.Value) (result driver.Result, err error) {
 
@@ -114,24 +131,32 @@ func (fc *firebirdsqlConn) Query(query string, args []driver.Value) (rows driver
 	return fc.query(context.Background(), query, args)
 }
 
-func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
-	addr, dbName, user, password, options, err := parseDSN(dsn)
+func newFirebirdsqlConn(dsn *firebirdDsn) (fc *firebirdsqlConn, err error) {
 
-	wp, err := newWireProtocol(addr, options["timezone"])
+	wp, err := newWireProtocol(dsn.addr, dsn.options["timezone"])
 	if err != nil {
 		return
 	}
 
-	column_name_to_lower := convertToBool(options["column_name_to_lower"], false)
+	column_name_to_lower := convertToBool(dsn.options["column_name_to_lower"], false)
 
 	clientPublic, clientSecret := getClientSeed()
 
-	wp.opConnect(dbName, user, password, options, clientPublic)
-	err = wp._parse_connect_response(user, password, options, clientPublic, clientSecret)
+	err = wp.opConnect(dsn.dbName, dsn.user, dsn.passwd, dsn.options, clientPublic)
 	if err != nil {
 		return
 	}
-	wp.opAttach(dbName, user, password, options["role"])
+
+	err = wp._parse_connect_response(dsn.user, dsn.passwd, dsn.options, clientPublic, clientSecret)
+	if err != nil {
+		return
+	}
+
+	err = wp.opAttach(dsn.dbName, dsn.user, dsn.passwd, dsn.options["role"])
+	if err != nil {
+		return
+	}
+
 	wp.dbHandle, _, _, err = wp.opResponse()
 	if err != nil {
 		return
@@ -140,10 +165,7 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	fc = new(firebirdsqlConn)
 	fc.transactionSet = make(map[*firebirdsqlTx]struct{})
 	fc.wp = wp
-	fc.addr = addr
-	fc.dbName = dbName
-	fc.user = user
-	fc.password = password
+	fc.dsn = dsn
 	fc.columnNameToLower = column_name_to_lower
 	fc.isAutocommit = true
 	fc.tx, err = newFirebirdsqlTx(fc, ISOLATION_LEVEL_READ_COMMITED, fc.isAutocommit, false)
@@ -155,24 +177,31 @@ func newFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	return fc, err
 }
 
-func createFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
-	// Create Database
-	addr, dbName, user, password, options, err := parseDSN(dsn)
+func createFirebirdsqlConn(dsn *firebirdDsn) (fc *firebirdsqlConn, err error) {
 
-	wp, err := newWireProtocol(addr, options["timezone"])
+	wp, err := newWireProtocol(dsn.addr, dsn.options["timezone"])
 	if err != nil {
 		return
 	}
-	column_name_to_lower := convertToBool(options["column_name_to_lower"], false)
+	column_name_to_lower := convertToBool(dsn.options["column_name_to_lower"], false)
 
 	clientPublic, clientSecret := getClientSeed()
 
-	wp.opConnect(dbName, user, password, options, clientPublic)
-	err = wp._parse_connect_response(user, password, options, clientPublic, clientSecret)
+	err = wp.opConnect(dsn.dbName, dsn.user, dsn.passwd, dsn.options, clientPublic)
 	if err != nil {
 		return
 	}
-	wp.opCreate(dbName, user, password, options["role"])
+
+	err = wp._parse_connect_response(dsn.user, dsn.passwd, dsn.options, clientPublic, clientSecret)
+	if err != nil {
+		return
+	}
+
+	err = wp.opCreate(dsn.dbName, dsn.user, dsn.passwd, dsn.options["role"])
+	if err != nil {
+		return
+	}
+
 	wp.dbHandle, _, _, err = wp.opResponse()
 	if err != nil {
 		return
@@ -181,10 +210,7 @@ func createFirebirdsqlConn(dsn string) (fc *firebirdsqlConn, err error) {
 	fc = new(firebirdsqlConn)
 	fc.transactionSet = make(map[*firebirdsqlTx]struct{})
 	fc.wp = wp
-	fc.addr = addr
-	fc.dbName = dbName
-	fc.user = user
-	fc.password = password
+	fc.dsn = dsn
 	fc.columnNameToLower = column_name_to_lower
 	fc.isAutocommit = true
 	fc.tx, err = newFirebirdsqlTx(fc, ISOLATION_LEVEL_READ_COMMITED, fc.isAutocommit, false)

@@ -23,7 +23,7 @@ const (
 // It is possible to send events to the database.
 type FbEvent struct {
 	mu               sync.RWMutex
-	dsn              string
+	dsn              *firebirdDsn
 	conn             *sql.DB
 	done             chan struct{}
 	closed           int32
@@ -44,11 +44,13 @@ type Event struct {
 type EventHandler func(e Event)
 
 // NewFBEvent returns FbEvent for event subscription
-func NewFBEvent(dsn string) (*FbEvent, error) {
-	conn, err := sql.Open("firebirdsql", dsn)
+func NewFBEvent(dsns string) (*FbEvent, error) {
+	conn, err := sql.Open("firebirdsql", dsns)
 	if err != nil {
 		return nil, err
 	}
+	// can ignore error, would have been thrown by sql.Open
+	dsn, _ := parseDSN(dsns)
 	fbEvent := &FbEvent{
 		dsn:              dsn,
 		conn:             conn,

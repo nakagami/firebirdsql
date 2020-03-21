@@ -87,7 +87,10 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 	if rows.currentChunkRow == nil && rows.moreData == true {
 		// Get one chunk
 		var chunk *list.List
-		rows.stmt.wp.opFetch(rows.stmt.stmtHandle, rows.stmt.blr)
+		err = rows.stmt.wp.opFetch(rows.stmt.stmtHandle, rows.stmt.blr)
+		if err != nil {
+			return err
+		}
 		chunk, rows.moreData, err = rows.stmt.wp.opFetchResponse(rows.stmt.stmtHandle, rows.stmt.tx.transHandle, rows.stmt.xsqlda)
 
 		if err == nil {
