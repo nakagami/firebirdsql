@@ -657,6 +657,8 @@ func (fc *firebirdsqlConn) loadTimeZoneId() {
 		64906: "W-SU",
 		64905: "WET",
 		64904: "Zulu",
+		64903: "America/Nuuk",
+		64902: "Asia/Qostanay",
 	}
 
 	fc.wp.tzIdByName = make(map[string]int)
