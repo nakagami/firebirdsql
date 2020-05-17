@@ -107,3 +107,4 @@ param1, param2... are
    role,Role name,
    tzname, Time Zone name, For Firebird 4.0+
    wire_crypt,Enable wire data encryption or not.,true,For Firebird 3.0+
+   charset, Firebird Charecter Set,
