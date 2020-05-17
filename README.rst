@@ -23,6 +23,7 @@ Modules get (go version < 1.11)
    $ go get github.com/shopspring/decimal
    $ go get github.com/nakagami/firebirdsql
    $ go get gitlab.com/nyarla/go-crypt
+   $ go get golang.org/x/text
 
 
 Example
