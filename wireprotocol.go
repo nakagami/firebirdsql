@@ -147,13 +147,15 @@ type wireProtocol struct {
 	password   string
 	authData   []byte
 
+	charset string
+
 	// Time Zone
 	timezone   string
 	tzNameById map[int]string
 	tzIdByName map[string]int
 }
 
-func newWireProtocol(addr string, timezone string) (*wireProtocol, error) {
+func newWireProtocol(addr string, timezone string, charset string) (*wireProtocol, error) {
 	p := new(wireProtocol)
 	p.buf = make([]byte, 0, BUFFER_LEN)
 
@@ -165,6 +167,7 @@ func newWireProtocol(addr string, timezone string) (*wireProtocol, error) {
 
 	p.conn, err = newWireChannel(conn)
 	p.timezone = timezone
+	p.charset = charset
 
 	return p, err
 }
@@ -677,7 +680,7 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 	var page_size int32
 	page_size = 4096
 
-	encode := bytes.NewBufferString("UTF8").Bytes()
+	encode := bytes.NewBufferString(p.charset).Bytes()
 	userBytes := bytes.NewBufferString(strings.ToUpper(user)).Bytes()
 	passwordBytes := bytes.NewBufferString(password).Bytes()
 	roleBytes := []byte(role)
@@ -717,7 +720,7 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 
 func (p *wireProtocol) opAttach(dbName string, user string, password string, role string) error {
 	p.debugPrint("opAttach")
-	encode := bytes.NewBufferString("UTF8").Bytes()
+	encode := bytes.NewBufferString(p.charset).Bytes()
 	userBytes := bytes.NewBufferString(strings.ToUpper(user)).Bytes()
 	passwordBytes := bytes.NewBufferString(password).Bytes()
 	roleBytes := []byte(role)

@@ -13,7 +13,7 @@ type eventManager struct {
 }
 
 func newEventManager(address string, auxHandle int32) (*eventManager, error) {
-	wp, err := newWireProtocol(address, "")
+	wp, err := newWireProtocol(address, "", "UTF8")
 	if err != nil {
 		return nil, err
 	}

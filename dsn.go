@@ -54,6 +54,7 @@ func parseDSN(dsns string) (*firebirdDsn, error) {
 
 	var default_options = map[string]string{
 		"auth_plugin_name":     "Srp",
+		"charset":              "UTF8",
 		"column_name_to_lower": "false",
 		"role":                 "",
 		"timezone":             "",

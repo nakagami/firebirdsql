@@ -1,7 +1,7 @@
 /*******************************************************************************
 The MIT License (MIT)
 
-Copyright (c) 2013-2019 Hajime Nakagami
+Copyright (c) 2013-2020 Hajime Nakagami
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
@@ -31,6 +31,11 @@ import (
 	"time"
 
 	"github.com/shopspring/decimal"
+	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/encoding/traditionalchinese"
+	"golang.org/x/text/encoding/korean"
+	"golang.org/x/text/encoding/japanese"
 )
 
 const (
@@ -304,19 +309,141 @@ func (x *xSQLVAR) parseTimestampTz(raw_value []byte) time.Time {
 	return time.Date(year, time.Month(month), day, h, m, s, n, tz)
 }
 
+func (x *xSQLVAR) parseString(raw_value []byte) interface{} {
+	if x.sqlsubtype == 1 { // OCTETS
+		return raw_value
+	}
+	if x.sqlsubtype == 0 {
+		switch x.wp.charset {
+		case "OCTETS":
+			return raw_value
+		case "UNICODE_FSS", "UTF8":
+			return bytes.NewBuffer(raw_value).String()
+		case "SJIS_0208":
+			dec := japanese.ShiftJIS.NewDecoder()
+			v, _ := dec.Bytes(raw_value)
+			return string(v)
+		case "EUCJ_0208":
+			dec := japanese.EUCJP.NewDecoder()
+			v, _ := dec.Bytes(raw_value)
+			return string(v)
+		case "ISO8859_1":
+			dec := charmap.ISO8859_1.NewDecoder()
+			v, _ := dec.Bytes(raw_value)
+			return string(v)
+		case "ISO8859_2":
+			dec := charmap.ISO8859_2.NewDecoder()
+			v, _ := dec.Bytes(raw_value)
+			return string(v)
+		case "ISO8859_3":
+			dec := charmap.ISO8859_3.NewDecoder()
+			v, _ := dec.Bytes(raw_value)
+			return string(v)
+		case "ISO8859_4":
+			dec := charmap.ISO8859_5.NewDecoder()
+			v, _ := dec.Bytes(raw_value)
+			return string(v)
+		case "ISO8859_5":
+			dec := charmap.ISO8859_5.NewDecoder()
+			v, _ := dec.Bytes(raw_value)
+			return string(v)
+		case "ISO8859_6":
+			dec := charmap.ISO8859_6.NewDecoder()
+			v, _ := dec.Bytes(raw_value)
+			return string(v)
+		case "ISO8859_7":
+			dec := charmap.ISO8859_7.NewDecoder()
+			v, _ := dec.Bytes(raw_value)
+			return string(v)
+		case "ISO8859_8":
+			dec := charmap.ISO8859_8.NewDecoder()
+			v, _ := dec.Bytes(raw_value)
+			return string(v)
+		case "ISO8859_9":
+			dec := charmap.ISO8859_9.NewDecoder()
+			v, _ := dec.Bytes(raw_value)
+			return string(v)
+		case "ISO8859_13":
+			dec := charmap.ISO8859_13.NewDecoder()
+			v, _ := dec.Bytes(raw_value)
+			return string(v)
+		case "KSC_5601":
+			dec := korean.EUCKR.NewDecoder()
+			v, _ := dec.Bytes(raw_value)
+			return string(v)
+		case "WIN1250":
+			dec := charmap.Windows1250.NewDecoder()
+			v, _ := dec.Bytes(raw_value)
+			return string(v)
+		case "WIN1251":
+			dec := charmap.Windows1251.NewDecoder()
+			v, _ := dec.Bytes(raw_value)
+			return string(v)
+		case "WIN1252":
+			dec := charmap.Windows1252.NewDecoder()
+			v, _ := dec.Bytes(raw_value)
+			return string(v)
+		case "WIN1253":
+			dec := charmap.Windows1252.NewDecoder()
+			v, _ := dec.Bytes(raw_value)
+			return string(v)
+		case "WIN1254":
+			dec := charmap.Windows1252.NewDecoder()
+			v, _ := dec.Bytes(raw_value)
+			return string(v)
+		case "BIG_5":
+			dec := traditionalchinese.Big5.NewDecoder()
+			v, _ := dec.Bytes(raw_value)
+			return string(v)
+		case "GB_2312":
+			dec := simplifiedchinese.HZGB2312.NewDecoder()
+			v, _ := dec.Bytes(raw_value)
+			return string(v)
+		case "WIN1255":
+			dec := charmap.Windows1255.NewDecoder()
+			v, _ := dec.Bytes(raw_value)
+			return string(v)
+		case "WIN1256":
+			dec := charmap.Windows1256.NewDecoder()
+			v, _ := dec.Bytes(raw_value)
+			return string(v)
+		case "WIN1257":
+			dec := charmap.Windows1257.NewDecoder()
+			v, _ := dec.Bytes(raw_value)
+			return string(v)
+		case "KOI8R":
+			dec := charmap.KOI8R.NewDecoder()
+			v, _ := dec.Bytes(raw_value)
+			return string(v)
+		case "KOI8U":
+			dec := charmap.KOI8U.NewDecoder()
+			v, _ := dec.Bytes(raw_value)
+			return string(v)
+		case "WIN1258":
+			dec := charmap.Windows1258.NewDecoder()
+			v, _ := dec.Bytes(raw_value)
+			return string(v)
+		default:
+			return bytes.NewBuffer(raw_value).String()
+		}
+	}
+
+	return raw_value
+}
+
 func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
 	switch x.sqltype {
 	case SQL_TYPE_TEXT:
 		if x.sqlsubtype == 1 { // OCTETS
 			v = raw_value
 		} else {
-			v = bytes.NewBuffer(raw_value).String()
+			v = x.parseString(raw_value)
 		}
 	case SQL_TYPE_VARYING:
 		if x.sqlsubtype == 1 { // OCTETS
 			v = raw_value
 		} else {
-			v = bytes.NewBuffer(raw_value).String()
+			v = x.parseString(raw_value)
 		}
 	case SQL_TYPE_SHORT:
 		i16 := int16(bytes_to_bint32(raw_value))
