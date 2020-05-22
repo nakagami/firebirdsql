@@ -42,7 +42,7 @@ const (
 	DEBUG_SRP         = false
 )
 
-func bigToSha1(n *big.Int) []byte {
+func bigIntToSha1(n *big.Int) []byte {
 	sha1 := sha1.New()
 	sha1.Write(n.Bytes())
 
@@ -88,13 +88,13 @@ func getScramble(keyA *big.Int, keyB *big.Int) *big.Int {
 	sha1.Write(pad(keyA))
 	sha1.Write(pad(keyB))
 
-	return bytesToBig(sha1.Sum(nil))
+	return bytesToBigInt(sha1.Sum(nil))
 }
 
 func getStringHash(s string) *big.Int {
 	hash := sha1.New()
 	hash.Write(bytes.NewBufferString(s).Bytes())
-	return bytesToBig(hash.Sum(nil))
+	return bytesToBigInt(hash.Sum(nil))
 }
 
 func getUserHash(salt []byte, user string, password string) *big.Int {
@@ -103,7 +103,7 @@ func getUserHash(salt []byte, user string, password string) *big.Int {
 	hash2 := sha1.New()
 	hash2.Write(salt)
 	hash2.Write(hash1.Sum(nil))
-	return bytesToBig(hash2.Sum(nil))
+	return bytesToBigInt(hash2.Sum(nil))
 }
 
 func getClientSeed() (keyA *big.Int, keya *big.Int) {
@@ -156,7 +156,7 @@ func getClientSession(user string, password string, salt []byte, keyA *big.Int, 
 	aux := new(big.Int).Mod(new(big.Int).Add(keya, ux), prime)   // aux = (a + ux) % N
 	sessionSecret := mathutil.ModPowBigInt(diff, aux, prime)     // (B - kg^x) ^ (a + ux)
 
-	return bigToSha1(sessionSecret)
+	return bigIntToSha1(sessionSecret)
 }
 
 func getServerSession(user string, password string, salt []byte, keyA *big.Int, keyB *big.Int, keyb *big.Int) []byte {
@@ -166,7 +166,7 @@ func getServerSession(user string, password string, salt []byte, keyA *big.Int, 
 	vu := mathutil.ModPowBigInt(v, u, prime)
 	avu := new(big.Int).Mod(new(big.Int).Mul(keyA, vu), prime)
 	sessionSecret := mathutil.ModPowBigInt(avu, keyb, prime)
-	return bigToSha1(sessionSecret)
+	return bigIntToSha1(sessionSecret)
 }
 
 func getClientProof(user string, password string, salt []byte, keyA *big.Int, keyB *big.Int, keya *big.Int, pluginName string) (keyM []byte, keyK []byte) {
@@ -174,8 +174,8 @@ func getClientProof(user string, password string, salt []byte, keyA *big.Int, ke
 	prime, g, _ := getPrime()
 	keyK = getClientSession(user, password, salt, keyA, keyB, keya)
 
-	n1 := bytesToBig(bigToSha1(prime))
-	n2 := bytesToBig(bigToSha1(g))
+	n1 := bytesToBigInt(bigIntToSha1(prime))
+	n2 := bytesToBigInt(bigIntToSha1(g))
 	n3 := mathutil.ModPowBigInt(n1, n2, prime)
 	n4 := getStringHash(user)
 
