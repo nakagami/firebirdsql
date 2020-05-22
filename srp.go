@@ -42,13 +42,6 @@ const (
 	DEBUG_SRP         = false
 )
 
-func bigIntToSha1(n *big.Int) []byte {
-	sha1 := sha1.New()
-	sha1.Write(n.Bytes())
-
-	return sha1.Sum(nil)
-}
-
 func pad(v *big.Int) []byte {
 	buf := make([]byte, SRP_KEY_SIZE)
 	var m big.Int
@@ -74,9 +67,9 @@ func pad(v *big.Int) []byte {
 }
 
 func getPrime() (prime *big.Int, g *big.Int, k *big.Int) {
-	prime = bigFromHexString("E67D2E994B2F900C3F41F08F5BB2627ED0D49EE1FE767A52EFCD565CD6E768812C3E1E9CE8F0A8BEA6CB13CD29DDEBF7A96D4A93B55D488DF099A15C89DCB0640738EB2CBDD9A8F7BAB561AB1B0DC1C6CDABF303264A08D1BCA932D1F1EE428B619D970F342ABA9A65793B8B2F041AE5364350C16F735F56ECBCA87BD57B29E7")
+	prime = bigIntFromHexString("E67D2E994B2F900C3F41F08F5BB2627ED0D49EE1FE767A52EFCD565CD6E768812C3E1E9CE8F0A8BEA6CB13CD29DDEBF7A96D4A93B55D488DF099A15C89DCB0640738EB2CBDD9A8F7BAB561AB1B0DC1C6CDABF303264A08D1BCA932D1F1EE428B619D970F342ABA9A65793B8B2F041AE5364350C16F735F56ECBCA87BD57B29E7")
 	g = big.NewInt(2)
-	k = bigFromString("1277432915985975349439481660349303019122249719989")
+	k = bigIntFromString("1277432915985975349439481660349303019122249719989")
 	return
 }
 
@@ -109,10 +102,10 @@ func getUserHash(salt []byte, user string, password string) *big.Int {
 func getClientSeed() (keyA *big.Int, keya *big.Int) {
 	prime, g, _ := getPrime()
 	if DEBUG_SRP {
-		keya = bigFromString(DEBUG_PRIVATE_KEY)
+		keya = bigIntFromString(DEBUG_PRIVATE_KEY)
 	} else {
 		keya = new(big.Int).Rand(rand.New(rand.NewSource(time.Now().UnixNano())),
-			bigFromString("340282366920938463463374607431768211456")) // 1 << 128
+			bigIntFromString("340282366920938463463374607431768211456")) // 1 << 128
 	}
 
 	keyA = mathutil.ModPowBigInt(g, keya, prime)
@@ -138,7 +131,7 @@ func getVerifier(user string, password string, salt []byte) *big.Int {
 func getServerSeed(v *big.Int) (keyB *big.Int, keyb *big.Int) {
 	prime, g, k := getPrime()
 	keyb = new(big.Int).Rand(rand.New(rand.NewSource(time.Now().UnixNano())),
-		bigFromString("340282366920938463463374607431768211456")) // 1 << 128
+		bigIntFromString("340282366920938463463374607431768211456")) // 1 << 128
 	gb := mathutil.ModPowBigInt(g, keyb, prime)              // gb = pow(g, b, N)
 	kv := new(big.Int).Mod(new(big.Int).Mul(k, v), prime)    // kv = (k * v) % N
 	keyB = new(big.Int).Mod(new(big.Int).Add(kv, gb), prime) // B = (kv + gb) % N

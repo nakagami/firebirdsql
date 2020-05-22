@@ -445,7 +445,7 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 
 				ln = int(bytes_to_int16(data[:2]))
 				serverSalt := data[2 : ln+2]
-				serverPublic := bigFromHexString(bytes_to_str(data[4+ln:]))
+				serverPublic := bigIntFromHexString(bytes_to_str(data[4+ln:]))
 				authData, sessionKey = getClientProof(strings.ToUpper(user), password, serverSalt, clientPublic, serverPublic, clientSecret, p.pluginName)
 				if DEBUG_SRP {
 					fmt.Printf("pluginName=%s\nserverSalt=%s\nserverPublic(bin)=%s\nserverPublic=%s\nauthData=%v,sessionKey=%v\n",
