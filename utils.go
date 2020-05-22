@@ -104,7 +104,7 @@ func bigIntFromString(s string) *big.Int {
 	return ret
 }
 
-func bigToBytes(v *big.Int) []byte {
+func bigIntToBytes(v *big.Int) []byte {
 	buf := pad(v)
 	for i, _ := range buf {
 		if buf[i] != 0 {

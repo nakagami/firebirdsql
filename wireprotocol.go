@@ -185,7 +185,7 @@ func (p *wireProtocol) appendBytes(bs []byte) {
 }
 
 func getSrpClientPublicBytes(clientPublic *big.Int) (bs []byte) {
-	b := bytes.NewBufferString(hex.EncodeToString(bigToBytes(clientPublic))).Bytes()
+	b := bytes.NewBufferString(hex.EncodeToString(bigIntToBytes(clientPublic))).Bytes()
 	if len(b) > 254 {
 		bs = bytes.Join([][]byte{
 			[]byte{CNCT_specific_data, byte(255), 0}, b[:254],
@@ -420,7 +420,7 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 				// TODO: normalize user
 
 				if len(data) == 0 {
-					p.opContAuth(bigToBytes(clientPublic), p.pluginName, PLUGIN_LIST, "")
+					p.opContAuth(bigIntToBytes(clientPublic), p.pluginName, PLUGIN_LIST, "")
 					b, _ := p.recvPackets(4)
 					if DEBUG_SRP && bytes_to_bint32(b) == op_cont_auth {
 						panic("auth error")
