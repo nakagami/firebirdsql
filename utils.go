@@ -114,7 +114,7 @@ func bigToBytes(v *big.Int) []byte {
 	return buf[:1] // 0
 }
 
-func bytesToBig(v []byte) (r *big.Int) {
+func bytesToBigInt(v []byte) (r *big.Int) {
 	m := new(big.Int)
 	m.SetInt64(256)
 	a := new(big.Int)

@@ -169,7 +169,7 @@ func decimal128ToSignDigitsExponent(b []byte) (v *decimal.Decimal, sign int, dig
 	}
 	exponent -= 6176
 
-	dpdBits := bytesToBig(b)
+	dpdBits := bytesToBigInt(b)
 	mask := bigFromHexString("3fffffffffffffffffffffffffff")
 	dpdBits.And(dpdBits, mask)
 	digits = calcSignificand(prefix, dpdBits, 110)
@@ -198,7 +198,7 @@ func decimal64ToDecimal(b []byte) decimal.Decimal {
 	cf := (uint32(b[0]) >> 2) & 0x1f
 	exponent := ((int32(b[0]) & 3) << 6) + ((int32(b[1]) >> 2) & 0x3f)
 
-	dpdBits := bytesToBig(b)
+	dpdBits := bytesToBigInt(b)
 	mask := bigFromHexString("3ffffffffffff")
 	dpdBits.And(dpdBits, mask)
 
