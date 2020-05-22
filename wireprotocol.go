@@ -148,7 +148,7 @@ type wireProtocol struct {
 	authData   []byte
 
 	// Time Zone
-	timezone   string
+	timezone string
 }
 
 func newWireProtocol(addr string, timezone string) (*wireProtocol, error) {
