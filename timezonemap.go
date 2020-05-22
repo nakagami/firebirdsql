@@ -23,8 +23,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 package firebirdsql
 
-func (fc *firebirdsqlConn) loadTimeZoneId() {
-	fc.wp.tzNameById = map[int]string{
+func getTimezoneNameByID(id int) string {
+	return map[int]string{
 		65535: "GMT",
 		65534: "ACT",
 		65533: "AET",
@@ -659,11 +659,5 @@ func (fc *firebirdsqlConn) loadTimeZoneId() {
 		64904: "Zulu",
 		64903: "America/Nuuk",
 		64902: "Asia/Qostanay",
-	}
-
-	fc.wp.tzIdByName = make(map[string]int)
-
-	for k, v := range fc.wp.tzNameById {
-		fc.wp.tzIdByName[v] = k
-	}
+	}[id]
 }

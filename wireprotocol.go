@@ -149,8 +149,6 @@ type wireProtocol struct {
 
 	// Time Zone
 	timezone   string
-	tzNameById map[int]string
-	tzIdByName map[string]int
 }
 
 func newWireProtocol(addr string, timezone string) (*wireProtocol, error) {
