@@ -128,7 +128,6 @@ var xsqlvarTypeName = map[int]string{
 }
 
 type xSQLVAR struct {
-	wp         *wireProtocol
 	sqltype    int
 	sqlscale   int
 	sqlsubtype int
@@ -262,28 +261,28 @@ func (x *xSQLVAR) _parseTime(raw_value []byte) (int, int, int, int) {
 	return h, m, s, (n % 10000) * 100000
 }
 
-func (x *xSQLVAR) parseDate(raw_value []byte) time.Time {
+func (x *xSQLVAR) parseDate(raw_value []byte, timezone string) time.Time {
 	tz := time.Local
-	if x.wp.timezone != "" {
-		tz, _ = time.LoadLocation(x.wp.timezone)
+	if timezone != "" {
+		tz, _ = time.LoadLocation(timezone)
 	}
 	year, month, day := x._parseDate(raw_value)
 	return time.Date(year, time.Month(month), day, 0, 0, 0, 0, tz)
 }
 
-func (x *xSQLVAR) parseTime(raw_value []byte) time.Time {
+func (x *xSQLVAR) parseTime(raw_value []byte, timezone string) time.Time {
 	tz := time.Local
-	if x.wp.timezone != "" {
-		tz, _ = time.LoadLocation(x.wp.timezone)
+	if timezone != "" {
+		tz, _ = time.LoadLocation(timezone)
 	}
 	h, m, s, n := x._parseTime(raw_value)
 	return time.Date(0, time.Month(1), 1, h, m, s, n, tz)
 }
 
-func (x *xSQLVAR) parseTimestamp(raw_value []byte) time.Time {
+func (x *xSQLVAR) parseTimestamp(raw_value []byte, timezone string) time.Time {
 	tz := time.Local
-	if x.wp.timezone != "" {
-		tz, _ = time.LoadLocation(x.wp.timezone)
+	if timezone != "" {
+		tz, _ = time.LoadLocation(timezone)
 	}
 
 	year, month, day := x._parseDate(raw_value[:4])
@@ -304,7 +303,7 @@ func (x *xSQLVAR) parseTimestampTz(raw_value []byte) time.Time {
 	return time.Date(year, time.Month(month), day, h, m, s, n, tz)
 }
 
-func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
+func (x *xSQLVAR) value(raw_value []byte, timezone string) (v interface{}, err error) {
 	switch x.sqltype {
 	case SQL_TYPE_TEXT:
 		if x.sqlsubtype == 1 { // OCTETS
@@ -350,11 +349,11 @@ func (x *xSQLVAR) value(raw_value []byte) (v interface{}, err error) {
 		low := decimal.New(int64(bytes_to_bint64(raw_value[8:])), int32(x.sqlscale))
 		v = high.Mul(low)
 	case SQL_TYPE_DATE:
-		v = x.parseDate(raw_value)
+		v = x.parseDate(raw_value, timezone)
 	case SQL_TYPE_TIME:
-		v = x.parseTime(raw_value)
+		v = x.parseTime(raw_value, timezone)
 	case SQL_TYPE_TIMESTAMP:
-		v = x.parseTimestamp(raw_value)
+		v = x.parseTimestamp(raw_value, timezone)
 	case SQL_TYPE_TIME_TZ:
 		v = x.parseTimeTz(raw_value)
 	case SQL_TYPE_TIMESTAMP_TZ:

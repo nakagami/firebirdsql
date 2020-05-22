@@ -605,9 +605,6 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
 		}
 	}
 
-	for i, _ := range xsqlda {
-		xsqlda[i].wp = p
-	}
 	return stmt_type, xsqlda, err
 }
 
@@ -988,7 +985,7 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsql
 				raw_value, _ := p.recvPacketsAlignment(ln)
 				b, err = p.recvPackets(4)
 				if bytes_to_bint32(b) == 0 { // Not NULL
-					r[i], err = x.value(raw_value)
+					r[i], err = x.value(raw_value, p.timezone)
 				}
 			}
 		} else { // PROTOCOL_VERSION13
@@ -1017,7 +1014,7 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsql
 					ln = x.ioLength()
 				}
 				raw_value, _ := p.recvPacketsAlignment(ln)
-				r[i], err = x.value(raw_value)
+				r[i], err = x.value(raw_value, p.timezone)
 			}
 		}
 
@@ -1163,7 +1160,7 @@ func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) ([]driver.Value, error) {
 			raw_value, _ := p.recvPacketsAlignment(ln)
 			b, err = p.recvPackets(4)
 			if bytes_to_bint32(b) == 0 { // Not NULL
-				r[i], err = x.value(raw_value)
+				r[i], err = x.value(raw_value, p.timezone)
 			}
 		}
 	} else { // PROTOCOL_VERSION13
@@ -1191,7 +1188,7 @@ func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) ([]driver.Value, error) {
 				ln = x.ioLength()
 			}
 			raw_value, _ := p.recvPacketsAlignment(ln)
-			r[i], err = x.value(raw_value)
+			r[i], err = x.value(raw_value, p.timezone)
 		}
 	}
 
