@@ -36,6 +36,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"github.com/shopspring/decimal"
 )
 
 func get_firebird_major_version(conn *sql.DB) int {
@@ -335,7 +336,7 @@ func TestInsertTimestamp(t *testing.T) {
 	conn.Close()
 }
 
-/*
+
 func TestBoolean(t *testing.T) {
 	temppath := TempFileName("test_boolean_")
 
@@ -343,6 +344,12 @@ func TestBoolean(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
+
+	firebird_major_version := get_firebird_major_version(conn)
+	if firebird_major_version < 3 {
+		return
+	}
+
 	var sql string
 	var n int
 
@@ -399,6 +406,11 @@ func TestDecFloat(t *testing.T) {
 		t.Fatalf("Error connecting: %v", err)
 	}
 
+	firebird_major_version := get_firebird_major_version(conn)
+	if firebird_major_version < 4 {
+		return
+	}
+
 	sql := `
         CREATE TABLE test_decfloat (
             i integer,
@@ -428,12 +440,10 @@ func TestDecFloat(t *testing.T) {
 	var d, df64, df128 decimal.Decimal
 	for rows.Next() {
 		rows.Scan(&d, &df64, &df128)
-		fmt.Println(d, df64, df128)
 	}
 
 	conn.Close()
 }
-*/
 
 func TestLegacyAuthWireCrypt(t *testing.T) {
 	temppath := TempFileName("test_legacy_atuh_")
