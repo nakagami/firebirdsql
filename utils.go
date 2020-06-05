@@ -26,6 +26,7 @@ package firebirdsql
 import (
 	"bytes"
 	"container/list"
+	"crypto/sha1"
 	"encoding/binary"
 	"math/big"
 	"strconv"
@@ -91,19 +92,19 @@ func bytes_to_int64(b []byte) int64 {
 	return int64(binary.LittleEndian.Uint64(b))
 }
 
-func bigFromHexString(s string) *big.Int {
+func bigIntFromHexString(s string) *big.Int {
 	ret := new(big.Int)
 	ret.SetString(s, 16)
 	return ret
 }
 
-func bigFromString(s string) *big.Int {
+func bigIntFromString(s string) *big.Int {
 	ret := new(big.Int)
 	ret.SetString(s, 10)
 	return ret
 }
 
-func bigToBytes(v *big.Int) []byte {
+func bigIntToBytes(v *big.Int) []byte {
 	buf := pad(v)
 	for i, _ := range buf {
 		if buf[i] != 0 {
@@ -114,7 +115,7 @@ func bigToBytes(v *big.Int) []byte {
 	return buf[:1] // 0
 }
 
-func bytesToBig(v []byte) (r *big.Int) {
+func bytesToBigInt(v []byte) (r *big.Int) {
 	m := new(big.Int)
 	m.SetInt64(256)
 	a := new(big.Int)
@@ -125,6 +126,13 @@ func bytesToBig(v []byte) (r *big.Int) {
 		r = r.Add(r, a.SetInt64(int64(b)))
 	}
 	return r
+}
+
+func bigIntToSha1(n *big.Int) []byte {
+	sha1 := sha1.New()
+	sha1.Write(n.Bytes())
+
+	return sha1.Sum(nil)
 }
 
 func flattenBytes(l *list.List) []byte {

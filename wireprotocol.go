@@ -150,9 +150,7 @@ type wireProtocol struct {
 	charset string
 
 	// Time Zone
-	timezone   string
-	tzNameById map[int]string
-	tzIdByName map[string]int
+	timezone string
 }
 
 func newWireProtocol(addr string, timezone string, charset string) (*wireProtocol, error) {
@@ -190,7 +188,7 @@ func (p *wireProtocol) appendBytes(bs []byte) {
 }
 
 func getSrpClientPublicBytes(clientPublic *big.Int) (bs []byte) {
-	b := bytes.NewBufferString(hex.EncodeToString(bigToBytes(clientPublic))).Bytes()
+	b := bytes.NewBufferString(hex.EncodeToString(bigIntToBytes(clientPublic))).Bytes()
 	if len(b) > 254 {
 		bs = bytes.Join([][]byte{
 			[]byte{CNCT_specific_data, byte(255), 0}, b[:254],
@@ -425,7 +423,7 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 				// TODO: normalize user
 
 				if len(data) == 0 {
-					p.opContAuth(bigToBytes(clientPublic), p.pluginName, PLUGIN_LIST, "")
+					p.opContAuth(bigIntToBytes(clientPublic), p.pluginName, PLUGIN_LIST, "")
 					b, _ := p.recvPackets(4)
 					if DEBUG_SRP && bytes_to_bint32(b) == op_cont_auth {
 						panic("auth error")
@@ -450,7 +448,7 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 
 				ln = int(bytes_to_int16(data[:2]))
 				serverSalt := data[2 : ln+2]
-				serverPublic := bigFromHexString(bytes_to_str(data[4+ln:]))
+				serverPublic := bigIntFromHexString(bytes_to_str(data[4+ln:]))
 				authData, sessionKey = getClientProof(strings.ToUpper(user), password, serverSalt, clientPublic, serverPublic, clientSecret, p.pluginName)
 				if DEBUG_SRP {
 					fmt.Printf("pluginName=%s\nserverSalt=%s\nserverPublic(bin)=%s\nserverPublic=%s\nauthData=%v,sessionKey=%v\n",
@@ -610,9 +608,6 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
 		}
 	}
 
-	for i, _ := range xsqlda {
-		xsqlda[i].wp = p
-	}
 	return stmt_type, xsqlda, err
 }
 
@@ -993,7 +988,7 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsql
 				raw_value, _ := p.recvPacketsAlignment(ln)
 				b, err = p.recvPackets(4)
 				if bytes_to_bint32(b) == 0 { // Not NULL
-					r[i], err = x.value(raw_value)
+					r[i], err = x.value(raw_value, p.timezone, p.charset)
 				}
 			}
 		} else { // PROTOCOL_VERSION13
@@ -1022,7 +1017,7 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsql
 					ln = x.ioLength()
 				}
 				raw_value, _ := p.recvPacketsAlignment(ln)
-				r[i], err = x.value(raw_value)
+				r[i], err = x.value(raw_value, p.timezone, p.charset)
 			}
 		}
 
@@ -1168,7 +1163,7 @@ func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) ([]driver.Value, error) {
 			raw_value, _ := p.recvPacketsAlignment(ln)
 			b, err = p.recvPackets(4)
 			if bytes_to_bint32(b) == 0 { // Not NULL
-				r[i], err = x.value(raw_value)
+				r[i], err = x.value(raw_value, p.timezone, p.charset)
 			}
 		}
 	} else { // PROTOCOL_VERSION13
@@ -1196,7 +1191,7 @@ func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) ([]driver.Value, error) {
 				ln = x.ioLength()
 			}
 			raw_value, _ := p.recvPacketsAlignment(ln)
-			r[i], err = x.value(raw_value)
+			r[i], err = x.value(raw_value, p.timezone, p.charset)
 		}
 	}
 

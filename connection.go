@@ -172,8 +172,6 @@ func newFirebirdsqlConn(dsn *firebirdDsn) (fc *firebirdsqlConn, err error) {
 	fc.clientPublic = clientPublic
 	fc.clientSecret = clientSecret
 
-	fc.loadTimeZoneId()
-
 	return fc, err
 }
 
@@ -216,8 +214,6 @@ func createFirebirdsqlConn(dsn *firebirdDsn) (fc *firebirdsqlConn, err error) {
 	fc.tx, err = newFirebirdsqlTx(fc, ISOLATION_LEVEL_READ_COMMITED, fc.isAutocommit, false)
 	fc.clientPublic = clientPublic
 	fc.clientSecret = clientSecret
-
-	fc.loadTimeZoneId()
 
 	return fc, err
 }

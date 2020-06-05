@@ -20,6 +20,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 *******************************************************************************/
+// See http://srp.stanford.edu/design.html
 
 package firebirdsql
 
@@ -41,13 +42,6 @@ const (
 	DEBUG_PRIVATE_KEY = "60975527035CF2AD1989806F0407210BC81EDC04E2762A56AFD529DDDA2D4393"
 	DEBUG_SRP         = false
 )
-
-func bigToSha1(n *big.Int) []byte {
-	sha1 := sha1.New()
-	sha1.Write(n.Bytes())
-
-	return sha1.Sum(nil)
-}
 
 func pad(v *big.Int) []byte {
 	buf := make([]byte, SRP_KEY_SIZE)
@@ -74,9 +68,9 @@ func pad(v *big.Int) []byte {
 }
 
 func getPrime() (prime *big.Int, g *big.Int, k *big.Int) {
-	prime = bigFromHexString("E67D2E994B2F900C3F41F08F5BB2627ED0D49EE1FE767A52EFCD565CD6E768812C3E1E9CE8F0A8BEA6CB13CD29DDEBF7A96D4A93B55D488DF099A15C89DCB0640738EB2CBDD9A8F7BAB561AB1B0DC1C6CDABF303264A08D1BCA932D1F1EE428B619D970F342ABA9A65793B8B2F041AE5364350C16F735F56ECBCA87BD57B29E7")
+	prime = bigIntFromHexString("E67D2E994B2F900C3F41F08F5BB2627ED0D49EE1FE767A52EFCD565CD6E768812C3E1E9CE8F0A8BEA6CB13CD29DDEBF7A96D4A93B55D488DF099A15C89DCB0640738EB2CBDD9A8F7BAB561AB1B0DC1C6CDABF303264A08D1BCA932D1F1EE428B619D970F342ABA9A65793B8B2F041AE5364350C16F735F56ECBCA87BD57B29E7")
 	g = big.NewInt(2)
-	k = bigFromString("1277432915985975349439481660349303019122249719989")
+	k = bigIntFromString("1277432915985975349439481660349303019122249719989")
 	return
 }
 
@@ -88,13 +82,13 @@ func getScramble(keyA *big.Int, keyB *big.Int) *big.Int {
 	sha1.Write(pad(keyA))
 	sha1.Write(pad(keyB))
 
-	return bytesToBig(sha1.Sum(nil))
+	return bytesToBigInt(sha1.Sum(nil))
 }
 
 func getStringHash(s string) *big.Int {
 	hash := sha1.New()
 	hash.Write(bytes.NewBufferString(s).Bytes())
-	return bytesToBig(hash.Sum(nil))
+	return bytesToBigInt(hash.Sum(nil))
 }
 
 func getUserHash(salt []byte, user string, password string) *big.Int {
@@ -103,16 +97,16 @@ func getUserHash(salt []byte, user string, password string) *big.Int {
 	hash2 := sha1.New()
 	hash2.Write(salt)
 	hash2.Write(hash1.Sum(nil))
-	return bytesToBig(hash2.Sum(nil))
+	return bytesToBigInt(hash2.Sum(nil))
 }
 
 func getClientSeed() (keyA *big.Int, keya *big.Int) {
 	prime, g, _ := getPrime()
 	if DEBUG_SRP {
-		keya = bigFromString(DEBUG_PRIVATE_KEY)
+		keya = bigIntFromString(DEBUG_PRIVATE_KEY)
 	} else {
 		keya = new(big.Int).Rand(rand.New(rand.NewSource(time.Now().UnixNano())),
-			bigFromString("340282366920938463463374607431768211456")) // 1 << 128
+			bigIntFromString("340282366920938463463374607431768211456")) // 1 << 128
 	}
 
 	keyA = mathutil.ModPowBigInt(g, keya, prime)
@@ -138,7 +132,7 @@ func getVerifier(user string, password string, salt []byte) *big.Int {
 func getServerSeed(v *big.Int) (keyB *big.Int, keyb *big.Int) {
 	prime, g, k := getPrime()
 	keyb = new(big.Int).Rand(rand.New(rand.NewSource(time.Now().UnixNano())),
-		bigFromString("340282366920938463463374607431768211456")) // 1 << 128
+		bigIntFromString("340282366920938463463374607431768211456")) // 1 << 128
 	gb := mathutil.ModPowBigInt(g, keyb, prime)              // gb = pow(g, b, N)
 	kv := new(big.Int).Mod(new(big.Int).Mul(k, v), prime)    // kv = (k * v) % N
 	keyB = new(big.Int).Mod(new(big.Int).Add(kv, gb), prime) // B = (kv + gb) % N
@@ -156,7 +150,7 @@ func getClientSession(user string, password string, salt []byte, keyA *big.Int, 
 	aux := new(big.Int).Mod(new(big.Int).Add(keya, ux), prime)   // aux = (a + ux) % N
 	sessionSecret := mathutil.ModPowBigInt(diff, aux, prime)     // (B - kg^x) ^ (a + ux)
 
-	return bigToSha1(sessionSecret)
+	return bigIntToSha1(sessionSecret)
 }
 
 func getServerSession(user string, password string, salt []byte, keyA *big.Int, keyB *big.Int, keyb *big.Int) []byte {
@@ -166,7 +160,7 @@ func getServerSession(user string, password string, salt []byte, keyA *big.Int, 
 	vu := mathutil.ModPowBigInt(v, u, prime)
 	avu := new(big.Int).Mod(new(big.Int).Mul(keyA, vu), prime)
 	sessionSecret := mathutil.ModPowBigInt(avu, keyb, prime)
-	return bigToSha1(sessionSecret)
+	return bigIntToSha1(sessionSecret)
 }
 
 func getClientProof(user string, password string, salt []byte, keyA *big.Int, keyB *big.Int, keya *big.Int, pluginName string) (keyM []byte, keyK []byte) {
@@ -174,8 +168,8 @@ func getClientProof(user string, password string, salt []byte, keyA *big.Int, ke
 	prime, g, _ := getPrime()
 	keyK = getClientSession(user, password, salt, keyA, keyB, keya)
 
-	n1 := bytesToBig(bigToSha1(prime))
-	n2 := bytesToBig(bigToSha1(g))
+	n1 := bytesToBigInt(bigIntToSha1(prime))
+	n2 := bytesToBigInt(bigIntToSha1(g))
 	n3 := mathutil.ModPowBigInt(n1, n2, prime)
 	n4 := getStringHash(user)
 
