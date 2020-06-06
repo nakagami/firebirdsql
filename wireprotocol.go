@@ -367,8 +367,6 @@ func (p *wireProtocol) _parse_op_response() (int32, []byte, []byte, error) {
 
 func (p *wireProtocol) _parse_connect_response(user string, password string, options map[string]string, clientPublic *big.Int, clientSecret *big.Int) (err error) {
 	p.debugPrint("_parse_connect_response")
-	wire_crypt := true
-	wire_crypt, _ = strconv.ParseBool(options["wire_crypt"])
 
 	b, err := p.recvPackets(4)
 	opcode := bytes_to_bint32(b)
@@ -458,6 +456,7 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 				return
 			}
 		}
+
 		if opcode == op_cond_accept {
 			p.opContAuth(authData, options["auth_plugin_name"], PLUGIN_LIST, "")
 			_, _, _, err = p.opResponse()
@@ -465,6 +464,9 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 				return
 			}
 		}
+
+		wire_crypt := true
+		wire_crypt, _ = strconv.ParseBool(options["wire_crypt"])
 		if wire_crypt && sessionKey != nil {
 			// Send op_crypt
 			p.packInt(op_crypt)
