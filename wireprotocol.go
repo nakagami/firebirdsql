@@ -469,12 +469,8 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 		wire_crypt, _ = strconv.ParseBool(options["wire_crypt"])
 		if wire_crypt && sessionKey != nil {
 			// Send op_crypt
-			p.packInt(op_crypt)
-			p.packString("Arc4")
-			p.packString("Symmetric")
-			_, err = p.sendPackets()
+			p.opCrypt()
 			p.conn.setAuthKey(sessionKey)
-
 			_, _, _, err = p.opResponse()
 			if err != nil {
 				return
@@ -770,6 +766,14 @@ func (p *wireProtocol) opContAuth(authData []byte, authPluginName string, authPl
 	p.packString(authPluginName)
 	p.packString(authPluginList)
 	p.packString(keys)
+	_, err := p.sendPackets()
+	return err
+}
+
+func (p *wireProtocol) opCrypt() error {
+	p.packInt(op_crypt)
+	p.packString("Arc4")
+	p.packString("Symmetric")
 	_, err := p.sendPackets()
 	return err
 }
