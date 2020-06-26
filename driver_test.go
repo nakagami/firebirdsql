@@ -871,3 +871,39 @@ func TestIssue96(t *testing.T) {
 
 	conn.Close()
 }
+
+func TestGoIssue112(t *testing.T) {
+	temppath := TempFileName("test_issue112_")
+	conn, err := sql.Open("firebirdsql_createdb", "SYSDBA:masterkey@localhost:3050"+temppath)
+	if err != nil {
+		t.Fatalf("Error occured at sql.Open()")
+	}
+	defer conn.Close()
+
+	query := `
+        CREATE TABLE foo (
+            i BIGINT
+        )
+    `
+
+	_, err = conn.Exec(query)
+	if err != nil {
+		t.Error(err)
+	}
+
+	var input_val, output_val int64
+	input_val = 2147483648
+	err = conn.QueryRow(`
+        insert into foo (i)
+        values (?)
+        returning i
+     `, input_val).Scan(
+		&output_val)
+	if err != nil {
+		t.Error(err)
+	}
+	if input_val != output_val {
+		t.Fatalf("%v != %v", input_val, output_val)
+	}
+
+}

@@ -1285,7 +1285,7 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 		case int32:
 			blr, v = _int32ToBlr(f)
 		case int64:
-			blr, v = _int32ToBlr(int32(f))
+			blr, v = _int64ToBlr(int64(f))
 		case time.Time:
 			if f.Year() == 0 {
 				blr, v = _timeToBlr(f)
