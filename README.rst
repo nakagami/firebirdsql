@@ -23,6 +23,7 @@ Modules get (go version < 1.11)
    $ go get github.com/shopspring/decimal
    $ go get github.com/nakagami/firebirdsql
    $ go get gitlab.com/nyarla/go-crypt
+   $ go get golang.org/x/text
 
 
 Example
@@ -107,3 +108,4 @@ param1, param2... are
    role,Role name,
    tzname, Time Zone name, For Firebird 4.0+
    wire_crypt,Enable wire data encryption or not.,true,For Firebird 3.0+
+   charset, Firebird Charecter Set,

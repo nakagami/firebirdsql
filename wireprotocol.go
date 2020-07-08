@@ -147,11 +147,13 @@ type wireProtocol struct {
 	password   string
 	authData   []byte
 
+	charset string
+
 	// Time Zone
 	timezone string
 }
 
-func newWireProtocol(addr string, timezone string) (*wireProtocol, error) {
+func newWireProtocol(addr string, timezone string, charset string) (*wireProtocol, error) {
 	p := new(wireProtocol)
 	p.buf = make([]byte, 0, BUFFER_LEN)
 
@@ -163,6 +165,7 @@ func newWireProtocol(addr string, timezone string) (*wireProtocol, error) {
 
 	p.conn, err = newWireChannel(conn)
 	p.timezone = timezone
+	p.charset = charset
 
 	return p, err
 }
@@ -670,7 +673,7 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 	var page_size int32
 	page_size = 4096
 
-	encode := bytes.NewBufferString("UTF8").Bytes()
+	encode := bytes.NewBufferString(p.charset).Bytes()
 	userBytes := bytes.NewBufferString(strings.ToUpper(user)).Bytes()
 	passwordBytes := bytes.NewBufferString(password).Bytes()
 	roleBytes := []byte(role)
@@ -710,7 +713,7 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 
 func (p *wireProtocol) opAttach(dbName string, user string, password string, role string) error {
 	p.debugPrint("opAttach")
-	encode := bytes.NewBufferString("UTF8").Bytes()
+	encode := bytes.NewBufferString(p.charset).Bytes()
 	userBytes := bytes.NewBufferString(strings.ToUpper(user)).Bytes()
 	passwordBytes := bytes.NewBufferString(password).Bytes()
 	roleBytes := []byte(role)
@@ -991,7 +994,7 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsql
 				raw_value, _ := p.recvPacketsAlignment(ln)
 				b, err = p.recvPackets(4)
 				if bytes_to_bint32(b) == 0 { // Not NULL
-					r[i], err = x.value(raw_value, p.timezone)
+					r[i], err = x.value(raw_value, p.timezone, p.charset)
 				}
 			}
 		} else { // PROTOCOL_VERSION13
@@ -1020,7 +1023,7 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsql
 					ln = x.ioLength()
 				}
 				raw_value, _ := p.recvPacketsAlignment(ln)
-				r[i], err = x.value(raw_value, p.timezone)
+				r[i], err = x.value(raw_value, p.timezone, p.charset)
 			}
 		}
 
@@ -1166,7 +1169,7 @@ func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) ([]driver.Value, error) {
 			raw_value, _ := p.recvPacketsAlignment(ln)
 			b, err = p.recvPackets(4)
 			if bytes_to_bint32(b) == 0 { // Not NULL
-				r[i], err = x.value(raw_value, p.timezone)
+				r[i], err = x.value(raw_value, p.timezone, p.charset)
 			}
 		}
 	} else { // PROTOCOL_VERSION13
@@ -1194,7 +1197,7 @@ func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) ([]driver.Value, error) {
 				ln = x.ioLength()
 			}
 			raw_value, _ := p.recvPacketsAlignment(ln)
-			r[i], err = x.value(raw_value, p.timezone)
+			r[i], err = x.value(raw_value, p.timezone, p.charset)
 		}
 	}
 
