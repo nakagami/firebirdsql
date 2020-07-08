@@ -370,8 +370,6 @@ func (p *wireProtocol) _parse_op_response() (int32, []byte, []byte, error) {
 
 func (p *wireProtocol) _parse_connect_response(user string, password string, options map[string]string, clientPublic *big.Int, clientSecret *big.Int) (err error) {
 	p.debugPrint("_parse_connect_response")
-	wire_crypt := true
-	wire_crypt, _ = strconv.ParseBool(options["wire_crypt"])
 
 	b, err := p.recvPackets(4)
 	opcode := bytes_to_bint32(b)
@@ -461,6 +459,7 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 				return
 			}
 		}
+
 		if opcode == op_cond_accept {
 			p.opContAuth(authData, options["auth_plugin_name"], PLUGIN_LIST, "")
 			_, _, _, err = p.opResponse()
@@ -468,14 +467,13 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 				return
 			}
 		}
+
+		wire_crypt := true
+		wire_crypt, _ = strconv.ParseBool(options["wire_crypt"])
 		if wire_crypt && sessionKey != nil {
 			// Send op_crypt
-			p.packInt(op_crypt)
-			p.packString("Arc4")
-			p.packString("Symmetric")
-			_, err = p.sendPackets()
+			p.opCrypt()
 			p.conn.setAuthKey(sessionKey)
-
 			_, _, _, err = p.opResponse()
 			if err != nil {
 				return
@@ -771,6 +769,14 @@ func (p *wireProtocol) opContAuth(authData []byte, authPluginName string, authPl
 	p.packString(authPluginName)
 	p.packString(authPluginList)
 	p.packString(keys)
+	_, err := p.sendPackets()
+	return err
+}
+
+func (p *wireProtocol) opCrypt() error {
+	p.packInt(op_crypt)
+	p.packString("Arc4")
+	p.packString("Symmetric")
 	_, err := p.sendPackets()
 	return err
 }
@@ -1282,7 +1288,9 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 		case int32:
 			blr, v = _int32ToBlr(f)
 		case int64:
-			blr, v = _int32ToBlr(int32(f))
+			blr, v = _int64ToBlr(int64(f))
+		case float64:
+			blr, v = _float64ToBlr(float64(f))
 		case time.Time:
 			if f.Year() == 0 {
 				blr, v = _timeToBlr(f)

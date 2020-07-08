@@ -28,6 +28,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"github.com/shopspring/decimal"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -36,7 +37,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"github.com/shopspring/decimal"
 )
 
 func get_firebird_major_version(conn *sql.DB) int {
@@ -336,7 +336,6 @@ func TestInsertTimestamp(t *testing.T) {
 	conn.Close()
 }
 
-
 func TestBoolean(t *testing.T) {
 	temppath := TempFileName("test_boolean_")
 
@@ -370,19 +369,19 @@ func TestBoolean(t *testing.T) {
 	conn.Exec(sql)
 	conn.Exec("insert into test_fb3(b) values (true)")
 	conn.Exec("insert into test_fb3(b) values (false)")
-    var b bool
+	var b bool
 	err = conn.QueryRow("select * from test_fb3 where b is true").Scan(&b)
 	if err != nil {
 		t.Fatalf("Error QueryRow: %v", err)
 	}
-	if b != true{
+	if b != true {
 		conn.Exec("Invalid boolean value")
 	}
 	err = conn.QueryRow("select * from test_fb3 where b is false").Scan(&b)
 	if err != nil {
 		t.Fatalf("Error QueryRow: %v", err)
 	}
-	if b != false{
+	if b != false {
 		conn.Exec("Invalid boolean value")
 	}
 
@@ -391,7 +390,7 @@ func TestBoolean(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error QueryRow: %v", err)
 	}
-	if b != false{
+	if b != false {
 		conn.Exec("Invalid boolean value")
 	}
 
@@ -871,4 +870,40 @@ func TestIssue96(t *testing.T) {
 	}
 
 	conn.Close()
+}
+
+func TestGoIssue112(t *testing.T) {
+	temppath := TempFileName("test_issue112_")
+	conn, err := sql.Open("firebirdsql_createdb", "SYSDBA:masterkey@localhost:3050"+temppath)
+	if err != nil {
+		t.Fatalf("Error occured at sql.Open()")
+	}
+	defer conn.Close()
+
+	query := `
+        CREATE TABLE foo (
+            i BIGINT
+        )
+    `
+
+	_, err = conn.Exec(query)
+	if err != nil {
+		t.Error(err)
+	}
+
+	var input_val, output_val int64
+	input_val = 2147483648
+	err = conn.QueryRow(`
+        insert into foo (i)
+        values (?)
+        returning i
+     `, input_val).Scan(
+		&output_val)
+	if err != nil {
+		t.Error(err)
+	}
+	if input_val != output_val {
+		t.Fatalf("%v != %v", input_val, output_val)
+	}
+
 }

@@ -47,6 +47,20 @@ func int32_to_bytes(i32 int32) []byte {
 	return bs
 }
 
+func bint64_to_bytes(i64 int64) []byte {
+	bs := []byte{
+		byte(i64 >> 56 & 0xFF),
+		byte(i64 >> 48 & 0xFF),
+		byte(i64 >> 40 & 0xFF),
+		byte(i64 >> 32 & 0xFF),
+		byte(i64 >> 24 & 0xFF),
+		byte(i64 >> 16 & 0xFF),
+		byte(i64 >> 8 & 0xFF),
+		byte(i64 & 0xFF),
+	}
+	return bs
+}
+
 func bint32_to_bytes(i32 int32) []byte {
 	bs := []byte{
 		byte(i32 >> 24 & 0xFF),
@@ -178,6 +192,15 @@ func xdrString(s string) []byte {
 	return xdrBytes(bs)
 }
 
+func _int64ToBlr(i64 int64) ([]byte, []byte) {
+	v := bytes.Join([][]byte{
+		bint64_to_bytes(i64),
+	}, nil)
+	blr := []byte{16, 0}
+
+	return blr, v
+}
+
 func _int32ToBlr(i32 int32) ([]byte, []byte) {
 	v := bytes.Join([][]byte{
 		bint32_to_bytes(i32),
@@ -185,6 +208,13 @@ func _int32ToBlr(i32 int32) ([]byte, []byte) {
 	blr := []byte{8, 0}
 
 	return blr, v
+}
+
+func _float64ToBlr(v float64) ([]byte, []byte) {
+	buf := new(bytes.Buffer)
+	binary.Write(buf, binary.BigEndian, v)
+	blr := []byte{27}
+	return blr, buf.Bytes()
 }
 
 func _bytesToBlr(v []byte) ([]byte, []byte) {
