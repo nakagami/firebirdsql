@@ -210,6 +210,13 @@ func _int32ToBlr(i32 int32) ([]byte, []byte) {
 	return blr, v
 }
 
+func _float64ToBlr(v float64) ([]byte, []byte) {
+	buf := new(bytes.Buffer)
+	binary.Write(buf, binary.BigEndian, v)
+	blr := []byte{27}
+	return blr, buf.Bytes()
+}
+
 func _bytesToBlr(v []byte) ([]byte, []byte) {
 	nbytes := len(v)
 	pad_length := ((4 - nbytes) & 3)
