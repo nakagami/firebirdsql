@@ -32,10 +32,10 @@ import (
 
 	"github.com/shopspring/decimal"
 	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/encoding/japanese"
+	"golang.org/x/text/encoding/korean"
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/encoding/traditionalchinese"
-	"golang.org/x/text/encoding/korean"
-	"golang.org/x/text/encoding/japanese"
 )
 
 const (
