@@ -11,20 +11,7 @@ Requirements
 -------------
 
 * Firebird 2.5 or higher
-* Golang 1.10 or higher
-
-Modules get (go version < 1.11)
-------------------------------------
-
-::
-
-   $ go get github.com/cznic/mathutil
-   $ go get github.com/kardianos/osext
-   $ go get github.com/shopspring/decimal
-   $ go get github.com/nakagami/firebirdsql
-   $ go get gitlab.com/nyarla/go-crypt
-   $ go get golang.org/x/text
-
+* Golang 1.13 or higher
 
 Example
 -------------
