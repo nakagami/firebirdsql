@@ -11,7 +11,7 @@ Requirements
 -------------
 
 * Firebird 2.5 or higher
-* Golang 1.7 or higher
+* Golang 1.10 or higher
 
 Modules get (go version < 1.11)
 ------------------------------------
