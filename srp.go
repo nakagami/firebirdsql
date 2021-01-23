@@ -68,14 +68,7 @@ func pad(v *big.Int) []byte {
 }
 
 func bigIntToBytes(v *big.Int) []byte {
-	buf := pad(v)
-	for i, _ := range buf {
-		if buf[i] != 0 {
-			return buf[i:]
-		}
-	}
-
-	return buf[:1] // 0
+	return pad(v)
 }
 
 func bytesToBigInt(v []byte) (r *big.Int) {
