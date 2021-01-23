@@ -26,7 +26,6 @@ package firebirdsql
 import (
 	"bytes"
 	"container/list"
-	"crypto/sha1"
 	"encoding/binary"
 	"math/big"
 	"strconv"
@@ -116,13 +115,6 @@ func bigIntFromString(s string) *big.Int {
 	ret := new(big.Int)
 	ret.SetString(s, 10)
 	return ret
-}
-
-func bigIntToSha1(n *big.Int) []byte {
-	sha1 := sha1.New()
-	sha1.Write(n.Bytes())
-
-	return sha1.Sum(nil)
 }
 
 func flattenBytes(l *list.List) []byte {
