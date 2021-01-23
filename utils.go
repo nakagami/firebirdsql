@@ -118,30 +118,6 @@ func bigIntFromString(s string) *big.Int {
 	return ret
 }
 
-func bigIntToBytes(v *big.Int) []byte {
-	buf := pad(v)
-	for i, _ := range buf {
-		if buf[i] != 0 {
-			return buf[i:]
-		}
-	}
-
-	return buf[:1] // 0
-}
-
-func bytesToBigInt(v []byte) (r *big.Int) {
-	m := new(big.Int)
-	m.SetInt64(256)
-	a := new(big.Int)
-	r = new(big.Int)
-	r.SetInt64(0)
-	for _, b := range v {
-		r = r.Mul(r, m)
-		r = r.Add(r, a.SetInt64(int64(b)))
-	}
-	return r
-}
-
 func bigIntToSha1(n *big.Int) []byte {
 	sha1 := sha1.New()
 	sha1.Write(n.Bytes())
