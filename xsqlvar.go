@@ -160,14 +160,6 @@ func (x *xSQLVAR) displayLength() int {
 	}
 }
 
-func (x *xSQLVAR) nullable() bool {
-	return x.null_ok
-}
-
-func (x *xSQLVAR) scale() int {
-	return x.sqlscale
-}
-
 func (x *xSQLVAR) hasPrecisionScale() bool {
 	return (x.sqltype == SQL_TYPE_SHORT || x.sqltype == SQL_TYPE_LONG || x.sqltype == SQL_TYPE_QUAD || x.sqltype == SQL_TYPE_INT64 || x.sqltype == SQL_TYPE_INT128 || x.sqltype == SQL_TYPE_DEC64 || x.sqltype == SQL_TYPE_DEC128 || x.sqltype == SQL_TYPE_DEC_FIXED) && x.sqlscale != 0
 }
