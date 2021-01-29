@@ -87,7 +87,7 @@ func newWireChannel(conn net.Conn) (wireChannel, error) {
 	return *c, err
 }
 
-func (c *wireChannel) setAuthKey(key []byte) (err error) {
+func (c *wireChannel) setArc4Key(key []byte) (err error) {
 	c.rc4reader, err = rc4.NewCipher(key)
 	c.rc4writer, err = rc4.NewCipher(key)
 	return
@@ -473,7 +473,7 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 		if wire_crypt && sessionKey != nil {
 			// Send op_crypt
 			p.opCrypt()
-			p.conn.setAuthKey(sessionKey)
+			p.conn.setArc4Key(sessionKey)
 			_, _, _, err = p.opResponse()
 			if err != nil {
 				return
