@@ -65,7 +65,7 @@ func (fc *firebirdsqlConn) Begin() (driver.Tx, error) {
 // idle connections, it shouldn't be necessary for drivers to
 // do their own connection caching.
 func (fc *firebirdsqlConn) Close() (err error) {
-	for tx, _ := range fc.transactionSet {
+	for tx := range fc.transactionSet {
 		tx.Rollback()
 	}
 

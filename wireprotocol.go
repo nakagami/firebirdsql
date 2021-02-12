@@ -325,14 +325,14 @@ func (p *wireProtocol) _parse_status_vector() (*list.List, int, string, error) {
 			if gds_code == 335544436 {
 				sql_code = num
 			}
-			num_arg += 1
+			num_arg++
 			message = strings.Replace(message, "@"+strconv.Itoa(num_arg), strconv.Itoa(num), 1)
 		case n == isc_arg_string:
 			b, err = p.recvPackets(4)
 			nbytes := int(bytes_to_bint32(b))
 			b, err = p.recvPacketsAlignment(nbytes)
 			s := bytes_to_str(b)
-			num_arg += 1
+			num_arg++
 			message = strings.Replace(message, "@"+strconv.Itoa(num_arg), s, 1)
 		case n == isc_arg_interpreted:
 			b, err = p.recvPackets(4)
@@ -575,7 +575,7 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
 
 	for i < len(buf) {
 		if buf[i] == byte(isc_info_sql_stmt_type) && buf[i+1] == byte(0x04) && buf[i+2] == byte(0x00) {
-			i += 1
+			i++
 			ln = int(bytes_to_int16(buf[i : i+2]))
 			i += 2
 			stmt_type = int32(bytes_to_int32(buf[i : i+ln]))

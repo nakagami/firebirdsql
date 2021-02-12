@@ -50,7 +50,7 @@ func pad(v *big.Int) []byte {
 	n = big.NewInt(0)
 	n = n.Add(n, v)
 
-	for i, _ := range buf {
+	for i := range buf {
 		buf[i] = byte(m.And(m.SetInt64(255), n).Int64())
 		n = n.Div(n, m.SetInt64(256))
 	}
@@ -140,7 +140,7 @@ func getClientSeed() (keyA *big.Int, keya *big.Int) {
 func getSalt() []byte {
 	buf := make([]byte, SRP_SALT_SIZE)
 	if DEBUG_SRP == false {
-		for i, _ := range buf {
+		for i := range buf {
 			buf[i] = byte(rand.Intn(256))
 		}
 	}

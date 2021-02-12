@@ -32,9 +32,8 @@ import (
 func dpdBitToInt(dpd uint, mask uint) int {
 	if (dpd & mask) != 0 {
 		return 1
-	} else {
-		return 0
 	}
+	return 0
 }
 
 func dpdToInt(dpd uint) int64 {
@@ -206,15 +205,13 @@ func decimal64ToDecimal(b []byte) decimal.Decimal {
 		if sign == 1 {
 			// Is there -NaN ?
 			return decimal.NewFromFloat(math.NaN())
-		} else {
-			return decimal.NewFromFloat(math.NaN())
 		}
+		return decimal.NewFromFloat(math.NaN())
 	} else if cf == 0x1e {
 		if sign == 1 {
 			return decimal.NewFromFloat(math.Inf(-1))
-		} else {
-			return decimal.NewFromFloat(math.Inf(1))
 		}
+		return decimal.NewFromFloat(math.Inf(1))
 	} else if (cf & 0x18) == 0x00 {
 		exponent = 0x000 + exponent
 		prefix = int64(cf & 0x07)

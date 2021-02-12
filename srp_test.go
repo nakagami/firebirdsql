@@ -37,14 +37,14 @@ func TestSrp(t *testing.T) {
 	keyB, keyb := getServerSeed(v)
 	serverKey := getServerSession(user, password, salt, keyA, keyB, keyb)
 	_, clientKey := getClientProof(user, password, salt, keyA, keyB, keya, "Srp")
-	for i, _ := range clientKey {
+	for i := range clientKey {
 		if clientKey[i] != serverKey[i] {
 			t.Fatalf("Error srp key exchange")
 		}
 	}
 
 	_, clientKey = getClientProof(user, password, salt, keyA, keyB, keya, "Srp256")
-	for i, _ := range clientKey {
+	for i := range clientKey {
 		if clientKey[i] != serverKey[i] {
 			t.Fatalf("Error srp256 key exchange")
 		}

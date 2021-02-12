@@ -147,17 +147,15 @@ type xSQLVAR struct {
 func (x *xSQLVAR) ioLength() int {
 	if x.sqltype == SQL_TYPE_TEXT {
 		return x.sqllen
-	} else {
-		return xsqlvarTypeLength[x.sqltype]
 	}
+	return xsqlvarTypeLength[x.sqltype]
 }
 
 func (x *xSQLVAR) displayLength() int {
 	if x.sqltype == SQL_TYPE_TEXT {
 		return x.sqllen
-	} else {
-		return xsqlvarTypeDisplayLength[x.sqltype]
 	}
+	return xsqlvarTypeDisplayLength[x.sqltype]
 }
 
 func (x *xSQLVAR) hasPrecisionScale() bool {
@@ -243,7 +241,7 @@ func (x *xSQLVAR) _parseDate(raw_value []byte) (int, int, int) {
 		month += 3
 	} else {
 		month -= 9
-		year += 1
+		year++
 	}
 	return year, month, day
 }
