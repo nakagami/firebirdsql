@@ -56,8 +56,17 @@ func GetTestDSN(prefix string) string {
 		tmppath = "/" + tmppath
 	}
 
-	retorno := "sysdba:masterkey@localhost:3050"
+	test_user := "sysdba"
+	if isc_user := os.Getenv("ISC_USER"); isc_user != "" {
+		test_user = isc_user
+	}
 
+	test_password := "masterkey"
+	if isc_password := os.Getenv("ISC_PASSWORD"); isc_password != "" {
+		test_password = isc_password
+	}
+
+	retorno := test_user + ":" + test_password + "@localhost:3050"
 	return retorno + tmppath
 }
 
