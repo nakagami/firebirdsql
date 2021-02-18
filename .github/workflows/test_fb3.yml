@@ -1,0 +1,35 @@
+name: Go
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Set up Firebird
+      run: |
+        sudo apt install firebird3.0-server -y
+        sudo cp misc/firebird.conf /etc/firebird/3.0
+        sudo systemctl restart firebird3.0
+        sudo chmod 0664 /etc/firebird/3.0/SYSDBA.password
+        grep '=' /etc/firebird/3.0/SYSDBA.password |sed 's/^/export /' >test_user.env
+
+    - name: Set up Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.15
+
+    - name: Build
+      run: go build -v ./...
+
+    - name: Test
+      run: |
+        source test_user.env
+        go test -v ./...
