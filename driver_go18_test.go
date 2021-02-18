@@ -34,8 +34,8 @@ import (
 )
 
 func TestGo18(t *testing.T) {
-	temppath := TempFileName("test_go18_")
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	test_dsn := GetTestDSN("test_go18_")
+	conn, err := sql.Open("firebirdsql_createdb", test_dsn)
 
 	if err != nil {
 		t.Fatalf("Error sql.Open(): %v", err)
@@ -74,7 +74,7 @@ func TestGo18(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	conn, err = sql.Open("firebirdsql", "SYSDBA:masterkey@localhost:3050"+temppath)
+	conn, err = sql.Open("firebirdsql", test_dsn)
 	if err != nil {
 		t.Fatalf("Error sql.Open(): %v", err)
 	}

@@ -31,8 +31,7 @@ import (
 
 func BenchmarkRead(b *testing.B) {
 	b.StopTimer()
-	temppath := TempFileName("test_basic_")
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	conn, err := sql.Open("firebirdsql_createdb", GetTestDSN("test_basic_"))
 	query := `
 	CREATE TABLE PERFTEST (
 		A SMALLINT,

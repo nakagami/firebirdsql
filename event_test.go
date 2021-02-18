@@ -33,8 +33,7 @@ import (
 )
 
 func TestEventsCallback(t *testing.T) {
-	tempPathDB := TempFileName("test_events_")
-	dsn := "sysdba:masterkey@localhost:3050" + tempPathDB
+	dsn := GetTestDSN("test_events_")
 	conn, err := sql.Open("firebirdsql_createdb", dsn)
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
@@ -192,8 +191,7 @@ func TestEventsCallback(t *testing.T) {
 }
 
 func TestSubscribe(t *testing.T) {
-	tempPathDB := TempFileName("test_subscribe_")
-	dsn := "sysdba:masterkey@localhost:3050" + tempPathDB
+	dsn := GetTestDSN("test_subscribe_")
 	conn, err := sql.Open("firebirdsql_createdb", dsn)
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)

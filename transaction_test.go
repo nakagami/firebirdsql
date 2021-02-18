@@ -31,8 +31,8 @@ import (
 
 func TestTransaction(t *testing.T) {
 	var n int
-	temppath := TempFileName("test_transaction_")
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	test_dsn := GetTestDSN("test_transaction_")
+	conn, err := sql.Open("firebirdsql_createdb", test_dsn)
 	if err != nil {
 		t.Fatalf("Error sql.Open(): %v", err)
 	}
@@ -41,7 +41,7 @@ func TestTransaction(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn, err = sql.Open("firebirdsql", test_dsn)
 	if err != nil {
 		t.Fatalf("Error sql.Open(): %v", err)
 	}
@@ -57,7 +57,7 @@ func TestTransaction(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn, err = sql.Open("firebirdsql", test_dsn)
 	if err != nil {
 		t.Fatalf("sql.Open(): %v", err)
 	}
@@ -147,7 +147,7 @@ func TestTransaction(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn, err = sql.Open("firebirdsql", test_dsn)
 	err = tx.QueryRow("SELECT Count(*) FROM test_trans").Scan(&n)
 	if err != nil {
 		t.Fatalf("Error SELECT: %v", err)
@@ -160,8 +160,8 @@ func TestTransaction(t *testing.T) {
 }
 
 func TestIssue35(t *testing.T) {
-	temppath := TempFileName("test_issue35_")
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	test_dsn := GetTestDSN("test_issue35_")
+	conn, err := sql.Open("firebirdsql_createdb", test_dsn)
 
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
@@ -188,7 +188,7 @@ func TestIssue35(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn, err = sql.Open("firebirdsql", test_dsn)
 	var n int
 	err = conn.QueryRow("SELECT Count(*) FROM test_issue35").Scan(&n)
 	if err != nil {
@@ -202,8 +202,8 @@ func TestIssue35(t *testing.T) {
 }
 
 func TestIssue38(t *testing.T) {
-	temppath := TempFileName("test_issue38_")
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	test_dsn := GetTestDSN("test_issue38_")
+	conn, err := sql.Open("firebirdsql_createdb", test_dsn)
 
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
@@ -222,7 +222,7 @@ func TestIssue38(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	conn, err = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn, err = sql.Open("firebirdsql", test_dsn)
 	tx, err := conn.Begin()
 
 	if err != nil {
@@ -245,8 +245,7 @@ func TestIssue38(t *testing.T) {
 }
 
 func TestIssue39(t *testing.T) {
-	temppath := TempFileName("test_issue39_")
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	conn, err := sql.Open("firebirdsql_createdb", GetTestDSN("test_issue39_"))
 	tx, err := conn.Begin()
 
 	if err != nil {
@@ -266,8 +265,8 @@ func TestIssue39(t *testing.T) {
 }
 
 func TestIssue67(t *testing.T) {
-	temppath := TempFileName("test_issue67_")
-	conn, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	test_dsn := GetTestDSN("test_issue67_")
+	conn, _ := sql.Open("firebirdsql_createdb", test_dsn)
 	var n int
 	conn.QueryRow("SELECT Count(*) FROM rdb$relations").Scan(&n)
 	err := conn.Close()
@@ -275,7 +274,7 @@ func TestIssue67(t *testing.T) {
 		t.Fatalf("Error Close: %v", err)
 	}
 
-	conn, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn, _ = sql.Open("firebirdsql", test_dsn)
 	tx, _ := conn.Begin()
 	tx.QueryRow("SELECT Count(*) FROM rdb$relations").Scan(&n)
 
@@ -292,13 +291,12 @@ func TestIssue89(t *testing.T) {
 
 	var noconn1, numberTrans, numberrelations int
 
-	temppath := TempFileName("test_issue89_")
-
 	//	test transaction open on connection open
-	conn1, _ := sql.Open("firebirdsql_createdb", "sysdba:masterkey@localhost:3050"+temppath)
+	test_dsn := GetTestDSN("test_issue89_")
+	conn1, _ := sql.Open("firebirdsql_createdb", test_dsn)
 	firebird_major_version := get_firebird_major_version(conn1)
 
-	conn2, _ := sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn2, _ := sql.Open("firebirdsql", test_dsn)
 
 	conn2.QueryRow("select count(*) from mon$transactions where mon$attachment_id <> current_connection").Scan(&numberTrans)
 
@@ -311,7 +309,7 @@ func TestIssue89(t *testing.T) {
 	//	test if are more than 1 transaction open on first query
 	conn1.QueryRow("select mon$attachment_id from mon$attachments where mon$attachment_id = current_connection").Scan(&noconn1)
 
-	conn2, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050/"+temppath)
+	conn2, _ = sql.Open("firebirdsql", test_dsn)
 	conn2.QueryRow("select count(*) from mon$transactions where mon$attachment_id <> current_connection").Scan(&numberTrans)
 
 	if numberTrans > 1 {
@@ -322,7 +320,7 @@ func TestIssue89(t *testing.T) {
 	conn2.Close()
 
 	//	test autocommit when rows is closed
-	conn1, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn1, _ = sql.Open("firebirdsql", test_dsn)
 
 	rows, _ := conn1.Query("select first 3 rdb$relation_id from rdb$relations")
 
@@ -331,7 +329,7 @@ func TestIssue89(t *testing.T) {
 
 	rows.Close()
 
-	conn2, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn2, _ = sql.Open("firebirdsql", test_dsn)
 	conn2.QueryRow("select count(*) from mon$transactions where mon$attachment_id <> current_connection").Scan(&numberTrans)
 
 	if numberTrans > 0 {
@@ -342,7 +340,7 @@ func TestIssue89(t *testing.T) {
 	conn2.Close()
 
 	//	test autocommit on prepare statement
-	conn1, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn1, _ = sql.Open("firebirdsql", test_dsn)
 	stmt, _ := conn1.Prepare("select count(*) from rdb$relations")
 	err := stmt.QueryRow().Scan(&numberrelations)
 
@@ -361,7 +359,7 @@ func TestIssue89(t *testing.T) {
 
 	rows.Close()
 
-	conn2, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn2, _ = sql.Open("firebirdsql", test_dsn)
 	conn2.QueryRow("select count(*) from mon$transactions where mon$attachment_id <> current_connection").Scan(&numberTrans)
 
 	if numberTrans > 0 {
@@ -369,7 +367,7 @@ func TestIssue89(t *testing.T) {
 	}
 
 	//	test autocommit on prepare statement
-	conn1, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn1, _ = sql.Open("firebirdsql", test_dsn)
 	conn1.Exec("create table testprepareinsert (id integer)")
 
 	stmt, _ = conn1.Prepare("insert into testprepareinsert (id) values (?)")
@@ -382,14 +380,14 @@ func TestIssue89(t *testing.T) {
 	*/
 	stmt.Close()
 
-	conn2, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn2, _ = sql.Open("firebirdsql", test_dsn)
 	conn2.QueryRow("select count(*) from mon$transactions where mon$attachment_id <> current_connection").Scan(&numberTrans)
 
 	if firebird_major_version < 4 && numberTrans > 0 {
 		t.Fatalf("Autocommit in prepare don't work")
 	}
 
-	conn1, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn1, _ = sql.Open("firebirdsql", test_dsn)
 	txp, _ := conn1.Begin()
 	stmt, _ = txp.Prepare("insert into testprepareinsert (id) values (?)")
 
@@ -401,7 +399,7 @@ func TestIssue89(t *testing.T) {
 	}
 
 	txp.Commit()
-	conn2, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn2, _ = sql.Open("firebirdsql", test_dsn)
 	conn2.QueryRow("select count(*) from mon$transactions where mon$attachment_id <> current_connection").Scan(&numberTrans)
 
 	if firebird_major_version < 4 && numberTrans > 0 {
@@ -409,8 +407,8 @@ func TestIssue89(t *testing.T) {
 	}
 
 	// test transaction open after a commit of another transaction
-	conn1, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
-	conn2, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn1, _ = sql.Open("firebirdsql", test_dsn)
+	conn2, _ = sql.Open("firebirdsql", test_dsn)
 
 	tx, err := conn1.Begin()
 
@@ -427,7 +425,7 @@ func TestIssue89(t *testing.T) {
 		t.Fatalf("Error opening new transaction after last one committed or rollback: %v", err)
 	}
 
-	conn2, _ = sql.Open("firebirdsql", "sysdba:masterkey@localhost:3050"+temppath)
+	conn2, _ = sql.Open("firebirdsql", test_dsn)
 	conn2.QueryRow("select count(*) from mon$transactions where mon$attachment_id <> current_connection").Scan(&numberTrans)
 
 	if firebird_major_version < 4 && numberTrans > 0 {
