@@ -161,18 +161,14 @@ func xdrString(s string) []byte {
 }
 
 func _int64ToBlr(i64 int64) ([]byte, []byte) {
-	v := bytes.Join([][]byte{
-		bint64_to_bytes(i64),
-	}, nil)
+	v := bint64_to_bytes(i64)
 	blr := []byte{16, 0}
 
 	return blr, v
 }
 
 func _int32ToBlr(i32 int32) ([]byte, []byte) {
-	v := bytes.Join([][]byte{
-		bint32_to_bytes(i32),
-	}, nil)
+	v := bint32_to_bytes(i32)
 	blr := []byte{8, 0}
 
 	return blr, v
@@ -213,17 +209,13 @@ func _convert_time(t time.Time) []byte {
 }
 
 func _dateToBlr(t time.Time) ([]byte, []byte) {
-	v := bytes.Join([][]byte{
-		_convert_date(t),
-	}, nil)
+	v := _convert_date(t)
 	blr := []byte{12}
 	return blr, v
 }
 
 func _timeToBlr(t time.Time) ([]byte, []byte) {
-	v := bytes.Join([][]byte{
-		_convert_time(t),
-	}, nil)
+	v := _convert_time(t)
 	blr := []byte{13}
 	return blr, v
 }
