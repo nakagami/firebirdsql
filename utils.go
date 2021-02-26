@@ -230,17 +230,6 @@ func _timestampToBlr(t time.Time) ([]byte, []byte) {
 	return blr, v
 }
 
-func split1(src string, delm string) (string, string) {
-	for i := 0; i < len(src); i++ {
-		if src[i:i+1] == delm {
-			s1 := src[0:i]
-			s2 := src[i+1:]
-			return s1, s2
-		}
-	}
-	return src, ""
-}
-
 func convertToBool(s string, defaultValue bool) bool {
 	v, err := strconv.ParseBool(s)
 	if err != nil {
