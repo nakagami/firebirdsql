@@ -825,7 +825,6 @@ func TestIssue96(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
-	firebird_major_version := get_firebird_major_version(conn)
 
 	conn.Exec(`CREATE EXCEPTION EX_DATA_ERROR ''`)
 	conn.Exec(`CREATE PROCEDURE EXCEPTION_PROC(in1 INTEGER)
@@ -842,20 +841,14 @@ func TestIssue96(t *testing.T) {
 
 	query := "SELECT * FROM exception_proc(1)"
 	rows, err := conn.Query(query)
-	if firebird_major_version < 4 {
-		if err != nil {
-			t.Fatalf("Error Query: %v", err)
-		}
-		rows.Next()
-		var n int
-		err = rows.Scan(&n)
-		if err == nil {
-			t.Error("Error not occured")
-		}
-	} else {
-		if err == nil {
-			t.Error("Error not occured")
-		}
+	if err != nil {
+		t.Fatalf("Error Query: %v", err)
+	}
+	rows.Next()
+	var n int
+	err = rows.Scan(&n)
+	if err == nil {
+		t.Error("Error not occured")
 	}
 
 	conn.Close()
