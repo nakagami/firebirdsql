@@ -527,7 +527,8 @@ func (p *wireProtocol) _parse_select_items(buf []byte, xsqlda []xSQLVAR) (int, e
 		case isc_info_sql_length:
 			ln = int(bytes_to_int16(buf[i : i+2]))
 			i += 2
-			xsqlda[index-1].sqllen = int(bytes_to_int32(buf[i : i+ln]))
+			// the length defined in buffer is 4 times the size of column
+			xsqlda[index-1].sqllen = int(bytes_to_int32(buf[i:i+ln])) / 4
 			i += ln
 		case isc_info_sql_null_ind:
 			ln = int(bytes_to_int16(buf[i : i+2]))
