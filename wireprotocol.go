@@ -147,7 +147,8 @@ type wireProtocol struct {
 	password   string
 	authData   []byte
 
-	charset string
+	charset        string
+	charsetByteLen int
 
 	// Time Zone
 	timezone string
@@ -166,8 +167,23 @@ func newWireProtocol(addr string, timezone string, charset string) (*wireProtoco
 	p.conn, err = newWireChannel(conn)
 	p.timezone = timezone
 	p.charset = charset
+	p.charsetLen()
 
 	return p, err
+}
+
+// charsetLen sets the length of character depending the charset to get the correct size of column
+func (p *wireProtocol) charsetLen() {
+	// all ISO8859_X and WIN125X are 1 byte character length, so omit here
+	// only add charset that character length is > 1
+	switch p.charset {
+	case "UNICODE_FSS", "UTF8":
+		p.charsetByteLen = 4
+	case "BIG_5", "SJIS_0208", "KSC_5601", "EUCJ_0208", "GB_2312", "KOI8R", "KOI8U":
+		p.charsetByteLen = 2
+	default:
+		p.charsetByteLen = 1
+	}
 }
 
 func (p *wireProtocol) packInt(i int32) {
@@ -527,7 +543,8 @@ func (p *wireProtocol) _parse_select_items(buf []byte, xsqlda []xSQLVAR) (int, e
 		case isc_info_sql_length:
 			ln = int(bytes_to_int16(buf[i : i+2]))
 			i += 2
-			xsqlda[index-1].sqllen = int(bytes_to_int32(buf[i : i+ln]))
+			// the length defined in buffer depends on character length of charset
+			xsqlda[index-1].sqllen = int(bytes_to_int32(buf[i:i+ln])) / p.charsetByteLen
 			i += ln
 		case isc_info_sql_null_ind:
 			ln = int(bytes_to_int16(buf[i : i+2]))
