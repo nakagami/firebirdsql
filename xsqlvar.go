@@ -27,6 +27,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"math"
+	"math/big"
 	"reflect"
 	"time"
 
@@ -188,7 +189,7 @@ func (x *xSQLVAR) scantype() reflect.Type {
 		}
 		return reflect.TypeOf(int64(0))
 	case SQL_TYPE_INT128:
-		return reflect.TypeOf(decimal.Decimal{})
+		return reflect.TypeOf(big.Int{})
 	case SQL_TYPE_DATE:
 		return reflect.TypeOf(time.Time{})
 	case SQL_TYPE_TIME:
@@ -462,9 +463,13 @@ func (x *xSQLVAR) value(raw_value []byte, timezone string, charset string) (v in
 			v = i64
 		}
 	case SQL_TYPE_INT128:
-		high := decimal.New(int64(bytes_to_bint64(raw_value[:8])), 64)
-		low := decimal.New(int64(bytes_to_bint64(raw_value[8:])), int32(x.sqlscale))
-		v = high.Mul(low)
+		i128 := big.NewInt(bytes_to_bint64(raw_value[:8]))
+		i128 = i128.Lsh(i128, 64)
+		low := big.NewInt(bytes_to_bint64(raw_value[8:]))
+		i128.Add(i128, low)
+		e := big.NewInt(int64(math.Pow10(x.sqlscale)))
+		i128.Mul(i128, e)
+		v = i128
 	case SQL_TYPE_DATE:
 		v = x.parseDate(raw_value, timezone)
 	case SQL_TYPE_TIME:

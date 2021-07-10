@@ -29,6 +29,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/shopspring/decimal"
+	"math/big"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -430,6 +431,35 @@ func TestDecFloat(t *testing.T) {
 	var d, df64, df128 decimal.Decimal
 	for rows.Next() {
 		rows.Scan(&d, &df64, &df128)
+	}
+
+	conn.Close()
+}
+
+func TestInt128(t *testing.T) {
+	// https://github.com/nakagami/firebirdsql/issues/129
+	conn, err := sql.Open("firebirdsql_createdb", GetTestDSN("test_int128_"))
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+
+	firebird_major_version := get_firebird_major_version(conn)
+	if firebird_major_version < 4 {
+		return
+	}
+
+	sql := `
+        CREATE TABLE test_int128 (
+            i int128
+        )
+    `
+	conn.Exec(sql)
+	conn.Exec("insert into test_int128(i) values (129)")
+
+	var i128 *big.Int
+	err = conn.QueryRow("SELECT i FROM test_int128").Scan(&i128)
+	if err != nil {
+		t.Fatalf("Error SELECT: %v", err)
 	}
 
 	conn.Close()
