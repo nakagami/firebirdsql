@@ -461,6 +461,9 @@ func TestInt128(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error SELECT: %v", err)
 	}
+	if i128.Cmp(big.NewInt(129)) != 0 {
+		t.Fatalf("INT128 Error: %v", i128)
+	}
 
 	conn.Close()
 }
