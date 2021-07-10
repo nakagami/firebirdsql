@@ -219,7 +219,7 @@ func (x *xSQLVAR) scantype() reflect.Type {
 }
 
 func (x *xSQLVAR) _parseTimezone(raw_value []byte) *time.Location {
-	timezone := getTimezoneNameByID(int(bytes_to_bint32(raw_value)))
+	timezone := getTimezoneNameByID(int(bytes_to_bint16(raw_value)))
 	tz, _ := time.LoadLocation(timezone)
 	return tz
 }
