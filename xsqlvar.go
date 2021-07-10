@@ -463,13 +463,33 @@ func (x *xSQLVAR) value(raw_value []byte, timezone string, charset string) (v in
 			v = i64
 		}
 	case SQL_TYPE_INT128:
-		i128 := big.NewInt(bytes_to_bint64(raw_value[:8]))
-		i128 = i128.Lsh(i128, 64)
-		low := big.NewInt(bytes_to_bint64(raw_value[8:]))
-		i128.Add(i128, low)
-		e := big.NewInt(int64(math.Pow10(x.sqlscale)))
-		i128.Mul(i128, e)
-		v = i128
+		// reverse
+		for i, j := 0, len(raw_value)-1; i < j; i, j = i+1, j-1 {
+			raw_value[i], raw_value[j] = raw_value[j], raw_value[i]
+		}
+
+		// variable to return
+		var x = new(big.Int)
+
+		for i := len(raw_value) - 1; i >= 0; i-- {
+			if raw_value[i] == 0 {
+				continue
+			}
+
+			// get the 2^(i*8) in big.Float
+			var t = new(big.Float).SetFloat64(math.Pow(2, float64(i*8)))
+
+			// convert the float to int
+			var xx *big.Int
+			xx, _ = t.Int(xx)
+
+			// mul with the value in raw_value
+			xx.Mul(xx, big.NewInt(int64(raw_value[i])))
+
+			// add to x
+			x.Add(x, xx)
+		}
+		v = x
 	case SQL_TYPE_DATE:
 		v = x.parseDate(raw_value, timezone)
 	case SQL_TYPE_TIME:

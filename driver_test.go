@@ -454,14 +454,18 @@ func TestInt128(t *testing.T) {
         )
     `
 	conn.Exec(sql)
-	conn.Exec("insert into test_int128(i) values (129)")
+	conn.Exec("insert into test_int128(i) values (170141183460469231731687303715884105727)")
 
 	var i128 *big.Int
 	err = conn.QueryRow("SELECT i FROM test_int128").Scan(&i128)
 	if err != nil {
 		t.Fatalf("Error SELECT: %v", err)
 	}
-	if i128.Cmp(big.NewInt(129)) != 0 {
+
+	var toCmp = new(big.Int)
+	toCmp, _ = toCmp.SetString("170141183460469231731687303715884105727", 10)
+
+	if i128.Cmp(toCmp) != 0 {
 		t.Fatalf("INT128 Error: %v", i128)
 	}
 
