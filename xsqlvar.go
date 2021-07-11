@@ -463,6 +463,20 @@ func (x *xSQLVAR) value(raw_value []byte, timezone string, charset string) (v in
 			v = i64
 		}
 	case SQL_TYPE_INT128:
+		var isNegative bool
+
+		// when raw_value[0] is > 127, then subtract 255 in every index
+		if raw_value[0] > 127 {
+			for i := range raw_value {
+				if raw_value[i] < 255 {
+					raw_value[i] = 255 - raw_value[i]
+				} else {
+					raw_value[i] -= 255
+				}
+			}
+			isNegative = true
+		}
+
 		// reverse
 		for i, j := 0, len(raw_value)-1; i < j; i, j = i+1, j-1 {
 			raw_value[i], raw_value[j] = raw_value[j], raw_value[i]
@@ -488,6 +502,12 @@ func (x *xSQLVAR) value(raw_value []byte, timezone string, charset string) (v in
 
 			// add to x
 			x.Add(x, xx)
+		}
+
+		// when negative, add 1 and mul -1
+		if isNegative {
+			x.Add(x, big.NewInt(1))
+			x.Mul(x, big.NewInt(-1))
 		}
 		v = x
 	case SQL_TYPE_DATE:
