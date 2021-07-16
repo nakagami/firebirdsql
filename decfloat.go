@@ -103,7 +103,7 @@ func calcSignificand(prefix int64, dpdBits *big.Int, numBits int) *big.Int {
 
 	for i := 0; i < numSegments; i++ {
 		var work big.Int
-		work = *dpdBits
+		work.Add(&work, dpdBits)
 		segments[numSegments-i-1] = uint(work.Mod(&work, bi1024).Int64())
 		dpdBits.Rsh(dpdBits, 10)
 	}

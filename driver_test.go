@@ -413,9 +413,9 @@ func TestDecFloat(t *testing.T) {
 	conn.Exec(query)
 	conn.Exec("insert into test_decfloat(i, d, df16, df34, s) values (1, 0.0, 0.0, 0.0, '0.0')")
 	conn.Exec("insert into test_decfloat(i, d, df16, df34, s) values (2, 1.1, 1.1, 1.1, '1.1')")
-	conn.Exec("insert into test_decfloat(i, d, df16, df34, s) values (3, 20.2, 20.2, 20.2, '20.2')")
+	conn.Exec("insert into test_decfloat(i, d, df16, df34, s) values (3, 120.2, 120.2, 120.2, '120.2')")
 	conn.Exec("insert into test_decfloat(i, d, df16, df34, s) values (4, -1.1, -1.1, -1.1, '-1.1')")
-	conn.Exec("insert into test_decfloat(i, d, df16, df34, s) values (5, -20.2, -20.2, -20.2, '-20.2')")
+	conn.Exec("insert into test_decfloat(i, d, df16, df34, s) values (5, -120.2, -120.2, -120.2, '-120.2')")
 
 	var n int
 	err = conn.QueryRow("select count(*) cnt from test_decfloat").Scan(&n)
