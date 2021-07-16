@@ -480,6 +480,41 @@ func TestInt128(t *testing.T) {
 	conn.Close()
 }
 
+func TestNegativeInt128(t *testing.T) {
+	conn, err := sql.Open("firebirdsql_createdb", GetTestDSN("test_negative_int128_"))
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+
+	firebird_major_version := get_firebird_major_version(conn)
+	if firebird_major_version < 4 {
+		return
+	}
+
+	sql := `
+        CREATE TABLE test_negative_int128 (
+            i int128
+        )
+    `
+	conn.Exec(sql)
+	conn.Exec("insert into test_negative_int128(i) values (-170141183460469231731687303715884105727)")
+
+	var i128 *big.Int
+	err = conn.QueryRow("SELECT i FROM test_negative_int128").Scan(&i128)
+	if err != nil {
+		t.Fatalf("Error SELECT: %v", err)
+	}
+
+	var toCmp = new(big.Int)
+	toCmp, _ = toCmp.SetString("-170141183460469231731687303715884105727", 10)
+
+	if i128.Cmp(toCmp) != 0 {
+		t.Fatalf("Negative INT128 Error: %v", i128)
+	}
+
+	conn.Close()
+}
+
 func TestLegacyAuthWireCrypt(t *testing.T) {
 	test_dsn := GetTestDSN("test_legacy_auth_")
 	var n int
