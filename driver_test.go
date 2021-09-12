@@ -444,6 +444,50 @@ func TestDecFloat(t *testing.T) {
 	conn.Close()
 }
 
+func TestTimeZone(t *testing.T) {
+	conn, err := sql.Open("firebirdsql_createdb", GetTestDSN("test_timezone_")+"?timezone=Asia/Tokyo")
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+
+	firebird_major_version := get_firebird_major_version(conn)
+	if firebird_major_version < 4 {
+		return
+	}
+
+	sql := `
+            CREATE TABLE test_timezone (
+                id INTEGER NOT NULL,
+                a TIME WITH TIME ZONE DEFAULT '12:34:56',
+                b TIMESTAMP WITH TIME ZONE DEFAULT '1967-08-11 23:45:01',
+                PRIMARY KEY (id)
+            )
+    `
+	conn.Exec(sql)
+	conn.Exec("insert into test_timezone (id) values (0)")
+	conn.Exec("insert into test_timezone (id, a, b) values (1, '12:34:56 Asia/Seoul', '1967-08-11 23:45:01.0000 Asia/Seoul')")
+	conn.Exec("insert into test_timezone (id, a, b) values (2, '03:34:56 UTC', '1967-08-11 14:45:01.0000 UTC')")
+
+	var id int
+	var a time.Time
+	var b time.Time
+	rows, _ := conn.Query("select * from test_timezone")
+	expected := []string{
+		"0000-01-01 12:34:56 +0900 JST, 1967-08-11 23:45:01 +0900 JST",
+		"0000-01-01 12:34:56 +0900 KST, 1967-08-11 23:45:01 +0900 KST",
+		"0000-01-01 03:34:56 +0000 UTC, 1967-08-11 14:45:01 +0000 UTC"}
+
+	for rows.Next() {
+		rows.Scan(&id, &a, &b)
+		s := fmt.Sprintf("%v, %v", a, b)
+		if s != expected[id] {
+			t.Fatalf("Incorrect result: %v", s)
+		}
+	}
+
+	conn.Close()
+}
+
 func TestInt128(t *testing.T) {
 	// https://github.com/nakagami/firebirdsql/issues/129
 	conn, err := sql.Open("firebirdsql_createdb", GetTestDSN("test_int128_"))

@@ -26,17 +26,16 @@ package firebirdsql
 import (
 	"bytes"
 	"encoding/binary"
-	"math"
-	"math/big"
-	"reflect"
-	"time"
-
 	"github.com/shopspring/decimal"
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/encoding/japanese"
 	"golang.org/x/text/encoding/korean"
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/encoding/traditionalchinese"
+	"math"
+	"math/big"
+	"reflect"
+	"time"
 )
 
 const (
@@ -219,7 +218,7 @@ func (x *xSQLVAR) scantype() reflect.Type {
 }
 
 func (x *xSQLVAR) _parseTimezone(raw_value []byte) *time.Location {
-	timezone := getTimezoneNameByID(int(bytes_to_bint16(raw_value)))
+	timezone := getTimezoneNameByID(int(bytes_to_buint16(raw_value)))
 	tz, _ := time.LoadLocation(timezone)
 	return tz
 }
@@ -272,7 +271,9 @@ func (x *xSQLVAR) parseTime(raw_value []byte, timezone string) time.Time {
 		tz, _ = time.LoadLocation(timezone)
 	}
 	h, m, s, n := x._parseTime(raw_value)
-	return time.Date(0, time.Month(1), 1, h, m, s, n, tz)
+	now := time.Now()
+	zone, offset := time.Date(now.Year(), now.Month(), now.Day(), h, m, s, n, tz).Zone()
+	return time.Date(0, time.Month(1), 1, h, m, s, n, time.FixedZone(zone, offset))
 }
 
 func (x *xSQLVAR) parseTimestamp(raw_value []byte, timezone string) time.Time {
@@ -282,21 +283,26 @@ func (x *xSQLVAR) parseTimestamp(raw_value []byte, timezone string) time.Time {
 	}
 
 	year, month, day := x._parseDate(raw_value[:4])
-	h, m, s, n := x._parseTime(raw_value[4:])
+	h, m, s, n := x._parseTime(raw_value[4:8])
 	return time.Date(year, time.Month(month), day, h, m, s, n, tz)
 }
 
 func (x *xSQLVAR) parseTimeTz(raw_value []byte) time.Time {
 	h, m, s, n := x._parseTime(raw_value[:4])
-	tz := x._parseTimezone(raw_value[4:])
-	return time.Date(0, time.Month(1), 1, h, m, s, n, tz)
+	tz := x._parseTimezone(raw_value[4:6])
+	loc := x._parseTimezone(raw_value[6:8])
+	now := time.Now()
+	t := time.Date(now.Year(), now.Month(), now.Day(), h, m, s, n, tz).In(loc)
+	zone, offset := t.Zone()
+	return time.Date(0, time.Month(1), 1, t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), time.FixedZone(zone, offset))
 }
 
 func (x *xSQLVAR) parseTimestampTz(raw_value []byte) time.Time {
 	year, month, day := x._parseDate(raw_value[:4])
 	h, m, s, n := x._parseTime(raw_value[4:8])
-	tz := x._parseTimezone(raw_value[8:])
-	return time.Date(year, time.Month(month), day, h, m, s, n, tz)
+	tz := x._parseTimezone(raw_value[8:10])
+	offset := x._parseTimezone(raw_value[10:12])
+	return time.Date(year, time.Month(month), day, h, m, s, n, tz).In(offset)
 }
 
 func (x *xSQLVAR) parseString(raw_value []byte, charset string) interface{} {
