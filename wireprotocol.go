@@ -671,6 +671,10 @@ func (p *wireProtocol) opConnect(dbName string, user string, password string, op
 		"ffff800b00000001000000000000000500000004", // 11, 1, 0, 5, 4
 		"ffff800c00000001000000000000000500000006", // 12, 1, 0, 5, 6
 		"ffff800d00000001000000000000000500000008", // 13, 1, 0, 5, 8
+		"ffff800e0000000100000000000000050000000a", // 14, 1, 0, 5, 10
+		"ffff800f0000000100000000000000050000000c", // 15, 1, 0, 5, 12
+		"ffff80100000000100000000000000050000000e", // 16, 1, 0, 5, 14
+		"ffff801100000001000000000000000500000010", // 17, 1, 0, 5, 16
 	}
 	p.packInt(op_connect)
 	p.packInt(op_attach)
@@ -932,6 +936,10 @@ func (p *wireProtocol) opExecute(stmtHandle int32, transHandle int32, params []d
 		p.packInt(1)
 		p.appendBytes(values)
 	}
+	if p.protocolVersion >= PROTOCOL_VERSION16 {
+		// statement timeout
+		p.appendBytes(bint32_to_bytes(0))
+	}
 	_, err := p.sendPackets()
 	return err
 }
@@ -956,6 +964,12 @@ func (p *wireProtocol) opExecute2(stmtHandle int32, transHandle int32, params []
 
 	p.packBytes(outputBlr)
 	p.packInt(0)
+
+	if p.protocolVersion >= PROTOCOL_VERSION16 {
+		// statement timeout
+		p.appendBytes(bint32_to_bytes(0))
+	}
+
 	_, err := p.sendPackets()
 	return err
 }

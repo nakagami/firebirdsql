@@ -33,6 +33,7 @@ const (
 
 	// Protocol Version
 	PROTOCOL_VERSION13 = 13
+	PROTOCOL_VERSION16 = 16
 
 	CNCT_user              = 1
 	CNCT_passwd            = 2
