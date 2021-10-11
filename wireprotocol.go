@@ -28,19 +28,20 @@ import (
 	"bytes"
 	"container/list"
 	"crypto/rc4"
+	"crypto/sha256"
 	"database/sql/driver"
 	"encoding/hex"
 	"fmt"
+	"github.com/kardianos/osext"
+	"github.com/pkg/errors"
+	"gitlab.com/nyarla/go-crypt"
+	"golang.org/x/crypto/chacha20"
 	"math/big"
 	"net"
 	"os"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/kardianos/osext"
-	"github.com/pkg/errors"
-	"gitlab.com/nyarla/go-crypt"
 	//"unsafe"
 )
 
@@ -70,11 +71,14 @@ func _INFO_SQL_SELECT_DESCRIBE_VARS() []byte {
 }
 
 type wireChannel struct {
-	conn      net.Conn
-	reader    *bufio.Reader
-	writer    *bufio.Writer
-	rc4reader *rc4.Cipher
-	rc4writer *rc4.Cipher
+	conn           net.Conn
+	reader         *bufio.Reader
+	writer         *bufio.Writer
+	plugin         string
+	rc4reader      *rc4.Cipher
+	rc4writer      *rc4.Cipher
+	chacha20reader *chacha20.Cipher
+	chacha20writer *chacha20.Cipher
 }
 
 func newWireChannel(conn net.Conn) (wireChannel, error) {
@@ -87,26 +91,46 @@ func newWireChannel(conn net.Conn) (wireChannel, error) {
 	return *c, err
 }
 
-func (c *wireChannel) setArc4Key(key []byte) (err error) {
-	c.rc4reader, err = rc4.NewCipher(key)
-	c.rc4writer, err = rc4.NewCipher(key)
+func (c *wireChannel) setCryptKey(plugin string, sessionKey []byte, nonce []byte) (err error) {
+	c.plugin = plugin
+	if plugin == "ChaCha" {
+		digest := sha256.New()
+		digest.Write(sessionKey)
+		key := digest.Sum(nil)
+		c.chacha20reader, err = chacha20.NewUnauthenticatedCipher(key, nonce)
+		c.chacha20writer, err = chacha20.NewUnauthenticatedCipher(key, nonce)
+	} else if plugin == "Arc4" {
+		c.rc4reader, err = rc4.NewCipher(sessionKey)
+		c.rc4writer, err = rc4.NewCipher(sessionKey)
+	} else {
+		err = errors.New(fmt.Sprintf("Unknown wire encrypto plugin name:%s", plugin))
+	}
+
 	return
 }
 
 func (c *wireChannel) Read(buf []byte) (n int, err error) {
-	if c.rc4reader != nil {
+	if c.plugin != "" {
 		src := make([]byte, len(buf))
 		n, err = c.reader.Read(src)
-		c.rc4reader.XORKeyStream(buf, src[0:n])
+		if c.plugin == "ChaCha" {
+			c.chacha20reader.XORKeyStream(buf, src[0:n])
+		} else if c.plugin == "Arc4" {
+			c.rc4reader.XORKeyStream(buf, src[0:n])
+		}
 		return
 	}
 	return c.reader.Read(buf)
 }
 
 func (c *wireChannel) Write(buf []byte) (n int, err error) {
-	if c.rc4writer != nil {
+	if c.plugin != "" {
 		dst := make([]byte, len(buf))
-		c.rc4writer.XORKeyStream(dst, buf)
+		if c.plugin == "ChaCha" {
+			c.chacha20writer.XORKeyStream(dst, buf)
+		} else if c.plugin == "Arc4" {
+			c.rc4writer.XORKeyStream(dst, buf)
+		}
 		written := 0
 		for written < len(buf) {
 			n, err = c.writer.Write(dst[written:])
@@ -384,6 +408,27 @@ func (p *wireProtocol) _parse_op_response() (int32, []byte, []byte, error) {
 	return h, oid, buf, err
 }
 
+func (p *wireProtocol) _guess_wire_crypt(buf []byte) (string, []byte) {
+	params := map[byte][]byte{}
+	i := 0
+	for i = 0; i < len(buf); {
+		k := buf[i]
+		i++
+		ln := int(buf[i])
+		i++
+		v := buf[i : i+ln]
+		i += ln
+		params[k] = v
+	}
+	v, ok := params[3]
+	if ok {
+		if string(v[:7]) == "ChaCha\x00" {
+			return "ChaCha", v[7 : len(v)-4]
+		}
+	}
+	return "Arc4", nil
+}
+
 func (p *wireProtocol) _parse_connect_response(user string, password string, options map[string]string, clientPublic *big.Int, clientSecret *big.Int) (err error) {
 	p.debugPrint("_parse_connect_response")
 
@@ -476,20 +521,25 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 			}
 		}
 
+		var encrypt_plugin string
+		var nonce []byte
+
 		if opcode == op_cond_accept {
 			p.opContAuth(authData, options["auth_plugin_name"], PLUGIN_LIST, "")
-			_, _, _, err = p.opResponse()
+			var buf []byte
+			_, _, buf, err = p.opResponse()
 			if err != nil {
 				return
 			}
+			encrypt_plugin, nonce = p._guess_wire_crypt(buf)
 		}
 
 		wire_crypt := true
 		wire_crypt, _ = strconv.ParseBool(options["wire_crypt"])
 		if wire_crypt && sessionKey != nil {
 			// Send op_crypt
-			p.opCrypt()
-			p.conn.setArc4Key(sessionKey)
+			p.opCrypt(encrypt_plugin)
+			p.conn.setCryptKey(encrypt_plugin, sessionKey, nonce)
 			_, _, _, err = p.opResponse()
 			if err != nil {
 				return
@@ -794,9 +844,9 @@ func (p *wireProtocol) opContAuth(authData []byte, authPluginName string, authPl
 	return err
 }
 
-func (p *wireProtocol) opCrypt() error {
+func (p *wireProtocol) opCrypt(plugin string) error {
 	p.packInt(op_crypt)
-	p.packString("Arc4")
+	p.packString(plugin)
 	p.packString("Symmetric")
 	_, err := p.sendPackets()
 	return err
