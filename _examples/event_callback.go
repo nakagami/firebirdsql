@@ -24,7 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package main
 
 import (
-	"github.com/arteev/firebirdsql"
+	"github.com/nakagami/firebirdsql"
 	"log"
 	"math/rand"
 )
