@@ -78,7 +78,7 @@ user:password@servername[:port_number]/database_name_or_file[?params1=value1[&pa
 param1, param2... are
 
 | Name | Description | Default | Note |
-| --- | --- |
+| --- | --- | --- | --- |
 | auth_plugin_name | Authentication plugin name. | Srp | Srp256/Srp/Legacy_Auth are available. |
 | column_name_to_lower | Force column name to lower | false | For "github.com/jmoiron/sqlx" |
 | role | Role name | | |
