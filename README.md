@@ -85,3 +85,7 @@ param1, param2... are
 | timezone | Time Zone name | | For Firebird 4.0+ |
 | wire_crypt | Enable wire data encryption or not. | true | For Firebird 3.0+ |
 | charset | Firebird Charecter Set | | |
+
+## GORM for Firebird
+
+See https://github.com/flylink888/gorm-firebird
