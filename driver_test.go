@@ -1013,3 +1013,42 @@ func TestGoIssue112(t *testing.T) {
 	}
 
 }
+
+func TestGoIssue134(t *testing.T) {
+	test_dsn := GetTestDSN("test_issue134_")
+	conn, err := sql.Open("firebirdsql_createdb", test_dsn)
+	if err != nil {
+		t.Fatalf("Error occured at sql.Open()")
+	}
+
+	query := `
+        CREATE TABLE t (
+			text VARCHAR(4)
+        )
+    `
+	_, err = conn.Exec(query)
+	if err != nil {
+		t.Error(err)
+	}
+
+	conn.Exec("INSERT INTO t(text) VALUES ('café')")
+	if err != nil {
+		t.Fatalf("Error Insert : %v", err)
+	}
+
+	rows, err := conn.Query("select text from t")
+	if err != nil {
+		t.Error(err)
+	}
+	rows.Next()
+	var text string
+	err = rows.Scan(&text)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if text != "café" {
+		t.Fatalf("Error bad record : %v", text)
+	}
+
+}
