@@ -38,15 +38,15 @@ func TestDSNParse(t *testing.T) {
 		authPluginName string
 		wireCrypt      string
 	}{
-		{"user:password@localhost:3000/dbname", "localhost:3000", "dbname", "user", "password", "", "Srp", "true"},
-		{"user:password@localhost/dbname", "localhost:3050", "dbname", "user", "password", "", "Srp", "true"},
-		{"user:password@localhost/dir/dbname", "localhost:3050", "/dir/dbname", "user", "password", "", "Srp", "true"},
-		{"user:password@localhost/c:\\fbdata\\database.fdb", "localhost:3050", "c:\\fbdata\\database.fdb", "user", "password", "", "Srp", "true"},
-		{"user:password@localhost/c:/fbdata/database.fdb", "localhost:3050", "c:/fbdata/database.fdb", "user", "password", "", "Srp", "true"},
-		{"user:password@localhost/dbname?role=role", "localhost:3050", "dbname", "user", "password", "role", "Srp", "true"},
-		{"user:password@localhost:3000/c:/fbdata/database.fdb?role=role&wire_crypt=false", "localhost:3000", "c:/fbdata/database.fdb", "user", "password", "role", "Srp", "false"},
-		{"firebird://user:password@localhost:3000/dbname", "localhost:3000", "dbname", "user", "password", "", "Srp", "true"},
-		{"firebird://user:%21p%40ssword%3F@localhost:3050/dbname", "localhost:3050", "dbname", "user", "!p@ssword?", "", "Srp", "true"},
+		{"user:password@localhost:3000/dbname", "localhost:3000", "dbname", "user", "password", "", "Srp256", "true"},
+		{"user:password@localhost/dbname", "localhost:3050", "dbname", "user", "password", "", "Srp256", "true"},
+		{"user:password@localhost/dir/dbname", "localhost:3050", "/dir/dbname", "user", "password", "", "Srp256", "true"},
+		{"user:password@localhost/c:\\fbdata\\database.fdb", "localhost:3050", "c:\\fbdata\\database.fdb", "user", "password", "", "Srp256", "true"},
+		{"user:password@localhost/c:/fbdata/database.fdb", "localhost:3050", "c:/fbdata/database.fdb", "user", "password", "", "Srp256", "true"},
+		{"user:password@localhost/dbname?role=role", "localhost:3050", "dbname", "user", "password", "role", "Srp256", "true"},
+		{"user:password@localhost:3000/c:/fbdata/database.fdb?role=role&wire_crypt=false", "localhost:3000", "c:/fbdata/database.fdb", "user", "password", "role", "Srp256", "false"},
+		{"firebird://user:password@localhost:3000/dbname", "localhost:3000", "dbname", "user", "password", "", "Srp256", "true"},
+		{"firebird://user:%21p%40ssword%3F@localhost:3050/dbname", "localhost:3050", "dbname", "user", "!p@ssword?", "", "Srp256", "true"},
 	}
 
 	for _, d := range testDSNs {

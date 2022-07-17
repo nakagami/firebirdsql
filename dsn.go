@@ -76,7 +76,7 @@ func parseDSN(dsns string) (*firebirdDsn, error) {
 	m, _ := url.ParseQuery(u.RawQuery)
 
 	var default_options = map[string]string{
-		"auth_plugin_name":     "Srp",
+		"auth_plugin_name":     "Srp256",
 		"charset":              "UTF8",
 		"column_name_to_lower": "false",
 		"role":                 "",
