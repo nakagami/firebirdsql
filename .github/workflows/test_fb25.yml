@@ -17,7 +17,7 @@ jobs:
     - uses: actions/checkout@v2
     
     - name: Setup FirebirdSQL container
-      uses: juarezr/firebirdsql-github-action@v1.0.0
+      uses: juarezr/firebirdsql-github-action@v1.2.0
       with:
         version: '2.5-ss'
         isc_password: "masterkey"
