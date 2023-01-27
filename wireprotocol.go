@@ -356,7 +356,11 @@ func (p *wireProtocol) _parse_status_vector() (*list.List, int, string, error) {
 			gds_code = int(bytes_to_bint32(b))
 			if gds_code != 0 {
 				gds_codes.PushBack(gds_code)
-				message += errmsgs[gds_code]
+				if msg, ok := errmsgs[gds_code]; ok {
+					message += msg
+				} else {
+					message += fmt.Sprintf("unknown gds_code: %d", gds_code)
+				}
 				num_arg = 0
 			}
 		case n == isc_arg_number:
