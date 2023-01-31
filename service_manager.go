@@ -380,7 +380,7 @@ func (svc *ServiceManager) doGetDbStats(database string, options StatisticsOptio
 		optMask |= isc_spb_sts_table
 	}
 
-	spb := NewXPBWriterFromBuffer([]byte{isc_action_svc_db_stats})
+	spb := NewXPBWriterFromTag(isc_action_svc_db_stats)
 	spb.PutString(isc_spb_dbname, database)
 	spb.PutInt32(isc_spb_options, optMask)
 

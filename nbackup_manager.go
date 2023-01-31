@@ -48,7 +48,7 @@ func NewNBackupManager(addr string, user string, password string, options Servic
 }
 
 func (bm *NBackupManager) Backup(database string, backup string, options NBackupOptions, verbose chan string) error {
-	spb := NewXPBWriterFromBuffer([]byte{isc_action_svc_nbak})
+	spb := NewXPBWriterFromTag(isc_action_svc_nbak)
 	spb.PutString(isc_spb_dbname, database)
 	spb.PutString(isc_spb_nbk_file, backup)
 
@@ -70,7 +70,7 @@ func (bm *NBackupManager) Backup(database string, backup string, options NBackup
 }
 
 func (bm *NBackupManager) Restore(backup string, database string, options NBackupOptions, verbose chan string) error {
-	spb := NewXPBWriterFromBuffer([]byte{isc_action_svc_nrest})
+	spb := NewXPBWriterFromTag(isc_action_svc_nrest)
 	spb.PutString(isc_spb_dbname, database)
 	spb.PutString(isc_spb_nbk_file, backup)
 
@@ -83,7 +83,7 @@ func (bm *NBackupManager) Restore(backup string, database string, options NBacku
 }
 
 func (bm *NBackupManager) Fixup(database string, options NBackupOptions, verbose chan string) error {
-	spb := NewXPBWriterFromBuffer([]byte{isc_action_svc_nfix})
+	spb := NewXPBWriterFromTag(isc_action_svc_nfix)
 	spb.PutString(isc_spb_dbname, database)
 
 	optionsMask := options.GetOptionsMask()

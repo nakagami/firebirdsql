@@ -132,7 +132,7 @@ func (um *UserManager) Close() error {
 }
 
 func (um *UserManager) userAction(action byte, user *User) error {
-	spb := NewXPBWriterFromBuffer([]byte{action})
+	spb := NewXPBWriterFromTag(action)
 	if user != nil {
 		spb.PutBytes(user.GetSpb())
 	}
