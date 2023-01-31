@@ -110,14 +110,7 @@ func (bm *BackupManager) Backup(database string, backup string, options BackupOp
 		_ = conn.Close()
 	}(conn)
 
-	if err = conn.ServiceStart(spb.GetBuffer()); err != nil {
-		return err
-	}
-	if verbose != nil {
-		return conn.WaitStrings(verbose)
-	} else {
-		return conn.Wait()
-	}
+	return bm.attach(spb.GetBuffer(), verbose)
 }
 
 func (bm *BackupManager) Restore(backup string, database string, options RestoreOptions, verbose chan string) error {
@@ -177,13 +170,18 @@ func (bm *BackupManager) Restore(backup string, database string, options Restore
 		_ = conn.Close()
 	}(conn)
 
-	if err = conn.ServiceStart(spb.GetBuffer()); err != nil {
+	return bm.attach(spb.GetBuffer(), verbose)
+}
+
+func (bm *BackupManager) attach(spb []byte, verbose chan string) error {
+	var err error
+	var conn *ServiceManager
+	if conn, err = bm.connBuilder(); err != nil {
 		return err
 	}
+	defer func(conn *ServiceManager) {
+		_ = conn.Close()
+	}(conn)
 
-	if verbose != nil {
-		return conn.WaitStrings(verbose)
-	} else {
-		return conn.Wait()
-	}
+	return conn.ServiceAttach(spb, verbose)
 }

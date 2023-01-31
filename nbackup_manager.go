@@ -104,12 +104,5 @@ func (bm *NBackupManager) attach(spb []byte, verbose chan string) error {
 		_ = conn.Close()
 	}(conn)
 
-	if err = conn.ServiceStart(spb); err != nil {
-		return err
-	}
-	if verbose != nil {
-		return conn.WaitStrings(verbose)
-	} else {
-		return conn.Wait()
-	}
+	return conn.ServiceAttach(spb, verbose)
 }
