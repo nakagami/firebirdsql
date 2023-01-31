@@ -216,6 +216,10 @@ func (ts *TraceSession) Resume() (err error) {
 	return nil
 }
 
-func (ts *TraceSession) WaitResult(result chan string) (err error) {
+func (ts *TraceSession) Wait() (err error) {
+	return ts.conn.Wait()
+}
+
+func (ts *TraceSession) WaitStrings(result chan string) (err error) {
 	return ts.conn.WaitStrings(result)
 }
