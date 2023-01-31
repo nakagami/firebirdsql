@@ -94,7 +94,7 @@ func (bm *BackupManager) Backup(database string, backup string, options BackupOp
 		optionsMask |= isc_spb_bkp_expand
 	}
 
-	spb := NewXPBWriterFromBuffer([]byte{isc_action_svc_backup})
+	spb := NewXPBWriterFromTag(isc_action_svc_backup)
 	spb.PutString(isc_spb_dbname, database)
 	spb.PutString(isc_spb_bkp_file, backup)
 	spb.PutInt32(isc_spb_options, optionsMask)
@@ -146,7 +146,7 @@ func (bm *BackupManager) Restore(backup string, database string, options Restore
 		optionsMask |= isc_spb_res_use_all_space
 	}
 
-	spb := NewXPBWriterFromBuffer([]byte{isc_action_svc_restore})
+	spb := NewXPBWriterFromTag(isc_action_svc_restore)
 	spb.PutString(isc_spb_dbname, database)
 	spb.PutString(isc_spb_bkp_file, backup)
 	spb.PutInt32(isc_spb_options, optionsMask)

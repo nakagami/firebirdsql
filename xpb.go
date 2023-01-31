@@ -56,6 +56,10 @@ func NewXPBWriter() *XPBWriter {
 	return &XPBWriter{}
 }
 
+func NewXPBWriterFromTag(tag byte) *XPBWriter {
+	return &XPBWriter{buf: []byte{tag}}
+}
+
 func NewXPBWriterFromBuffer(buf []byte) *XPBWriter {
 	return &XPBWriter{buf: buf}
 }
