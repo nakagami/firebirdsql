@@ -6,7 +6,7 @@ import (
 )
 
 // 1. Get copy of Firebird 5 sources or at least src/include from Firebird 5 sources
-// 2. Run CGO_CFLAGS=-I/path/to/firebird/src/include go run ./attic ./errmsgs.go
+// 2. Run CGO_CFLAGS=-I/path/to/firebird/src/include go run ./_attic ./errmsgs.go
 
 //#include "msgs.h"
 import "C"
