@@ -110,7 +110,7 @@ func (bm *BackupManager) Backup(database string, backup string, options BackupOp
 		_ = conn.Close()
 	}(conn)
 
-	return bm.attach(spb.GetBuffer(), verbose)
+	return bm.attach(spb.Bytes(), verbose)
 }
 
 func (bm *BackupManager) Restore(backup string, database string, options RestoreOptions, verbose chan string) error {
@@ -170,7 +170,7 @@ func (bm *BackupManager) Restore(backup string, database string, options Restore
 		_ = conn.Close()
 	}(conn)
 
-	return bm.attach(spb.GetBuffer(), verbose)
+	return bm.attach(spb.Bytes(), verbose)
 }
 
 func (bm *BackupManager) attach(spb []byte, verbose chan string) error {

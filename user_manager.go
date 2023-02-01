@@ -109,7 +109,7 @@ func (u *User) GetSpb() []byte {
 	if u.GroupId != -1 {
 		srb.PutInt32(isc_spb_sec_groupid, u.GroupId)
 	}
-	return srb.GetBuffer()
+	return srb.Bytes()
 }
 
 func NewUserManager(addr string, user string, password string, options UserManagerOptions) (*UserManager, error) {
@@ -139,7 +139,7 @@ func (um *UserManager) userAction(action byte, user *User) error {
 	if um.securityDb != "" {
 		spb.PutString(isc_spb_dbname, um.securityDb)
 	}
-	return um.sm.ServiceStart(spb.GetBuffer())
+	return um.sm.ServiceStart(spb.Bytes())
 }
 
 func (um *UserManager) AddUser(user *User) error {

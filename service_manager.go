@@ -153,9 +153,9 @@ func (svc *ServiceManager) WaitBuffer(stream chan []byte) error {
 		bufferLength int32 = BUFFER_LEN
 	)
 	for cont {
-		spb := NewXPBWriterFromBuffer(GetServiceInfoSPBPreamble())
+		spb := NewXPBWriterFromBytes(GetServiceInfoSPBPreamble())
 		spb.PutByte(isc_info_svc_timeout, 1)
-		if buf, err = svc.GetServiceInfo(spb.GetBuffer(), []byte{isc_info_svc_to_eof}, bufferLength); err != nil {
+		if buf, err = svc.GetServiceInfo(spb.Bytes(), []byte{isc_info_svc_to_eof}, bufferLength); err != nil {
 			return err
 		}
 		switch buf[0] {
@@ -388,7 +388,7 @@ func (svc *ServiceManager) doGetDbStats(database string, options StatisticsOptio
 		spb.PutString(isc_spb_command_line, strings.Join(options.Tables, " "))
 	}
 
-	return svc.ServiceStart(spb.GetBuffer())
+	return svc.ServiceStart(spb.Bytes())
 }
 
 func (svc *ServiceManager) GetDbStats(database string, options StatisticsOptions, result chan string) error {

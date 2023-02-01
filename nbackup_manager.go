@@ -66,7 +66,7 @@ func (bm *NBackupManager) Backup(database string, backup string, options NBackup
 		spb.PutInt32(isc_spb_options, optionsMask)
 	}
 
-	return bm.attach(spb.GetBuffer(), verbose)
+	return bm.attach(spb.Bytes(), verbose)
 }
 
 func (bm *NBackupManager) Restore(backup string, database string, options NBackupOptions, verbose chan string) error {
@@ -79,7 +79,7 @@ func (bm *NBackupManager) Restore(backup string, database string, options NBacku
 		spb.PutInt32(isc_spb_options, optionsMask)
 	}
 
-	return bm.attach(spb.GetBuffer(), verbose)
+	return bm.attach(spb.Bytes(), verbose)
 }
 
 func (bm *NBackupManager) Fixup(database string, options NBackupOptions, verbose chan string) error {
@@ -91,7 +91,7 @@ func (bm *NBackupManager) Fixup(database string, options NBackupOptions, verbose
 		spb.PutInt32(isc_spb_options, optionsMask)
 	}
 
-	return bm.attach(spb.GetBuffer(), verbose)
+	return bm.attach(spb.Bytes(), verbose)
 }
 
 func (bm *NBackupManager) attach(spb []byte, verbose chan string) error {
