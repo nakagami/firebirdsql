@@ -57,7 +57,9 @@ func GetDefaultServiceManagerOptions() ServiceManagerOptions {
 func NewServiceManager(addr string, user string, password string, options ServiceManagerOptions) (*ServiceManager, error) {
 	var err error
 	var wp *wireProtocol
-
+	if !strings.ContainsRune(addr, ':') {
+		addr += ":3050"
+	}
 	if wp, err = newWireProtocol(addr, "", ""); err != nil {
 		return nil, err
 	}
