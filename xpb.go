@@ -1,7 +1,5 @@
 package firebirdsql
 
-import "bytes"
-
 type XPBReader struct {
 	buf []byte
 	pos int
@@ -50,6 +48,10 @@ func (pb *XPBReader) GetInt32() int32 {
 	r := bytes_to_int32(pb.buf[pb.pos : pb.pos+4])
 	pb.pos += 4
 	return r
+}
+
+func (pb *XPBReader) Reset() {
+	pb.pos = 0
 }
 
 func NewXPBWriter() *XPBWriter {
@@ -103,4 +105,9 @@ func (pb *XPBWriter) PutBytes(bytes []byte) *XPBWriter {
 
 func (pb *XPBWriter) Bytes() []byte {
 	return pb.buf
+}
+
+func (pb *XPBWriter) Reset() *XPBWriter {
+	pb.buf = pb.buf[:0]
+	return pb
 }
