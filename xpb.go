@@ -53,63 +53,51 @@ func (pb *XPBReader) GetInt32() int32 {
 }
 
 func NewXPBWriter() *XPBWriter {
-	return &XPBWriter{}
+	return &XPBWriter{
+		buf: make([]byte, 0, 16),
+	}
 }
 
 func NewXPBWriterFromTag(tag byte) *XPBWriter {
-	return &XPBWriter{buf: []byte{tag}}
+	return NewXPBWriter().PutTag(tag)
 }
 
 func NewXPBWriterFromBytes(bytes []byte) *XPBWriter {
-	return &XPBWriter{buf: bytes}
+	return NewXPBWriter().PutBytes(bytes)
 }
 
 func (pb *XPBWriter) PutTag(tag byte) *XPBWriter {
-	pb.buf = bytes.Join([][]byte{
-		pb.buf,
-		{tag},
-	}, nil)
+	pb.buf = append(pb.buf, []byte{tag}...)
 	return pb
 }
 
 func (pb *XPBWriter) PutByte(tag byte, val byte) *XPBWriter {
-	pb.buf = bytes.Join([][]byte{
-		pb.buf,
-		{tag, val},
-	}, nil)
+	pb.buf = append(pb.buf, []byte{tag, val}...)
 	return pb
 }
 
 func (pb *XPBWriter) PutInt16(tag byte, val int16) *XPBWriter {
-	pb.buf = bytes.Join([][]byte{
-		pb.buf,
-		{tag}, int16_to_bytes(val),
-	}, nil)
+	pb.buf = append(pb.buf, []byte{tag}...)
+	pb.buf = append(pb.buf, int16_to_bytes(val)...)
 	return pb
 }
 
 func (pb *XPBWriter) PutInt32(tag byte, val int32) *XPBWriter {
-	pb.buf = bytes.Join([][]byte{
-		pb.buf,
-		{tag}, int32_to_bytes(val),
-	}, nil)
+	pb.buf = append(pb.buf, []byte{tag}...)
+	pb.buf = append(pb.buf, int32_to_bytes(val)...)
 	return pb
 }
 
 func (pb *XPBWriter) PutString(tag byte, val string) *XPBWriter {
 	strBytes := str_to_bytes(val)
-	pb.buf = bytes.Join([][]byte{
-		pb.buf,
-		{tag}, int16_to_bytes(int16(len(strBytes))), strBytes,
-	}, nil)
+	pb.buf = append(pb.buf, []byte{tag}...)
+	pb.buf = append(pb.buf, int16_to_bytes(int16(len(strBytes)))...)
+	pb.buf = append(pb.buf, strBytes...)
 	return pb
 }
 
-func (pb *XPBWriter) PutBytes(buf []byte) *XPBWriter {
-	pb.buf = bytes.Join([][]byte{
-		pb.buf,
-		buf,
-	}, nil)
+func (pb *XPBWriter) PutBytes(bytes []byte) *XPBWriter {
+	pb.buf = append(pb.buf, bytes...)
 	return pb
 }
 
