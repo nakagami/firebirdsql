@@ -4,7 +4,7 @@ import "bytes"
 
 type XPBReader struct {
 	buf []byte
-	pos int16
+	pos int
 }
 
 type XPBWriter struct {
@@ -25,7 +25,7 @@ func (pb *XPBReader) Next() (have bool, value byte) {
 }
 
 func (pb *XPBReader) End() bool {
-	return pb.pos >= int16(len(pb.buf))
+	return pb.pos >= len(pb.buf)
 }
 
 func (pb *XPBReader) Get() byte {
@@ -34,7 +34,7 @@ func (pb *XPBReader) Get() byte {
 }
 
 func (pb *XPBReader) GetString() string {
-	l := pb.GetInt16()
+	l := int(pb.GetInt16())
 	s := bytes_to_str(pb.buf[pb.pos : pb.pos+l])
 	pb.pos += l
 	return s
