@@ -55,7 +55,7 @@ func (t *TraceManager) StartWithName(name string, config string) (*TraceSession,
 
 	spb.PutString(isc_spb_trc_cfg, config)
 
-	if err = conn.ServiceStart(spb.GetBuffer()); err != nil {
+	if err = conn.ServiceStart(spb.Bytes()); err != nil {
 		return nil, err
 	}
 	if res, _, err = conn.GetString(); err != nil {
@@ -137,7 +137,7 @@ func (ts *TraceSession) Stop() (err error) {
 	spb := NewXPBWriterFromTag(isc_action_svc_trace_stop)
 	spb.PutInt32(isc_spb_trc_id, ts.id)
 
-	if err = auxConn.ServiceStart(spb.GetBuffer()); err != nil {
+	if err = auxConn.ServiceStart(spb.Bytes()); err != nil {
 		return err
 	}
 	if res, _, err = auxConn.GetString(); err != nil {
@@ -169,7 +169,7 @@ func (ts *TraceSession) Pause() (err error) {
 	spb := NewXPBWriterFromTag(isc_action_svc_trace_suspend)
 	spb.PutInt32(isc_spb_trc_id, ts.id)
 
-	if err = auxConn.ServiceStart(spb.GetBuffer()); err != nil {
+	if err = auxConn.ServiceStart(spb.Bytes()); err != nil {
 		return err
 	}
 	if res, _, err = auxConn.GetString(); err != nil {
@@ -201,7 +201,7 @@ func (ts *TraceSession) Resume() (err error) {
 	spb := NewXPBWriterFromTag(isc_action_svc_trace_resume)
 	spb.PutInt32(isc_spb_trc_id, ts.id)
 
-	if err = auxConn.ServiceStart(spb.GetBuffer()); err != nil {
+	if err = auxConn.ServiceStart(spb.Bytes()); err != nil {
 		return err
 	}
 	if res, _, err = auxConn.GetString(); err != nil {
