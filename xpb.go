@@ -1,5 +1,7 @@
 package firebirdsql
 
+const xpbPreallocBufSize = 16
+
 type XPBReader struct {
 	buf []byte
 	pos int
@@ -56,7 +58,7 @@ func (pb *XPBReader) Reset() {
 
 func NewXPBWriter() *XPBWriter {
 	return &XPBWriter{
-		buf: make([]byte, 0, 16),
+		buf: make([]byte, 0, xpbPreallocBufSize),
 	}
 }
 
@@ -108,6 +110,6 @@ func (pb *XPBWriter) Bytes() []byte {
 }
 
 func (pb *XPBWriter) Reset() *XPBWriter {
-	pb.buf = pb.buf[:0]
+	pb.buf = make([]byte, 0, xpbPreallocBufSize)
 	return pb
 }
