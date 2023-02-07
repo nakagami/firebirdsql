@@ -99,6 +99,12 @@ func NewServiceManager(addr string, user string, password string, options Servic
 
 func (svc *ServiceManager) Close() (err error) {
 	if err = svc.wp.opServiceDetach(); err != nil {
+		svc.wp.conn.Close()
+		return err
+	}
+
+	if _, _, _, err = svc.wp.opResponse(); err != nil {
+		svc.wp.conn.Close()
 		return err
 	}
 
