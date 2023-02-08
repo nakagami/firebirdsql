@@ -46,6 +46,20 @@ func int32_to_bytes(i32 int32) []byte {
 	return bs
 }
 
+func int64_to_bytes(i64 int64) []byte {
+	bs := []byte{
+		byte(i64 & 0xFF),
+		byte(i64 >> 8 & 0xFF),
+		byte(i64 >> 16 & 0xFF),
+		byte(i64 >> 24 & 0xFF),
+		byte(i64 >> 32 & 0xFF),
+		byte(i64 >> 40 & 0xFF),
+		byte(i64 >> 40 & 0xFF),
+		byte(i64 >> 56 & 0xFF),
+	}
+	return bs
+}
+
 func bint64_to_bytes(i64 int64) []byte {
 	bs := []byte{
 		byte(i64 >> 56 & 0xFF),
@@ -240,4 +254,8 @@ func convertToBool(s string, defaultValue bool) bool {
 		v = defaultValue
 	}
 	return v
+}
+
+func fitsUint32(val int64) bool {
+	return val >= 0 && val <= 0xffffffff
 }

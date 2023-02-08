@@ -131,6 +131,13 @@ func (svc *ServiceManager) ServiceAttach(spb []byte, verbose chan string) error 
 	}
 }
 
+func (svc *ServiceManager) ServiceAttachBuffer(spb []byte, verbose chan []byte) error {
+	if err := svc.ServiceStart(spb); err != nil {
+		return err
+	}
+	return svc.WaitBuffer(verbose)
+}
+
 func (svc *ServiceManager) IsRunning() (bool, error) {
 	res, err := svc.GetServiceInfoInt(isc_info_svc_running)
 	return res > 0, err
