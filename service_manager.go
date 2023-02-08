@@ -297,8 +297,16 @@ func (svc *ServiceManager) GetServiceInfoString(item byte) (string, error) {
 	return NewXPBReader(buf[1:]).GetString(), nil
 }
 
-func (svc *ServiceManager) GetServerVersion() (string, error) {
+func (svc *ServiceManager) GetServerVersionString() (string, error) {
 	return svc.GetServiceInfoString(isc_info_svc_server_version)
+}
+
+func (svc *ServiceManager) GetServerVersion() (FirebirdVersion, error) {
+	if ver, err := svc.GetServerVersionString(); err == nil {
+		return ParseFirebirdVersion(ver), nil
+	} else {
+		return FirebirdVersion{}, err
+	}
 }
 
 func (svc *ServiceManager) GetArchitecture() (string, error) {
