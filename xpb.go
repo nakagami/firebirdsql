@@ -24,6 +24,10 @@ func (pb *XPBReader) Next() (have bool, value byte) {
 	return true, b
 }
 
+func (pb *XPBReader) Skip(count int) {
+	pb.pos += count
+}
+
 func (pb *XPBReader) End() bool {
 	return pb.pos >= len(pb.buf)
 }
@@ -49,6 +53,12 @@ func (pb *XPBReader) GetInt16() int16 {
 func (pb *XPBReader) GetInt32() int32 {
 	r := bytes_to_int32(pb.buf[pb.pos : pb.pos+4])
 	pb.pos += 4
+	return r
+}
+
+func (pb *XPBReader) GetInt64() int64 {
+	r := bytes_to_int64(pb.buf[pb.pos : pb.pos+8])
+	pb.pos += 8
 	return r
 }
 
@@ -89,6 +99,12 @@ func (pb *XPBWriter) PutInt16(tag byte, val int16) *XPBWriter {
 func (pb *XPBWriter) PutInt32(tag byte, val int32) *XPBWriter {
 	pb.buf = append(pb.buf, []byte{tag}...)
 	pb.buf = append(pb.buf, int32_to_bytes(val)...)
+	return pb
+}
+
+func (pb *XPBWriter) PutInt64(tag byte, val int64) *XPBWriter {
+	pb.buf = append(pb.buf, []byte{tag}...)
+	pb.buf = append(pb.buf, int64_to_bytes(val)...)
 	return pb
 }
 

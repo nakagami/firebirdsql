@@ -275,6 +275,71 @@ const (
 	isc_spb_nbk_inplace       = 0x02
 	isc_spb_nbk_sequence      = 0x04
 
+	// Parameters for isc_action_svc_properties
+	isc_spb_prp_page_buffers          = 5
+	isc_spb_prp_sweep_interval        = 6
+	isc_spb_prp_shutdown_db           = 7
+	isc_spb_prp_deny_new_attachments  = 9
+	isc_spb_prp_deny_new_transactions = 10
+	isc_spb_prp_reserve_space         = 11
+	isc_spb_prp_write_mode            = 12
+	isc_spb_prp_access_mode           = 13
+	isc_spb_prp_set_sql_dialect       = 14
+	isc_spb_prp_activate              = 0x0100
+	isc_spb_prp_db_online             = 0x0200
+	isc_spb_prp_nolinger              = 0x0400
+	isc_spb_prp_force_shutdown        = 41
+	isc_spb_prp_attachments_shutdown  = 42
+	isc_spb_prp_transactions_shutdown = 43
+	isc_spb_prp_shutdown_mode         = 44
+	isc_spb_prp_online_mode           = 45
+	isc_spb_prp_replica_mode          = 46
+
+	// Parameters for isc_spb_prp_shutdown_mode and isc_spb_prp_online_mode
+	isc_spb_prp_sm_normal = 0
+	isc_spb_prp_sm_multi  = 1
+	isc_spb_prp_sm_single = 2
+	isc_spb_prp_sm_full   = 3
+
+	// Parameters for isc_action_svc_repair
+	isc_spb_rpr_commit_trans         = 15
+	isc_spb_rpr_rollback_trans       = 34
+	isc_spb_rpr_recover_two_phase    = 17
+	isc_spb_tra_id                   = 18
+	isc_spb_single_tra_id            = 19
+	isc_spb_multi_tra_id             = 20
+	isc_spb_tra_state                = 21
+	isc_spb_tra_state_limbo          = 22
+	isc_spb_tra_state_commit         = 23
+	isc_spb_tra_state_rollback       = 24
+	isc_spb_tra_state_unknown        = 25
+	isc_spb_tra_host_site            = 26
+	isc_spb_tra_remote_site          = 27
+	isc_spb_tra_db_path              = 28
+	isc_spb_tra_advise               = 29
+	isc_spb_tra_advise_commit        = 30
+	isc_spb_tra_advise_rollback      = 31
+	isc_spb_tra_advise_unknown       = 33
+	isc_spb_tra_id_64                = 46
+	isc_spb_single_tra_id_64         = 47
+	isc_spb_multi_tra_id_64          = 48
+	isc_spb_rpr_commit_trans_64      = 49
+	isc_spb_rpr_rollback_trans_64    = 50
+	isc_spb_rpr_recover_two_phase_64 = 51
+	isc_spb_rpr_par_workers          = 52
+
+	// Parameters for isc_spb_prp_reserve_space *
+	isc_spb_prp_res_use_full = 35
+	isc_spb_prp_res          = 36
+
+	// Parameters for isc_spb_prp_write_mode
+	isc_spb_prp_wm_async = 37
+	isc_spb_prp_wm_sync  = 38
+
+	// Parameters for isc_spb_prp_access_mode
+	isc_spb_prp_am_readonly  = 39
+	isc_spb_prp_am_readwrite = 40
+
 	// trace
 	isc_spb_trc_id   = 1
 	isc_spb_trc_name = 2
@@ -479,4 +544,35 @@ const (
 	fb_cancel_enable  = 2
 	fb_cancel_raise   = 3
 	fb_cancel_abort   = 4
+)
+
+type ShutdownMode byte
+
+const (
+	//ShutdownModeForce Wait for N seconds then shutdown
+	ShutdownModeForce ShutdownMode = isc_spb_prp_shutdown_db
+	//ShutdownModeDenyNewAttachments Disable new attachments for N seconds then shutdown
+	ShutdownModeDenyNewAttachments ShutdownMode = isc_spb_prp_deny_new_attachments
+	//ShutdownModeDenyNewTransactions Disable new transactions for N seconds then shutdown
+	ShutdownModeDenyNewTransactions ShutdownMode = isc_spb_prp_deny_new_transactions
+)
+
+type OperationMode byte
+
+const (
+	OperationModeNormal OperationMode = isc_spb_prp_sm_normal
+	OperationModeMulti  OperationMode = isc_spb_prp_sm_multi
+	OperationModeSingle OperationMode = isc_spb_prp_sm_single
+	OperationModeFull   OperationMode = isc_spb_prp_sm_full
+)
+
+type ShutdownModeEx byte
+
+const (
+	//ShutdownModeExForce Wait for N seconds then shutdown
+	ShutdownModeExForce ShutdownModeEx = isc_spb_prp_force_shutdown
+	//ShutdownModeExDenyNewAttachments Disable new attachments for N seconds then shutdown
+	ShutdownModeExDenyNewAttachments ShutdownModeEx = isc_spb_prp_attachments_shutdown
+	//ShutdownModeExDenyNewTransactions Disable new transactions for N seconds then shutdown
+	ShutdownModeExDenyNewTransactions ShutdownModeEx = isc_spb_prp_transactions_shutdown
 )
