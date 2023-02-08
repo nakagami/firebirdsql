@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
@@ -39,6 +40,31 @@ import (
 	"strings"
 	"testing"
 	"time"
+)
+
+var (
+	longQueryNonSelectable = `
+		execute block
+		as
+		declare c integer = 0;
+		begin
+		while (c < 9000000000 ) do
+			begin
+				c = c + 1;
+			end
+		end`
+
+	longQuerySelectable = `
+		execute block returns (i integer) as declare c integer = 0;
+		begin
+		i = 0;
+		while (c < 9000000000 ) do
+			begin
+				c = c + 1;
+				i = c;
+				suspend;
+			end
+		end`
 )
 
 func get_firebird_major_version(conn *sql.DB) int {
@@ -1083,4 +1109,68 @@ func TestGoIssue117(t *testing.T) {
 	require.NoError(t, rows.Scan(&text))
 	assert.Equal(t, "test", text)
 	require.NoError(t, rows.Close())
+}
+
+func TestTimeoutQueryContextDuringScan(t *testing.T) {
+	testDsn := GetTestDSN("test_timeout_query_context_scan_")
+	conn, err := sql.Open("firebirdsql_createdb", testDsn)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
+	defer cancel()
+
+	rows, err := conn.QueryContext(ctx, longQuerySelectable)
+	require.NoError(t, err)
+
+	var n int
+	for rows.Next() {
+		if err := rows.Scan(&n); err != nil {
+			break
+		}
+	}
+
+	// rows.Next or rows.Scan should fail with timeout
+	if err == nil {
+		err = rows.Err()
+	}
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
+}
+
+func TestTimeoutQueryContextDuringExec(t *testing.T) {
+	testDsn := GetTestDSN("test_timeout_query_context_exec_")
+	conn, err := sql.Open("firebirdsql_createdb", testDsn)
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
+	defer cancel()
+	_, err = conn.QueryContext(ctx, longQueryNonSelectable)
+	assert.EqualError(t, err, "operation was cancelled\n")
+	assert.ErrorIs(t, ctx.Err(), context.DeadlineExceeded)
+}
+
+func TestTimeoutExecContext(t *testing.T) {
+	testDsn := GetTestDSN("test_timeout_exec_context_")
+	conn, err := sql.Open("firebirdsql_createdb", testDsn)
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
+	defer cancel()
+	_, err = conn.ExecContext(ctx, longQueryNonSelectable)
+	assert.EqualError(t, err, "operation was cancelled\n")
+	assert.ErrorIs(t, ctx.Err(), context.DeadlineExceeded)
+}
+
+func TestReuseConnectionAfterTimeout(t *testing.T) {
+	testDsn := GetTestDSN("test_timeout_conn_reuse_")
+	conn, err := sql.Open("firebirdsql_createdb", testDsn)
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
+	defer cancel()
+	_, err = conn.QueryContext(ctx, longQueryNonSelectable)
+	assert.EqualError(t, err, "operation was cancelled\n")
+	assert.ErrorIs(t, ctx.Err(), context.DeadlineExceeded)
+
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second*2)
+	defer cancel()
+
+	_, err = conn.QueryContext(ctx, "select * from rdb$database")
+	require.NoError(t, err)
 }

@@ -439,11 +439,19 @@ const (
 	ISOLATION_LEVEL_READ_COMMITED_RO
 )
 
-//Event
+// Event
 const (
 	p_req_async             = 1 // Auxiliary asynchronous port
 	EPB_version1            = 1
 	partner_identification  = 0
 	address_of_ast_routine  = 0
 	argument_to_ast_routine = 0
+)
+
+// op_cancel kind
+const (
+	fb_cancel_disable = 1
+	fb_cancel_enable  = 2
+	fb_cancel_raise   = 3
+	fb_cancel_abort   = 4
 )

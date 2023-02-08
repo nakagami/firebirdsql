@@ -24,9 +24,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
-	"database/sql/driver"
-
 	"context"
+	"database/sql/driver"
 )
 
 type firebirdsqlStmt struct {
@@ -60,13 +59,29 @@ func (stmt *firebirdsqlStmt) NumInput() int {
 	return -1
 }
 
+func (stmt *firebirdsqlStmt) sendOpCancel(ctx context.Context, done chan struct{}) {
+	cancel := true
+	select {
+	case <-done:
+		cancel = false
+	case <-ctx.Done():
+	}
+	if cancel {
+		stmt.wp.opCancel(fb_cancel_raise)
+	}
+}
+
 func (stmt *firebirdsqlStmt) exec(ctx context.Context, args []driver.Value) (result driver.Result, err error) {
 	err = stmt.wp.opExecute(stmt.stmtHandle, stmt.tx.transHandle, args)
 	if err != nil {
 		return
 	}
 
+	var done = make(chan struct{}, 1)
+	go stmt.sendOpCancel(ctx, done)
 	_, _, _, err = stmt.wp.opResponse()
+	done <- struct{}{}
+
 	if err != nil {
 		return
 	}
@@ -106,6 +121,7 @@ func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (dr
 	var rows driver.Rows
 	var err error
 	var result []driver.Value
+	var done = make(chan struct{}, 1)
 
 	if stmt.stmtType == isc_info_sql_stmt_exec_procedure {
 		err = stmt.wp.opExecute2(stmt.stmtHandle, stmt.tx.transHandle, args, stmt.blr)
@@ -113,12 +129,14 @@ func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (dr
 			return nil, err
 		}
 
+		go stmt.sendOpCancel(ctx, done)
 		result, err = stmt.wp.opSqlResponse(stmt.xsqlda)
+		done <- struct{}{}
 		if err != nil {
 			return nil, err
 		}
 
-		rows = newFirebirdsqlRows(stmt, result)
+		rows = newFirebirdsqlRows(ctx, stmt, result)
 
 		_, _, _, err = stmt.wp.opResponse()
 		if err != nil {
@@ -130,12 +148,15 @@ func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (dr
 			return nil, err
 		}
 
+		go stmt.sendOpCancel(ctx, done)
 		_, _, _, err = stmt.wp.opResponse()
+		done <- struct{}{}
+
 		if err != nil {
 			return nil, err
 		}
 
-		rows = newFirebirdsqlRows(stmt, nil)
+		rows = newFirebirdsqlRows(ctx, stmt, nil)
 	}
 	return rows, err
 }

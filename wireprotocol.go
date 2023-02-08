@@ -1464,3 +1464,11 @@ func (p *wireProtocol) opCancelEvents(eventID int32) {
 	p.packInt(eventID)
 	p.sendPackets()
 }
+
+func (p *wireProtocol) opCancel(kind int) error {
+	p.debugPrint("opCancel")
+	p.packInt(op_cancel)
+	p.packInt(int32(kind))
+	_, err := p.sendPackets()
+	return err
+}
