@@ -28,6 +28,8 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -1051,4 +1053,34 @@ func TestGoIssue134(t *testing.T) {
 		t.Fatalf("Error bad record : %v", text)
 	}
 
+}
+
+func TestGoIssue117(t *testing.T) {
+	testDsn := GetTestDSN("test_issue117_")
+	conn, err := sql.Open("firebirdsql_createdb", testDsn)
+	require.NoError(t, err)
+
+	query := `CREATE TABLE t (text CHAR(16))`
+	_, err = conn.Exec(query)
+	require.NoError(t, err)
+
+	_, err = conn.Exec("INSERT INTO t VALUES ('test')")
+	require.NoError(t, err)
+
+	rows, err := conn.Query("select text from t")
+	require.NoError(t, err)
+
+	var text string
+	require.True(t, rows.Next())
+	require.NoError(t, rows.Scan(&text))
+	assert.Equal(t, "test            ", text)
+	require.NoError(t, rows.Close())
+
+	rows, err = conn.Query("select 'test' from rdb$database")
+	require.NoError(t, err)
+
+	require.True(t, rows.Next())
+	require.NoError(t, rows.Scan(&text))
+	assert.Equal(t, "test", text)
+	require.NoError(t, rows.Close())
 }
