@@ -763,6 +763,7 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 		[]byte{isc_dpb_force_write, 4}, bint32_to_bytes(1),
 		[]byte{isc_dpb_overwrite, 4}, bint32_to_bytes(1),
 		[]byte{isc_dpb_page_size, 4}, int32_to_bytes(page_size),
+		[]byte{isc_dpb_utf8_filename, 1, 1},
 	}, nil)
 
 	if p.authData != nil {
@@ -814,6 +815,7 @@ func (p *wireProtocol) opAttach(dbName string, user string, password string, rol
 		[]byte{isc_dpb_sql_role_name, byte(len(roleBytes))}, roleBytes,
 		[]byte{isc_dpb_process_id, 4}, int32_to_bytes(pid),
 		[]byte{isc_dpb_process_name, byte(len(processNameBytes))}, processNameBytes,
+		[]byte{isc_dpb_utf8_filename, 1, 1},
 	}, nil)
 
 	if p.authData != nil {
