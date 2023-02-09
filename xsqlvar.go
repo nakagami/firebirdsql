@@ -305,141 +305,115 @@ func (x *xSQLVAR) parseTimestampTz(raw_value []byte) time.Time {
 	return time.Date(year, time.Month(month), day, h, m, s, n, tz).In(offset)
 }
 
-func (x *xSQLVAR) parseString(raw_value []byte, charset string) interface{} {
-	if x.sqlsubtype == 1 { // OCTETS
-		return raw_value
-	}
-	if x.sqlsubtype == 0 {
-		switch charset {
-		case "OCTETS":
-			return raw_value
-		case "UNICODE_FSS", "UTF8":
-			return bytes.NewBuffer(raw_value).String()
-		case "SJIS_0208":
-			dec := japanese.ShiftJIS.NewDecoder()
-			v, _ := dec.Bytes(raw_value)
-			return string(v)
-		case "EUCJ_0208":
-			dec := japanese.EUCJP.NewDecoder()
-			v, _ := dec.Bytes(raw_value)
-			return string(v)
-		case "ISO8859_1":
-			dec := charmap.ISO8859_1.NewDecoder()
-			v, _ := dec.Bytes(raw_value)
-			return string(v)
-		case "ISO8859_2":
-			dec := charmap.ISO8859_2.NewDecoder()
-			v, _ := dec.Bytes(raw_value)
-			return string(v)
-		case "ISO8859_3":
-			dec := charmap.ISO8859_3.NewDecoder()
-			v, _ := dec.Bytes(raw_value)
-			return string(v)
-		case "ISO8859_4":
-			dec := charmap.ISO8859_5.NewDecoder()
-			v, _ := dec.Bytes(raw_value)
-			return string(v)
-		case "ISO8859_5":
-			dec := charmap.ISO8859_5.NewDecoder()
-			v, _ := dec.Bytes(raw_value)
-			return string(v)
-		case "ISO8859_6":
-			dec := charmap.ISO8859_6.NewDecoder()
-			v, _ := dec.Bytes(raw_value)
-			return string(v)
-		case "ISO8859_7":
-			dec := charmap.ISO8859_7.NewDecoder()
-			v, _ := dec.Bytes(raw_value)
-			return string(v)
-		case "ISO8859_8":
-			dec := charmap.ISO8859_8.NewDecoder()
-			v, _ := dec.Bytes(raw_value)
-			return string(v)
-		case "ISO8859_9":
-			dec := charmap.ISO8859_9.NewDecoder()
-			v, _ := dec.Bytes(raw_value)
-			return string(v)
-		case "ISO8859_13":
-			dec := charmap.ISO8859_13.NewDecoder()
-			v, _ := dec.Bytes(raw_value)
-			return string(v)
-		case "KSC_5601":
-			dec := korean.EUCKR.NewDecoder()
-			v, _ := dec.Bytes(raw_value)
-			return string(v)
-		case "WIN1250":
-			dec := charmap.Windows1250.NewDecoder()
-			v, _ := dec.Bytes(raw_value)
-			return string(v)
-		case "WIN1251":
-			dec := charmap.Windows1251.NewDecoder()
-			v, _ := dec.Bytes(raw_value)
-			return string(v)
-		case "WIN1252":
-			dec := charmap.Windows1252.NewDecoder()
-			v, _ := dec.Bytes(raw_value)
-			return string(v)
-		case "WIN1253":
-			dec := charmap.Windows1252.NewDecoder()
-			v, _ := dec.Bytes(raw_value)
-			return string(v)
-		case "WIN1254":
-			dec := charmap.Windows1252.NewDecoder()
-			v, _ := dec.Bytes(raw_value)
-			return string(v)
-		case "BIG_5":
-			dec := traditionalchinese.Big5.NewDecoder()
-			v, _ := dec.Bytes(raw_value)
-			return string(v)
-		case "GB_2312":
-			dec := simplifiedchinese.HZGB2312.NewDecoder()
-			v, _ := dec.Bytes(raw_value)
-			return string(v)
-		case "WIN1255":
-			dec := charmap.Windows1255.NewDecoder()
-			v, _ := dec.Bytes(raw_value)
-			return string(v)
-		case "WIN1256":
-			dec := charmap.Windows1256.NewDecoder()
-			v, _ := dec.Bytes(raw_value)
-			return string(v)
-		case "WIN1257":
-			dec := charmap.Windows1257.NewDecoder()
-			v, _ := dec.Bytes(raw_value)
-			return string(v)
-		case "KOI8R":
-			dec := charmap.KOI8R.NewDecoder()
-			v, _ := dec.Bytes(raw_value)
-			return string(v)
-		case "KOI8U":
-			dec := charmap.KOI8U.NewDecoder()
-			v, _ := dec.Bytes(raw_value)
-			return string(v)
-		case "WIN1258":
-			dec := charmap.Windows1258.NewDecoder()
-			v, _ := dec.Bytes(raw_value)
-			return string(v)
-		default:
-			return bytes.NewBuffer(raw_value).String()
-		}
+func (x *xSQLVAR) decode(rawValue []byte, charset string) []byte {
+	var decoded []byte
+	switch charset {
+	case "SJIS_0208":
+		dec := japanese.ShiftJIS.NewDecoder()
+		decoded, _ = dec.Bytes(rawValue)
+	case "EUCJ_0208":
+		dec := japanese.EUCJP.NewDecoder()
+		decoded, _ = dec.Bytes(rawValue)
+	case "ISO8859_1":
+		dec := charmap.ISO8859_1.NewDecoder()
+		decoded, _ = dec.Bytes(rawValue)
+	case "ISO8859_2":
+		dec := charmap.ISO8859_2.NewDecoder()
+		decoded, _ = dec.Bytes(rawValue)
+	case "ISO8859_3":
+		dec := charmap.ISO8859_3.NewDecoder()
+		decoded, _ = dec.Bytes(rawValue)
+	case "ISO8859_4":
+		dec := charmap.ISO8859_5.NewDecoder()
+		decoded, _ = dec.Bytes(rawValue)
+	case "ISO8859_5":
+		dec := charmap.ISO8859_5.NewDecoder()
+		decoded, _ = dec.Bytes(rawValue)
+	case "ISO8859_6":
+		dec := charmap.ISO8859_6.NewDecoder()
+		decoded, _ = dec.Bytes(rawValue)
+	case "ISO8859_7":
+		dec := charmap.ISO8859_7.NewDecoder()
+		decoded, _ = dec.Bytes(rawValue)
+	case "ISO8859_8":
+		dec := charmap.ISO8859_8.NewDecoder()
+		decoded, _ = dec.Bytes(rawValue)
+	case "ISO8859_9":
+		dec := charmap.ISO8859_9.NewDecoder()
+		decoded, _ = dec.Bytes(rawValue)
+	case "ISO8859_13":
+		dec := charmap.ISO8859_13.NewDecoder()
+		decoded, _ = dec.Bytes(rawValue)
+	case "KSC_5601":
+		dec := korean.EUCKR.NewDecoder()
+		decoded, _ = dec.Bytes(rawValue)
+	case "WIN1250":
+		dec := charmap.Windows1250.NewDecoder()
+		decoded, _ = dec.Bytes(rawValue)
+	case "WIN1251":
+		dec := charmap.Windows1251.NewDecoder()
+		decoded, _ = dec.Bytes(rawValue)
+	case "WIN1252":
+		dec := charmap.Windows1252.NewDecoder()
+		decoded, _ = dec.Bytes(rawValue)
+	case "WIN1253":
+		dec := charmap.Windows1252.NewDecoder()
+		decoded, _ = dec.Bytes(rawValue)
+	case "WIN1254":
+		dec := charmap.Windows1252.NewDecoder()
+		decoded, _ = dec.Bytes(rawValue)
+	case "BIG_5":
+		dec := traditionalchinese.Big5.NewDecoder()
+		decoded, _ = dec.Bytes(rawValue)
+	case "GB_2312":
+		dec := simplifiedchinese.HZGB2312.NewDecoder()
+		decoded, _ = dec.Bytes(rawValue)
+	case "WIN1255":
+		dec := charmap.Windows1255.NewDecoder()
+		decoded, _ = dec.Bytes(rawValue)
+	case "WIN1256":
+		dec := charmap.Windows1256.NewDecoder()
+		decoded, _ = dec.Bytes(rawValue)
+	case "WIN1257":
+		dec := charmap.Windows1257.NewDecoder()
+		decoded, _ = dec.Bytes(rawValue)
+	case "KOI8R":
+		dec := charmap.KOI8R.NewDecoder()
+		decoded, _ = dec.Bytes(rawValue)
+	case "KOI8U":
+		dec := charmap.KOI8U.NewDecoder()
+		decoded, _ = dec.Bytes(rawValue)
+	case "WIN1258":
+		dec := charmap.Windows1258.NewDecoder()
+		decoded, _ = dec.Bytes(rawValue)
+	case "UNICODE_FSS", "UTF8":
+		fallthrough
+	default:
+		decoded = rawValue
 	}
 
-	return raw_value
+	return decoded
 }
 
 func (x *xSQLVAR) value(raw_value []byte, timezone string, charset string) (v interface{}, err error) {
 	switch x.sqltype {
 	case SQL_TYPE_TEXT:
-		if x.sqlsubtype == 1 { // OCTETS
-			v = raw_value
+		realLen := x.sqllen
+		if x.sqlsubtype == 4 || x.sqlsubtype == 69 { // UTF8 and GB18030
+			realLen = x.sqllen / 4
+		} else if x.sqlsubtype == 3 { // UNICODE_FSS
+			realLen = x.sqllen / 3
+		}
+		if x.sqlsubtype == 1 || charset == "OCTETS" { //OCTETS
+			v = raw_value[:realLen]
 		} else {
-			v = x.parseString(raw_value, charset)
+			v = string(x.decode(raw_value, charset)[:realLen])
 		}
 	case SQL_TYPE_VARYING:
-		if x.sqlsubtype == 1 { // OCTETS
+		if x.sqlsubtype == 1 || charset == "OCTETS" { //OCTETS
 			v = raw_value
 		} else {
-			v = x.parseString(raw_value, charset)
+			v = x.decode(raw_value, charset)
 		}
 	case SQL_TYPE_SHORT:
 		i16 := int16(bytes_to_bint32(raw_value))
