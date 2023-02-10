@@ -203,7 +203,7 @@ func (um *UserManager) GetUsers() ([]User, error) {
 					user.MiddleName = &s
 				case isc_spb_sec_lastname:
 					s := srb.GetString()
-					user.MiddleName = &s
+					user.LastName = &s
 				case isc_spb_sec_userid:
 					user.UserId = srb.GetInt32()
 				case isc_spb_sec_groupid:
