@@ -463,6 +463,7 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 	p.acceptArchitecture = bytes_to_bint32(b[4:8])
 	p.acceptType = bytes_to_bint32(b[8:12])
 	p.user = user
+	p.password = password
 
 	if opcode == op_cond_accept || opcode == op_accept_data {
 		var readLength, ln int
@@ -1627,9 +1628,11 @@ func (p *wireProtocol) opServiceAttach() error {
 	p.packString("service_mgr")
 
 	userBytes := bytes.NewBufferString(p.user).Bytes()
+	passwordBytes := bytes.NewBufferString(p.password).Bytes()
 	spb := bytes.Join([][]byte{
 		{isc_spb_version, isc_spb_current_version},
 		{isc_spb_user_name, byte(len(userBytes))}, userBytes,
+		{isc_spb_password, byte(len(passwordBytes))}, passwordBytes,
 		{isc_spb_utf8_filename, 1, 1},
 	}, nil)
 	if p.authData != nil {
