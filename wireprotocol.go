@@ -462,6 +462,7 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 	p.protocolVersion = int32(b[3])
 	p.acceptArchitecture = bytes_to_bint32(b[4:8])
 	p.acceptType = bytes_to_bint32(b[8:12])
+	p.user = user
 
 	if opcode == op_cond_accept || opcode == op_accept_data {
 		var readLength, ln int
@@ -1618,4 +1619,58 @@ func (p *wireProtocol) encodeString(str string) string {
 	default:
 		return str // If the specified charset is not supported, return the input string without any modification or encoding.
 	}
+
+func (p *wireProtocol) opServiceAttach() error {
+	p.debugPrint("opServiceAttach()")
+	p.packInt(op_service_attach)
+	p.packInt(0)
+	p.packString("service_mgr")
+
+	userBytes := bytes.NewBufferString(p.user).Bytes()
+	spb := bytes.Join([][]byte{
+		{isc_spb_version, isc_spb_current_version},
+		{isc_spb_user_name, byte(len(userBytes))}, userBytes,
+	}, nil)
+	if p.authData != nil {
+		specificAuthData := bytes.NewBufferString(hex.EncodeToString(p.authData)).Bytes()
+		spb = bytes.Join([][]byte{
+			spb,
+			{isc_dpb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)
+	}
+	p.packBytes(spb)
+	_, err := p.sendPackets()
+	return err
+}
+
+func (p *wireProtocol) opServiceDetach() error {
+	p.debugPrint("opServiceDetach()")
+	p.packInt(op_service_detach)
+	p.packInt(p.dbHandle)
+	_, err := p.sendPackets()
+	return err
+}
+
+func (p *wireProtocol) opServiceInfo(spb []byte, srb []byte, bufferLength int32) error {
+	p.debugPrint("opServiceInfo(%v, %v, %v)", spb, srb, bufferLength)
+	if bufferLength <= 0 {
+		bufferLength = BUFFER_LEN
+	}
+	p.packInt(op_service_info)
+	p.packInt(p.dbHandle)
+	p.packInt(0)
+	p.packBytes(spb)
+	p.packBytes(srb)
+	p.packInt(bufferLength)
+	_, err := p.sendPackets()
+	return err
+}
+
+func (p *wireProtocol) opServiceStart(spb []byte) error {
+	p.debugPrint("opServiceStart(%v)", spb)
+	p.packInt(op_service_start)
+	p.packInt(p.dbHandle)
+	p.packInt(0)
+	p.packBytes(spb)
+	_, err := p.sendPackets()
+	return err
 }

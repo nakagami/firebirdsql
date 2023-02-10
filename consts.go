@@ -196,6 +196,17 @@ const (
 	isc_spb_dummy_packet_interval = 58 // isc_dpb_dummy_packet_interval
 	isc_spb_sql_role_name         = 60 // isc_dpb_sql_role_name
 
+	// Parameters for isc_action_{add|del|mod|disp)_user
+	isc_spb_sec_userid     = 5
+	isc_spb_sec_groupid    = 6
+	isc_spb_sec_username   = 7
+	isc_spb_sec_password   = 8
+	isc_spb_sec_groupname  = 9
+	isc_spb_sec_firstname  = 10
+	isc_spb_sec_middlename = 11
+	isc_spb_sec_lastname   = 12
+	isc_spb_sec_admin      = 13
+
 	//Database Parameter Block Types
 	isc_dpb_version1              = 1
 	isc_dpb_page_size             = 4
@@ -252,6 +263,18 @@ const (
 	isc_spb_res_create         = 0x2000
 	isc_spb_res_use_all_space  = 0x4000
 
+	// Parameters for isc_action_svc_nbak
+	isc_spb_nbk_level         = 5
+	isc_spb_nbk_file          = 6
+	isc_spb_nbk_direct        = 7
+	isc_spb_nbk_guid          = 8
+	isc_spb_nbk_clean_history = 9
+	isc_spb_nbk_keep_days     = 10
+	isc_spb_nbk_keep_rows     = 11
+	isc_spb_nbk_no_triggers   = 0x01
+	isc_spb_nbk_inplace       = 0x02
+	isc_spb_nbk_sequence      = 0x04
+
 	// trace
 	isc_spb_trc_id   = 1
 	isc_spb_trc_name = 2
@@ -305,7 +328,9 @@ const (
 	isc_action_svc_set_mapping      = 27
 	isc_action_svc_drop_mapping     = 28
 	isc_action_svc_display_user_adm = 29
-	isc_action_svc_last             = 30
+	isc_action_svc_validate         = 30
+	isc_action_svc_nfix             = 31
+	isc_action_svc_last             = 32
 
 	// Transaction informatino items
 	isc_info_tra_id                 = 4

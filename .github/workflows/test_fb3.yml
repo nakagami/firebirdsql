@@ -18,7 +18,7 @@ jobs:
     
     - name: Set up Firebird
       run: |
-        sudo apt install firebird3.0-server -y
+        sudo apt install firebird3.0-server firebird3.0-examples -y
         sudo cp _attic/firebird.conf /etc/firebird/3.0
         sudo systemctl restart firebird3.0
         sudo chmod 0664 /etc/firebird/3.0/SYSDBA.password
