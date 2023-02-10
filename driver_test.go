@@ -98,6 +98,13 @@ func GetTestDSN(prefix string) string {
 	return retorno + tmppath
 }
 
+func getTestPassword() string {
+	testPassword := "masterkey"
+	if iscPassword := os.Getenv("ISC_PASSWORD"); iscPassword != "" {
+		testPassword = iscPassword
+	}
+	return testPassword
+}
 func TestBasic(t *testing.T) {
 	test_dsn := GetTestDSN("test_basic_")
 	conn, err := sql.Open("firebirdsql_createdb", test_dsn)
