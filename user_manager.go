@@ -194,7 +194,7 @@ func (um *UserManager) GetUsers() ([]User, error) {
 				case isc_spb_sec_groupid:
 					user.GroupId = srb.GetInt32()
 				case isc_spb_sec_admin:
-					user.Admin = srb.GetInt16() > 0
+					user.Admin = srb.GetInt32() > 0
 				}
 			}
 			if user != nil {
