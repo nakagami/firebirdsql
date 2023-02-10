@@ -103,6 +103,7 @@ func getTestPassword() string {
 	if iscPassword := os.Getenv("ISC_PASSWORD"); iscPassword != "" {
 		testPassword = iscPassword
 	}
+	fmt.Printf("getTestPassword: %s\n", testPassword)
 	return testPassword
 }
 func TestBasic(t *testing.T) {
