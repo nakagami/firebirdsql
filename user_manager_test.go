@@ -32,6 +32,7 @@ func TestUserManager(t *testing.T) {
 		}
 		if *user.Username == "TEST" {
 			haveTest = true
+			assert.False(t, *user.Admin, "admin flag")
 		}
 	}
 	assert.True(t, haveSysdba, "sysdba found")
@@ -51,7 +52,7 @@ func TestUserManager(t *testing.T) {
 	assert.NoError(t, conn.Ping())
 	conn.Close()
 
-	err = um.ModifyUser(NewUser("test").WithLastName("testlastname").WithPassword("zzz").WithUserId(1))
+	err = um.ModifyUser(NewUser("test").WithLastName("testlastname").WithPassword("zzz").WithUserId(1).WithAdmin(true))
 	assert.NoError(t, err, "ModifyUser")
 
 	conn, err = sql.Open("firebirdsql", GetTestDSNFromDatabaseUserPassword(dbPath, "test", "zzz"))
@@ -73,8 +74,12 @@ func TestUserManager(t *testing.T) {
 			haveTest = true
 			assert.NotNil(t, user.LastName)
 			assert.Equal(t, "testlastname", *user.LastName)
+			assert.True(t, *user.Admin, "admin flag")
 		}
 	}
 	assert.True(t, haveSysdba, "sysdba found")
 	assert.True(t, haveTest, "test user found")
+
+	assert.NoError(t, um.SetAdminRoleMapping())
+	assert.NoError(t, um.DropAdminRoleMapping())
 }
