@@ -8,7 +8,7 @@ type User struct {
 	LastName   *string
 	UserId     int32
 	GroupId    int32
-	Admin      bool
+	Admin      *bool
 }
 
 type UserManager struct {
@@ -71,6 +71,11 @@ func (u *User) WithGroupId(groupId int32) *User {
 	return u
 }
 
+func (u *User) WithAdmin(admin bool) *User {
+	u.Admin = &admin
+	return u
+}
+
 func (u *User) GetSpb() []byte {
 	srb := NewXPBWriter()
 	if u.Username != nil {
@@ -93,6 +98,13 @@ func (u *User) GetSpb() []byte {
 	}
 	if u.GroupId != -1 {
 		srb.PutInt32(isc_spb_sec_groupid, u.GroupId)
+	}
+	if u.Admin != nil {
+		if *u.Admin {
+			srb.PutInt32(isc_spb_sec_admin, 1)
+		} else {
+			srb.PutInt32(isc_spb_sec_admin, 0)
+		}
 	}
 	return srb.Bytes()
 }
@@ -194,7 +206,8 @@ func (um *UserManager) GetUsers() ([]User, error) {
 				case isc_spb_sec_groupid:
 					user.GroupId = srb.GetInt32()
 				case isc_spb_sec_admin:
-					user.Admin = srb.GetInt32() > 0
+					a := srb.GetInt32() > 0
+					user.Admin = &a
 				}
 			}
 			if user != nil {
@@ -206,4 +219,20 @@ func (um *UserManager) GetUsers() ([]User, error) {
 	}
 
 	return users, err
+}
+
+func (um *UserManager) adminRoleMappingAction(action byte) error {
+	spb := NewXPBWriterFromTag(action)
+	if um.securityDb != "" {
+		spb.PutString(isc_spb_dbname, um.securityDb)
+	}
+	return um.sm.ServiceStart(spb.Bytes())
+}
+
+func (um *UserManager) SetAdminRoleMapping() error {
+	return um.adminRoleMappingAction(isc_action_svc_set_mapping)
+}
+
+func (um *UserManager) DropAdminRoleMapping() error {
+	return um.adminRoleMappingAction(isc_action_svc_drop_mapping)
 }
