@@ -1484,6 +1484,7 @@ func (p *wireProtocol) opServiceAttach() error {
 	spb := bytes.Join([][]byte{
 		{isc_spb_version, isc_spb_current_version},
 		{isc_spb_user_name, byte(len(userBytes))}, userBytes,
+		{isc_spb_utf8_filename, 1, 1},
 	}, nil)
 	if p.authData != nil {
 		specificAuthData := bytes.NewBufferString(hex.EncodeToString(p.authData)).Bytes()
