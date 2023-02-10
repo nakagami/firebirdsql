@@ -28,21 +28,6 @@ func GetDefaultUserManagerOptions() UserManagerOptions {
 	}
 }
 
-func (umo UserManagerOptions) WithoutWireCrypt() UserManagerOptions {
-	umo.WireCrypt = false
-	return umo
-}
-
-func (umo UserManagerOptions) WithWireCrypt() UserManagerOptions {
-	umo.WireCrypt = true
-	return umo
-}
-
-func (umo UserManagerOptions) WithAuthPlugin(authPlugin string) UserManagerOptions {
-	umo.AuthPlugin = authPlugin
-	return umo
-}
-
 func (umo UserManagerOptions) WithSecurityDB(securityDB string) UserManagerOptions {
 	umo.SecurityDB = securityDB
 	return umo

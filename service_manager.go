@@ -54,6 +54,21 @@ func GetDefaultServiceManagerOptions() ServiceManagerOptions {
 	}
 }
 
+func (sm ServiceManagerOptions) WithoutWireCrypt() ServiceManagerOptions {
+	sm.WireCrypt = false
+	return sm
+}
+
+func (sm ServiceManagerOptions) WithWireCrypt() ServiceManagerOptions {
+	sm.WireCrypt = true
+	return sm
+}
+
+func (sm ServiceManagerOptions) WithAuthPlugin(authPlugin string) ServiceManagerOptions {
+	sm.AuthPlugin = authPlugin
+	return sm
+}
+
 func NewServiceManager(addr string, user string, password string, options ServiceManagerOptions) (*ServiceManager, error) {
 	var err error
 	var wp *wireProtocol
