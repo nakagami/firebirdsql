@@ -8,7 +8,7 @@ import (
 )
 
 func TestUserManager(t *testing.T) {
-	um, err := NewUserManager("localhost:3050", "sysdba", "masterkey", GetDefaultUserManagerOptions())
+	um, err := NewUserManager("localhost:3050", "sysdba", getTestPassword(), GetDefaultUserManagerOptions())
 	require.NoError(t, err)
 	require.NotNil(t, um)
 	defer um.Close()
