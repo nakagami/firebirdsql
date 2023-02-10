@@ -74,28 +74,35 @@ func get_firebird_major_version(conn *sql.DB) int {
 	return major_version
 }
 
-func GetTestDSN(prefix string) string {
-	var tmppath string
+func GetTestDatabase(prefix string) string {
 	randBytes := make([]byte, 16)
 	rand.Read(randBytes)
+	return filepath.Join(os.TempDir(), prefix+hex.EncodeToString(randBytes)+".fdb")
+}
 
-	tmppath = filepath.Join(os.TempDir(), prefix+hex.EncodeToString(randBytes)+".fdb")
+func GetTestDSN(prefix string) string {
+	return GetTestDSNFromDatabase(GetTestDatabase(prefix))
+}
+
+func GetTestDSNFromDatabase(dbPath string) string {
+	testUser := "sysdba"
+	if iscUser := os.Getenv("ISC_USER"); iscUser != "" {
+		testUser = iscUser
+	}
+
+	testPassword := "masterkey"
+	if iscPassword := os.Getenv("ISC_PASSWORD"); iscPassword != "" {
+		testPassword = iscPassword
+	}
+
+	return GetTestDSNFromDatabaseUserPassword(dbPath, testUser, testPassword)
+}
+
+func GetTestDSNFromDatabaseUserPassword(dbPath string, testUser string, testPassword string) string {
 	if runtime.GOOS == "windows" {
-		tmppath = "/" + tmppath
+		dbPath = "/" + dbPath
 	}
-
-	test_user := "sysdba"
-	if isc_user := os.Getenv("ISC_USER"); isc_user != "" {
-		test_user = isc_user
-	}
-
-	test_password := "masterkey"
-	if isc_password := os.Getenv("ISC_PASSWORD"); isc_password != "" {
-		test_password = isc_password
-	}
-
-	retorno := test_user + ":" + test_password + "@localhost:3050"
-	return retorno + tmppath
+	return testUser + ":" + testPassword + "@localhost:3050" + dbPath
 }
 
 func getTestPassword() string {
@@ -106,6 +113,7 @@ func getTestPassword() string {
 	fmt.Printf("getTestPassword: %s\n", testPassword)
 	return testPassword
 }
+
 func TestBasic(t *testing.T) {
 	test_dsn := GetTestDSN("test_basic_")
 	conn, err := sql.Open("firebirdsql_createdb", test_dsn)
