@@ -85,17 +85,7 @@ func GetTestDSN(prefix string) string {
 }
 
 func GetTestDSNFromDatabase(dbPath string) string {
-	testUser := "sysdba"
-	if iscUser := os.Getenv("ISC_USER"); iscUser != "" {
-		testUser = iscUser
-	}
-
-	testPassword := "masterkey"
-	if iscPassword := os.Getenv("ISC_PASSWORD"); iscPassword != "" {
-		testPassword = iscPassword
-	}
-
-	return GetTestDSNFromDatabaseUserPassword(dbPath, testUser, testPassword)
+	return GetTestDSNFromDatabaseUserPassword(dbPath, GetTestUser(), GetTestPassword())
 }
 
 func GetTestDSNFromDatabaseUserPassword(dbPath string, testUser string, testPassword string) string {
@@ -105,12 +95,19 @@ func GetTestDSNFromDatabaseUserPassword(dbPath string, testUser string, testPass
 	return testUser + ":" + testPassword + "@localhost:3050" + dbPath
 }
 
-func getTestPassword() string {
+func GetTestUser() string {
+	testUser := "sysdba"
+	if iscUser := os.Getenv("ISC_USER"); iscUser != "" {
+		testUser = iscUser
+	}
+	return testUser
+}
+
+func GetTestPassword() string {
 	testPassword := "masterkey"
 	if iscPassword := os.Getenv("ISC_PASSWORD"); iscPassword != "" {
 		testPassword = iscPassword
 	}
-	fmt.Printf("getTestPassword: %s\n", testPassword)
 	return testPassword
 }
 

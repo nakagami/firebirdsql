@@ -9,15 +9,14 @@ import (
 
 func TestUserManager(t *testing.T) {
 	dbPath := GetTestDatabase("test_user_manager_")
-	testDsn := GetTestDSNFromDatabase(dbPath)
-	conn, err := sql.Open("firebirdsql_createdb", testDsn)
+	conn, err := sql.Open("firebirdsql_createdb", GetTestDSNFromDatabase(dbPath))
 	require.NoError(t, err)
 	require.NotNil(t, conn)
 	defer conn.Close()
 	err = conn.Ping()
 	require.NoError(t, err)
 
-	um, err := NewUserManager("localhost:3050", "sysdba", getTestPassword(), GetDefaultUserManagerOptions())
+	um, err := NewUserManager("localhost:3050", GetTestUser(), GetTestPassword(), GetDefaultUserManagerOptions())
 	require.NoError(t, err)
 	require.NotNil(t, um)
 	defer um.Close()
@@ -46,8 +45,7 @@ func TestUserManager(t *testing.T) {
 		assert.NoError(t, err)
 	}()
 
-	testDsn = GetTestDSNFromDatabaseUserPassword(dbPath, "test", "test")
-	conn, err = sql.Open("firebirdsql", testDsn)
+	conn, err = sql.Open("firebirdsql", GetTestDSNFromDatabaseUserPassword(dbPath, "test", "test"))
 	require.NoError(t, err)
 	require.NotNil(t, conn)
 	assert.NoError(t, conn.Ping())
@@ -56,8 +54,7 @@ func TestUserManager(t *testing.T) {
 	err = um.ModifyUser(NewUser("test").WithLastName("testlastname").WithPassword("zzz").WithUserId(1))
 	assert.NoError(t, err)
 
-	testDsn = GetTestDSNFromDatabaseUserPassword(dbPath, "test", "zzz")
-	conn, err = sql.Open("firebirdsql", testDsn)
+	conn, err = sql.Open("firebirdsql", GetTestDSNFromDatabaseUserPassword(dbPath, "test", "zzz"))
 	require.NoError(t, err)
 	require.NotNil(t, conn)
 	assert.NoError(t, conn.Ping())
