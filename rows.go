@@ -26,6 +26,7 @@ package firebirdsql
 import (
 	"bytes"
 	"container/list"
+	"context"
 	"database/sql/driver"
 	"io"
 	"reflect"
@@ -33,14 +34,16 @@ import (
 )
 
 type firebirdsqlRows struct {
+	ctx             context.Context
 	stmt            *firebirdsqlStmt
 	currentChunkRow *list.Element
 	moreData        bool
 	result          []driver.Value
 }
 
-func newFirebirdsqlRows(stmt *firebirdsqlStmt, result []driver.Value) *firebirdsqlRows {
+func newFirebirdsqlRows(ctx context.Context, stmt *firebirdsqlStmt, result []driver.Value) *firebirdsqlRows {
 	rows := new(firebirdsqlRows)
+	rows.ctx = ctx
 	rows.stmt = stmt
 	rows.result = result
 	if stmt.stmtType == isc_info_sql_stmt_select {
@@ -67,6 +70,11 @@ func (rows *firebirdsqlRows) Close() (er error) {
 }
 
 func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
+	if rows.ctx.Err() != nil {
+		rows.stmt.wp.opCancel(fb_cancel_raise)
+		return rows.ctx.Err()
+	}
+
 	if rows.stmt.stmtType == isc_info_sql_stmt_exec_procedure {
 		if rows.result != nil {
 			for i, v := range rows.result {
