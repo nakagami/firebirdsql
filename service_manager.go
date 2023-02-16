@@ -22,8 +22,8 @@ type StatisticsOptions struct {
 }
 
 type SrvDbInfo struct {
-	AttachmentsCount int32
-	DatabaseCount    int32
+	AttachmentsCount int
+	DatabaseCount    int
 	Databases        []string
 }
 
@@ -369,7 +369,7 @@ func (svc *ServiceManager) GetSvrDbInfo() (*SrvDbInfo, error) {
 		}
 	}
 
-	return &SrvDbInfo{attachmentsCount, databasesCount, databases}, nil
+	return &SrvDbInfo{int(attachmentsCount), int(databasesCount), databases}, nil
 }
 
 func (svc *ServiceManager) doGetFbLog() error {
