@@ -488,7 +488,13 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 				if len(data) == 0 {
 					p.opContAuth(bigIntToBytes(clientPublic), p.pluginName, PLUGIN_LIST, "")
 					b, _ := p.recvPackets(4)
-					if DEBUG_SRP && bytes_to_bint32(b) == op_cont_auth {
+					op := bytes_to_bint32(b)
+					if op == op_response {
+						_, _, _, err = p._parse_op_response() // error occurred
+						return
+					}
+
+					if DEBUG_SRP && op != op_cont_auth {
 						panic("auth error")
 					}
 
