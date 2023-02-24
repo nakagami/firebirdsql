@@ -5,7 +5,7 @@ Firebird RDBMS https://firebirdsql.org SQL driver for Go
 ## Requirements
 
 * Firebird 2.5 or higher
-* Golang 1.15 or higher
+* Golang 1.18 or higher
 
 ## Example
 
