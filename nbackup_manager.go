@@ -69,10 +69,12 @@ func (bm *NBackupManager) Backup(database string, backup string, options NBackup
 	return bm.attach(spb.Bytes(), verbose)
 }
 
-func (bm *NBackupManager) Restore(backup string, database string, options NBackupOptions, verbose chan string) error {
+func (bm *NBackupManager) Restore(backups []string, database string, options NBackupOptions, verbose chan string) error {
 	spb := NewXPBWriterFromTag(isc_action_svc_nrest)
 	spb.PutString(isc_spb_dbname, database)
-	spb.PutString(isc_spb_nbk_file, backup)
+	for _, file := range backups {
+		spb.PutString(isc_spb_nbk_file, file)
+	}
 
 	optionsMask := options.GetOptionsMask()
 	if optionsMask != 0 {
