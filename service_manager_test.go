@@ -21,6 +21,7 @@ func TestServiceManager_Info(t *testing.T) {
 	sm, err := NewServiceManager("localhost:3050", GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
 	require.NoError(t, err, "NewServiceManager")
 	require.NotNil(t, sm, "NewServiceManager")
+	defer sm.Close()
 
 	version, err := sm.GetServerVersion()
 	assert.NoError(t, err, "GetServerVersion")
