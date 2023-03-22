@@ -80,6 +80,12 @@ func GetTestDatabase(prefix string) string {
 	return filepath.Join(os.TempDir(), prefix+hex.EncodeToString(randBytes)+".fdb")
 }
 
+func GetTestBackup(prefix string) string {
+	randBytes := make([]byte, 16)
+	rand.Read(randBytes)
+	return filepath.Join(os.TempDir(), prefix+hex.EncodeToString(randBytes)+".fbk")
+}
+
 func GetTestDSN(prefix string) string {
 	return GetTestDSNFromDatabase(GetTestDatabase(prefix))
 }
