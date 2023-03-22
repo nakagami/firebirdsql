@@ -18,7 +18,7 @@ func TestServiceManager_Info(t *testing.T) {
 	var s string
 	conn.QueryRow("SELECT rdb$get_context('SYSTEM', 'ENGINE_VERSION') from rdb$database").Scan(&s)
 
-	sm, err := NewServiceManager("localhost:3050", "sysdba", "masterkey", GetDefaultServiceManagerOptions())
+	sm, err := NewServiceManager("localhost:3050", GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
 	require.NoError(t, err, "NewServiceManager")
 	require.NotNil(t, sm, "NewServiceManager")
 
