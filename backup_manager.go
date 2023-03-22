@@ -16,7 +16,6 @@ type BackupOptions struct {
 
 type RestoreOptions struct {
 	Replace              bool
-	Create               bool
 	DeactivateIndexes    bool
 	RestoreShadows       bool
 	EnforceConstraints   bool
@@ -41,7 +40,6 @@ func GetDefaultBackupOptions() BackupOptions {
 func GetDefaultRestoreOptions() RestoreOptions {
 	return RestoreOptions{
 		Replace:              false,
-		Create:               false,
 		DeactivateIndexes:    false,
 		RestoreShadows:       true,
 		EnforceConstraints:   true,
@@ -120,9 +118,7 @@ func (bm *BackupManager) Restore(backup string, database string, options Restore
 
 	if options.Replace {
 		optionsMask |= isc_spb_res_replace
-	}
-
-	if options.Create {
+	} else {
 		optionsMask |= isc_spb_res_create
 	}
 
