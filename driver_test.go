@@ -67,11 +67,17 @@ var (
 		end`
 )
 
-func get_firebird_major_version(conn *sql.DB) int {
-	var s string
-	conn.QueryRow("SELECT rdb$get_context('SYSTEM', 'ENGINE_VERSION') from rdb$database").Scan(&s)
-	major_version, _ := strconv.Atoi(s[:strings.Index(s, ".")])
-	return major_version
+func get_firebird_major_version() int {
+	sm, err := NewServiceManager("localhost:3050", GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
+	if err != nil {
+		panic("unable to get connect service manager")
+	}
+	defer sm.Close()
+	version, err := sm.GetServerVersion()
+	if err != nil {
+		panic("unable to get server version")
+	}
+	return version.Major
 }
 
 func GetTestDatabase(prefix string) string {
@@ -384,7 +390,7 @@ func TestBoolean(t *testing.T) {
 		t.Fatalf("Error connecting: %v", err)
 	}
 
-	firebird_major_version := get_firebird_major_version(conn)
+	firebird_major_version := get_firebird_major_version()
 	if firebird_major_version < 3 {
 		return
 	}
@@ -443,7 +449,7 @@ func TestDecFloat(t *testing.T) {
 		t.Fatalf("Error connecting: %v", err)
 	}
 
-	firebird_major_version := get_firebird_major_version(conn)
+	firebird_major_version := get_firebird_major_version()
 	if firebird_major_version < 4 {
 		return
 	}
@@ -497,7 +503,7 @@ func TestTimeZone(t *testing.T) {
 		t.Fatalf("Error connecting: %v", err)
 	}
 
-	firebird_major_version := get_firebird_major_version(conn)
+	firebird_major_version := get_firebird_major_version()
 	if firebird_major_version < 4 {
 		return
 	}
@@ -542,7 +548,7 @@ func TestInt128(t *testing.T) {
 		t.Fatalf("Error connecting: %v", err)
 	}
 
-	firebird_major_version := get_firebird_major_version(conn)
+	firebird_major_version := get_firebird_major_version()
 	if firebird_major_version < 4 {
 		return
 	}
@@ -577,7 +583,7 @@ func TestNegativeInt128(t *testing.T) {
 		t.Fatalf("Error connecting: %v", err)
 	}
 
-	firebird_major_version := get_firebird_major_version(conn)
+	firebird_major_version := get_firebird_major_version()
 	if firebird_major_version < 4 {
 		return
 	}
