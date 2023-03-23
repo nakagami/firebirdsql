@@ -1,6 +1,7 @@
 package firebirdsql
 
 import (
+	"database/sql"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -8,6 +9,7 @@ import (
 	"path"
 	"regexp"
 	"testing"
+	"time"
 )
 
 func cleanFirebirdLog(t *testing.T) {
@@ -59,11 +61,14 @@ func grabStringOutput(run func() error, resChan chan string) (string, error) {
 }
 
 func TestServiceManager_Sweep(t *testing.T) {
+	db, _, err := CreateTestDatabase("test_sweep_")
+	require.NoError(t, err)
+
 	m, err := NewMaintenanceManager("localhost:3050", GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
 	require.NoError(t, err)
 	require.NotNil(t, m)
 	cleanFirebirdLog(t)
-	err = m.Sweep("employee")
+	err = m.Sweep(db)
 	assert.NoError(t, err)
 	log := getFirebirdLog(t)
 	fmt.Println(log)
@@ -76,12 +81,15 @@ OIT xxx, OAT xxx, OST xxx, Next xxx`, log)
 }
 
 func TestServiceManager_Validate(t *testing.T) {
+	db, _, err := CreateTestDatabase("test_validate_")
+	require.NoError(t, err)
+
 	m, err := NewMaintenanceManager("localhost:3050", GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
 	require.NoError(t, err)
 	require.NotNil(t, m)
 
 	cleanFirebirdLog(t)
-	err = m.Validate("employee", isc_spb_rpr_check_db)
+	err = m.Validate(db, isc_spb_rpr_check_db)
 	assert.NoError(t, err)
 	log := getFirebirdLog(t)
 	assert.Equal(t, `Database xxxxx
@@ -90,7 +98,7 @@ Database xxxxx
 Validation finished: x errors, x warnings, x fixed`, log)
 
 	cleanFirebirdLog(t)
-	err = m.Validate("employee", isc_spb_rpr_full)
+	err = m.Validate(db, isc_spb_rpr_full)
 	assert.NoError(t, err)
 	log = getFirebirdLog(t)
 	assert.Equal(t, `Database xxxxx
@@ -100,12 +108,15 @@ Validation finished: x errors, x warnings, x fixed`, log)
 }
 
 func TestServiceManager_Mend(t *testing.T) {
+	db, _, err := CreateTestDatabase("test_mend_")
+	require.NoError(t, err)
+
 	m, err := NewMaintenanceManager("localhost:3050", GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
 	require.NoError(t, err)
 	require.NotNil(t, m)
 
 	cleanFirebirdLog(t)
-	err = m.Mend("employee")
+	err = m.Mend(db)
 	assert.NoError(t, err)
 	log := getFirebirdLog(t)
 	assert.Equal(t, `Database xxxxx
@@ -115,18 +126,24 @@ Validation finished: x errors, x warnings, x fixed`, log)
 }
 
 func TestServiceManager_ListLimboTransactions(t *testing.T) {
+	db, _, err := CreateTestDatabase("test_list_limbo_")
+	require.NoError(t, err)
+
 	m, err := NewMaintenanceManager("localhost:3050", GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
 	require.NoError(t, err)
 	require.NotNil(t, m)
-	_, err = m.GetLimboTransactions("employee")
+	_, err = m.GetLimboTransactions(db)
 	assert.NoError(t, err)
 }
 
 func TestServiceManager_CommitTransaction(t *testing.T) {
+	db, _, err := CreateTestDatabase("test_commit_transaction_")
+	require.NoError(t, err)
+
 	m, err := NewMaintenanceManager("localhost:3050", GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
 	require.NoError(t, err)
 	require.NotNil(t, m)
-	err = m.CommitTransaction("employee", 1)
+	err = m.CommitTransaction(db, 1)
 	assert.EqualError(t, err, `failed to reconnect to a transaction in database employee
 transaction is not in limbo
 transaction 1 is committed
@@ -134,10 +151,13 @@ transaction 1 is committed
 }
 
 func TestServiceManager_RollbackTransaction(t *testing.T) {
+	db, _, err := CreateTestDatabase("test_rollback_transaction_")
+	require.NoError(t, err)
+
 	m, err := NewMaintenanceManager("localhost:3050", GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
 	require.NoError(t, err)
 	require.NotNil(t, m)
-	err = m.RollbackTransaction("employee", 1)
+	err = m.RollbackTransaction(db, 1)
 	assert.EqualError(t, err, `failed to reconnect to a transaction in database employee
 transaction is not in limbo
 transaction 1 is committed
@@ -145,97 +165,124 @@ transaction 1 is committed
 }
 
 func TestServiceManager_SetDatabaseMode(t *testing.T) {
+	db, _, err := CreateTestDatabase("test_set_mode_")
+	require.NoError(t, err)
+
 	m, err := NewMaintenanceManager("localhost:3050", GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
 	require.NoError(t, err)
 	require.NotNil(t, m)
-	err = m.SetAccessModeReadOnly("employee")
+	err = m.SetAccessModeReadOnly(db)
 	assert.NoError(t, err)
-	err = m.SetAccessModeReadWrite("employee")
+	err = m.SetAccessModeReadWrite(db)
 	assert.NoError(t, err)
 }
 
 func TestServiceManager_SetDatabaseDialect(t *testing.T) {
+	db, _, err := CreateTestDatabase("test_set_dialect_")
+	require.NoError(t, err)
+
 	m, err := NewMaintenanceManager("localhost:3050", GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
 	require.NoError(t, err)
 	require.NotNil(t, m)
-	err = m.SetDialect("employee", 1)
+	err = m.SetDialect(db, 1)
 	assert.NoError(t, err)
-	err = m.SetDialect("employee", 3)
+	err = m.SetDialect(db, 3)
 	assert.NoError(t, err)
-	err = m.SetDialect("employee", 10)
+	err = m.SetDialect(db, 10)
 	assert.Error(t, err)
 }
 
 func TestServiceManager_SetPageBuffers(t *testing.T) {
+	db, _, err := CreateTestDatabase("test_set_buffers_")
+	require.NoError(t, err)
+
 	m, err := NewMaintenanceManager("localhost:3050", GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
 	require.NoError(t, err)
 	require.NotNil(t, m)
-	err = m.SetPageBuffers("employee", 0)
+	err = m.SetPageBuffers(db, 0)
 	assert.NoError(t, err)
-	err = m.SetPageBuffers("employee", 30)
+	err = m.SetPageBuffers(db, 30)
 	assert.Error(t, err)
-	err = m.SetPageBuffers("employee", 100)
+	err = m.SetPageBuffers(db, 100)
 	assert.NoError(t, err)
 }
 
 func TestServiceManager_SetWriteMode(t *testing.T) {
+	db, _, err := CreateTestDatabase("test_set_write_mode_")
+	require.NoError(t, err)
+
 	m, err := NewMaintenanceManager("localhost:3050", GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
 	require.NoError(t, err)
 	require.NotNil(t, m)
-	err = m.SetWriteModeAsync("employee")
+	err = m.SetWriteModeAsync(db)
 	assert.NoError(t, err)
-	err = m.SetWriteModeSync("employee")
+	err = m.SetWriteModeSync(db)
 	assert.NoError(t, err)
 }
 
 func TestServiceManager_SetPageFill(t *testing.T) {
+	db, _, err := CreateTestDatabase("test_set_page_fill_")
+	require.NoError(t, err)
+
 	m, err := NewMaintenanceManager("localhost:3050", GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
 	require.NoError(t, err)
 	require.NotNil(t, m)
-	err = m.SetPageFillNoReserve("employee")
+	err = m.SetPageFillNoReserve(db)
 	assert.NoError(t, err)
-	err = m.SetPageFillReserve("employee")
+	err = m.SetPageFillReserve(db)
 	assert.NoError(t, err)
 }
 
 func TestServiceManager_DatabaseShutdown(t *testing.T) {
+	db, _, err := CreateTestDatabase("test_shutdown_")
+	require.NoError(t, err)
+
 	m, err := NewMaintenanceManager("localhost:3050", GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
 	require.NoError(t, err)
 	require.NotNil(t, m)
 
 	for _, mode := range []ShutdownMode{ShutdownModeDenyNewAttachments, ShutdownModeDenyNewTransactions, ShutdownModeForce} {
-		err = m.Shutdown("employee", mode, 0)
+		err = m.Shutdown(db, mode, 0)
 		assert.NoError(t, err)
-		err = m.Online("employee")
+		err = m.Online(db)
 		assert.NoError(t, err)
 	}
 }
 
 func TestServiceManager_DatabaseShutdownEx(t *testing.T) {
+	db, _, err := CreateTestDatabase("test_shutdown_ex_")
+	require.NoError(t, err)
+
 	m, err := NewMaintenanceManager("localhost:3050", GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
 	require.NoError(t, err)
 	require.NotNil(t, m)
 
-	err = m.ShutdownEx("employee", OperationModeFull, ShutdownModeExForce, 0)
+	err = m.ShutdownEx(db, OperationModeFull, ShutdownModeExForce, 0)
 	assert.NoError(t, err)
-	err = m.OnlineEx("employee", OperationModeNormal)
+	err = m.OnlineEx(db, OperationModeNormal)
 	assert.NoError(t, err)
 }
 
 func TestServiceManager_SetSweepInterval(t *testing.T) {
+	db, _, err := CreateTestDatabase("test_set_sweep_interval_")
+	require.NoError(t, err)
+
 	m, err := NewMaintenanceManager("localhost:3050", GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
 	require.NoError(t, err)
 	require.NotNil(t, m)
 
-	err = m.SetSweepInterval("employee", 20000)
+	err = m.SetSweepInterval(db, 20000)
 	assert.NoError(t, err)
 }
 
 func TestServiceManager_NoLinger(t *testing.T) {
+	db, _, err := CreateTestDatabase("test_nolinger_")
+	require.NoError(t, err)
+
 	m, err := NewMaintenanceManager("localhost:3050", GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
 	require.NoError(t, err)
 	require.NotNil(t, m)
 
-	err = m.NoLinger("employee")
+	err = m.NoLinger(db)
 	assert.NoError(t, err)
 }

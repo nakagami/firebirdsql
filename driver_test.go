@@ -123,6 +123,21 @@ func GetTestPassword() string {
 	return testPassword
 }
 
+func CreateTestDatabase(prefix string) (file string, dsn string, err error) {
+	file = GetTestDatabase(prefix)
+	dsn = GetTestDSNFromDatabase(file)
+	conn, err := sql.Open("firebirdsql_createdb", dsn)
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+	_, err = conn.Exec("select * from rdb$database")
+	if err != nil {
+		return
+	}
+	return
+}
+
 func TestBasic(t *testing.T) {
 	test_dsn := GetTestDSN("test_basic_")
 	conn, err := sql.Open("firebirdsql_createdb", test_dsn)
