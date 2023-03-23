@@ -47,7 +47,7 @@ func TestNBackupManagerSingleLevel(t *testing.T) {
 
 func TestNBackupManagerFixup(t *testing.T) {
 	if get_firebird_major_version() < 4 {
-		t.Skip("fixup in Service Manger API supported since 4.0")
+		t.Skip("fixup in Service Manager API supported since 4.0")
 	}
 
 	dbPathOrig := GetTestDatabase("test_nbackup_manager_orig_")
