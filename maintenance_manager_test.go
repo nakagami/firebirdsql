@@ -1,7 +1,6 @@
 package firebirdsql
 
 import (
-	"database/sql"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -9,7 +8,6 @@ import (
 	"path"
 	"regexp"
 	"testing"
-	"time"
 )
 
 func cleanFirebirdLog(t *testing.T) {
