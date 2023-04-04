@@ -146,10 +146,10 @@ func TestServiceManager_CommitTransaction(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, m)
 	err = m.CommitTransaction(db, 1)
-	assert.EqualError(t, err, `failed to reconnect to a transaction in database employee
+	assert.EqualError(t, err, fmt.Sprintf(`failed to reconnect to a transaction in database %s
 transaction is not in limbo
 transaction 1 is committed
-`)
+`, db))
 }
 
 func TestServiceManager_RollbackTransaction(t *testing.T) {
@@ -160,10 +160,10 @@ func TestServiceManager_RollbackTransaction(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, m)
 	err = m.RollbackTransaction(db, 1)
-	assert.EqualError(t, err, `failed to reconnect to a transaction in database employee
+	assert.EqualError(t, err, fmt.Sprintf(`failed to reconnect to a transaction in database %s
 transaction is not in limbo
 transaction 1 is committed
-`)
+`, db))
 }
 
 func TestServiceManager_SetDatabaseMode(t *testing.T) {
