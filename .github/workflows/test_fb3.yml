@@ -23,6 +23,8 @@ jobs:
         sudo systemctl restart firebird3.0 firebird3.0-examples
         sudo chmod 0664 /etc/firebird/3.0/SYSDBA.password
         grep '=' /etc/firebird/3.0/SYSDBA.password |sed 's/^/export /' >test_user.env
+        sudo touch /usr/lib/x86_64-linux-gnu/firebird/3.0/firebird.log
+        sudo chmod 777 /usr/lib/x86_64-linux-gnu/firebird/3.0/firebird.log
 
     - name: Set up Go ${{ matrix.go }}
       uses: actions/setup-go@v5

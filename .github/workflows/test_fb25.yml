@@ -22,6 +22,11 @@ jobs:
         version: '2.5-ss'
         isc_password: "masterkey"
 
+    - name: Set firebird.log permissions for tests
+      run: |
+        sudo touch /firebird/etc/firebird.log
+        sudo chmod 777 /firebird/etc/firebird.log
+
     - name: Set up Go ${{ matrix.go }}
       uses: actions/setup-go@v5
       with:
