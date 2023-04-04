@@ -17,6 +17,10 @@ func cleanFirebirdLog(t *testing.T) {
 	logFile, err := m.GetHomeDir()
 	logFile = path.Join(logFile, "firebird.log")
 	require.NoError(t, err)
+	_, err = os.Stat(logFile)
+	if os.IsNotExist(err) {
+		return
+	}
 	require.NoError(t, os.Truncate(logFile, 0))
 }
 
