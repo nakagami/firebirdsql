@@ -14,9 +14,14 @@ func cleanFirebirdLog(t *testing.T) {
 	m, err := NewServiceManager("localhost:3050", GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
 	require.NoError(t, err)
 	defer m.Close()
-	logFile, err := m.GetHomeDir()
-	logFile = path.Join(logFile, "firebird.log")
-	require.NoError(t, err)
+
+	var logFile string
+	if logFile = os.Getenv("FIREBIRD_LOG"); logFile == "" {
+		logFile, err = m.GetHomeDir()
+		require.NoError(t, err)
+		logFile = path.Join(logFile, "firebird.log")
+	}
+
 	_, err = os.Stat(logFile)
 	if os.IsNotExist(err) {
 		return
@@ -63,6 +68,10 @@ func grabStringOutput(run func() error, resChan chan string) (string, error) {
 }
 
 func TestServiceManager_Sweep(t *testing.T) {
+	if get_firebird_major_version() < 3 {
+		t.Skip("skip for 2.5, because it running in container")
+	}
+
 	db, _, err := CreateTestDatabase("test_sweep_")
 	require.NoError(t, err)
 
@@ -83,6 +92,10 @@ OIT xxx, OAT xxx, OST xxx, Next xxx`, log)
 }
 
 func TestServiceManager_Validate(t *testing.T) {
+	if get_firebird_major_version() < 3 {
+		t.Skip("skip for 2.5, because it running in container")
+	}
+
 	db, _, err := CreateTestDatabase("test_validate_")
 	require.NoError(t, err)
 
@@ -110,6 +123,10 @@ Validation finished: x errors, x warnings, x fixed`, log)
 }
 
 func TestServiceManager_Mend(t *testing.T) {
+	if get_firebird_major_version() < 3 {
+		t.Skip("skip for 2.5, because it running in container")
+	}
+
 	db, _, err := CreateTestDatabase("test_mend_")
 	require.NoError(t, err)
 
