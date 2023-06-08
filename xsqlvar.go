@@ -145,7 +145,7 @@ type xSQLVAR struct {
 }
 
 func (x *xSQLVAR) ioLength() int {
-	if x.sqltype == SQL_TYPE_TEXT || x.sqltype == SQL_TYPE_VARYING {
+	if x.sqltype == SQL_TYPE_TEXT {
 		return x.sqllen
 	}
 	return xsqlvarTypeLength[x.sqltype]
