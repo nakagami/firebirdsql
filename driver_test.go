@@ -164,6 +164,17 @@ func TestBasic(t *testing.T) {
 	if !reflect.DeepEqual(columns, []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J"}) {
 		t.Fatalf("Columns() mismatch: %v", columns)
 	}
+
+	columnTypes, _ := rows.ColumnTypes()
+	lenB, _ := columnTypes[1].Length()
+	if lenB != 30 * 4 {
+		t.Fatalf("Column B Length(): %v", lenB)
+	}
+	lenC, _ := columnTypes[2].Length()
+	if lenC != 1024 * 4 {
+		t.Fatalf("Column C Length(): %v", lenC)
+	}
+
 	var a int
 	var b, c string
 	var d float64
