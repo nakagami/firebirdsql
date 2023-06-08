@@ -152,7 +152,7 @@ func (x *xSQLVAR) ioLength() int {
 }
 
 func (x *xSQLVAR) displayLength() int {
-	if x.sqltype == SQL_TYPE_TEXT {
+	if x.sqltype == SQL_TYPE_TEXT || x.sqltype == SQL_TYPE_VARYING {
 		return x.sqllen
 	}
 	return xsqlvarTypeDisplayLength[x.sqltype]
