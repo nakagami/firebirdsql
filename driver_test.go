@@ -167,11 +167,11 @@ func TestBasic(t *testing.T) {
 
 	columnTypes, _ := rows.ColumnTypes()
 	lenB, _ := columnTypes[1].Length()
-	if lenB != 30 * 4 {
+	if lenB != 30*4 {
 		t.Fatalf("Column B Length(): %v", lenB)
 	}
 	lenC, _ := columnTypes[2].Length()
-	if lenC != 1024 * 4 {
+	if lenC != 1024*4 {
 		t.Fatalf("Column C Length(): %v", lenC)
 	}
 
