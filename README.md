@@ -9,7 +9,7 @@ Firebird RDBMS https://firebirdsql.org SQL driver for Go
 
 ## Example
 
-```
+```go
 package main
 
 import (
@@ -31,7 +31,7 @@ func main() {
 
 See also driver_test.go
 
-```
+```go
    package main
 
       import (
@@ -60,7 +60,7 @@ See also _example
 
 ## Connection string
 
-```
+```bash
 user:password@servername[:port_number]/database_name_or_file[?params1=value1[&param2=value2]...]
 ```
 
