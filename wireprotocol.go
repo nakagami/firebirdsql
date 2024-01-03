@@ -33,15 +33,16 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/kardianos/osext"
-	"gitlab.com/nyarla/go-crypt"
-	"golang.org/x/crypto/chacha20"
 	"math/big"
 	"net"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/kardianos/osext"
+	"gitlab.com/nyarla/go-crypt"
+	"golang.org/x/crypto/chacha20"
 	//"unsafe"
 )
 
@@ -864,6 +865,15 @@ func (p *wireProtocol) opCrypt(plugin string) error {
 	return err
 }
 
+func (p *wireProtocol) opCryptCallback() error {
+	p.debugPrint("opCryptCallback")
+	p.packInt(op_crypt_key_callback)
+	p.packInt(0)
+	p.packInt(int32(BUFFER_LEN))
+	_, err := p.sendPackets()
+	return err
+}
+
 func (p *wireProtocol) opDropDatabase() error {
 	p.debugPrint("opDropDatabase")
 	p.packInt(op_drop_database)
@@ -1215,6 +1225,17 @@ func (p *wireProtocol) opResponse() (int32, []byte, []byte, error) {
 	}
 	for bytes_to_bint32(b) == op_dummy {
 		b, _ = p.recvPackets(4)
+	}
+	for bytes_to_bint32(b) == op_crypt_key_callback {
+
+		err = p.opCryptCallback()
+		if err != nil {
+			return 0, nil, nil, err
+		}
+
+		b, _ = p.recvPackets(12)
+		b, _ = p.recvPackets(4)
+
 	}
 	for bytes_to_bint32(b) == op_response && p.lazyResponseCount > 0 {
 		p.lazyResponseCount--
