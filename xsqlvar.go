@@ -357,10 +357,10 @@ func (x *xSQLVAR) decode(rawValue []byte, charset string) []byte {
 		dec := charmap.Windows1252.NewDecoder()
 		decoded, _ = dec.Bytes(rawValue)
 	case "WIN1253":
-		dec := charmap.Windows1252.NewDecoder()
+		dec := charmap.Windows1253.NewDecoder()
 		decoded, _ = dec.Bytes(rawValue)
 	case "WIN1254":
-		dec := charmap.Windows1252.NewDecoder()
+		dec := charmap.Windows1254.NewDecoder()
 		decoded, _ = dec.Bytes(rawValue)
 	case "BIG_5":
 		dec := traditionalchinese.Big5.NewDecoder()
