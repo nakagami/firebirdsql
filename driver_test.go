@@ -1122,6 +1122,29 @@ func TestGoIssue117(t *testing.T) {
 	require.NoError(t, rows.Close())
 }
 
+func TestGoIssue164(t *testing.T) {
+	testDsn := GetTestDSN("test_issue164_") + "?charset=WIN1251"
+	fmt.Println(testDsn)
+	conn, err := sql.Open("firebirdsql_createdb", testDsn)
+	require.NoError(t, err)
+
+	query := `CREATE TABLE t (text CHAR(1))`
+	_, err = conn.Exec(query)
+	require.NoError(t, err)
+
+	_, err = conn.Exec("INSERT INTO t VALUES ('A')")
+	require.NoError(t, err)
+
+	rows, err := conn.Query("select text from t")
+	require.NoError(t, err)
+
+	var text string
+	require.True(t, rows.Next())
+	require.NoError(t, rows.Scan(&text))
+	assert.Equal(t, "A", text)
+	require.NoError(t, rows.Close())
+}
+
 func TestTimeoutQueryContextDuringScan(t *testing.T) {
 	testDsn := GetTestDSN("test_timeout_query_context_scan_")
 	conn, err := sql.Open("firebirdsql_createdb", testDsn)
