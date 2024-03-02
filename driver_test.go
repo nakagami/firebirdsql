@@ -1132,7 +1132,7 @@ func TestGoIssue164(t *testing.T) {
 	_, err = conn.Exec(query)
 	require.NoError(t, err)
 
-	_, err = conn.Exec("INSERT INTO t VALUES ('A')")
+	_, err = conn.Exec("INSERT INTO t VALUES ('Б')")
 	require.NoError(t, err)
 
 	rows, err := conn.Query("select text from t")
@@ -1141,7 +1141,7 @@ func TestGoIssue164(t *testing.T) {
 	var text string
 	require.True(t, rows.Next())
 	require.NoError(t, rows.Scan(&text))
-	assert.Equal(t, "A", text)
+	assert.Equal(t, "Б", text)
 	require.NoError(t, rows.Close())
 }
 
