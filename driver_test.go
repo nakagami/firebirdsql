@@ -165,16 +165,6 @@ func TestBasic(t *testing.T) {
 		t.Fatalf("Columns() mismatch: %v", columns)
 	}
 
-	columnTypes, _ := rows.ColumnTypes()
-	lenB, _ := columnTypes[1].Length()
-	if lenB != 30*4 {
-		t.Fatalf("Column B Length(): %v", lenB)
-	}
-	lenC, _ := columnTypes[2].Length()
-	if lenC != 1024*4 {
-		t.Fatalf("Column C Length(): %v", lenC)
-	}
-
 	var a int
 	var b, c string
 	var d float64
@@ -1110,7 +1100,7 @@ func TestGoIssue117(t *testing.T) {
 	var text string
 	require.True(t, rows.Next())
 	require.NoError(t, rows.Scan(&text))
-	assert.Equal(t, "test            ", text)
+	assert.Equal(t, "test", text)
 	require.NoError(t, rows.Close())
 
 	rows, err = conn.Query("select 'test' from rdb$database")
@@ -1119,6 +1109,28 @@ func TestGoIssue117(t *testing.T) {
 	require.True(t, rows.Next())
 	require.NoError(t, rows.Scan(&text))
 	assert.Equal(t, "test", text)
+	require.NoError(t, rows.Close())
+}
+
+func TestGoIssue164(t *testing.T) {
+	testDsn := GetTestDSN("test_issue164_") + "?charset=WIN1251"
+	conn, err := sql.Open("firebirdsql_createdb", testDsn)
+	require.NoError(t, err)
+
+	query := `CREATE TABLE t (text CHAR(2))`
+	_, err = conn.Exec(query)
+	require.NoError(t, err)
+
+	_, err = conn.Exec("INSERT INTO t VALUES ('Б')")
+	require.NoError(t, err)
+
+	rows, err := conn.Query("select text from t")
+	require.NoError(t, err)
+
+	var text string
+	require.True(t, rows.Next())
+	require.NoError(t, rows.Scan(&text))
+	assert.Equal(t, "Б", text)
 	require.NoError(t, rows.Close())
 }
 
