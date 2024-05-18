@@ -431,7 +431,7 @@ func (x *xSQLVAR) parseString(raw_value []byte, charset string) interface{} {
 func (x *xSQLVAR) value(raw_value []byte, timezone string, charset string) (v interface{}, err error) {
 	switch x.sqltype {
 	case SQL_TYPE_TEXT:
-		if x.sqlsubtype == 1 { // OCTETS
+		if x.sqlsubtype == 1 || charset == "None" { // OCTETS
 			v = raw_value
 		} else {
 			v = x.parseString(raw_value, charset)
