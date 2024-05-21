@@ -1187,6 +1187,20 @@ VALUES(2, NULL, 'dos', NULL, '2024-06-04', NULL, '12:50:00', NULL, '2024-06-04 1
 	conn.Close()
 }
 
+func TestGoIssue172(t *testing.T) {
+	testDsn := GetTestDSN("test_constraint_type_")
+	conn, err := sql.Open("firebirdsql_createdb", testDsn)
+	require.NoError(t, err)
+
+	rows, err := conn.Query("select RDB$CONSTRAINT_TYPE from RDB$RELATION_CONSTRAINTS")
+	require.NoError(t, err)
+
+	var text string
+	require.True(t, rows.Next())
+	require.NoError(t, rows.Scan(&text))
+	require.NoError(t, rows.Close())
+}
+
 func TestTimeoutQueryContextDuringScan(t *testing.T) {
 	testDsn := GetTestDSN("test_timeout_query_context_scan_")
 	conn, err := sql.Open("firebirdsql_createdb", testDsn)

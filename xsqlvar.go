@@ -435,7 +435,12 @@ func (x *xSQLVAR) value(raw_value []byte, timezone string, charset string) (v in
 			v = raw_value
 		} else {
 			v = x.parseString(raw_value, charset)
-			v = strings.TrimRight(string(v.([]uint8)), " ")
+			switch v.(type) {
+			case string:
+				v = strings.TrimRight(v.(string), " ")
+			case []uint8:
+				v = strings.TrimRight(string(v.([]uint8)), " ")
+			}
 		}
 	case SQL_TYPE_VARYING:
 		if x.sqlsubtype == 1 { // OCTETS
