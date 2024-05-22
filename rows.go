@@ -56,7 +56,7 @@ func (rows *firebirdsqlRows) Columns() []string {
 	columns := make([]string, len(rows.stmt.xsqlda))
 	for i, x := range rows.stmt.xsqlda {
 		columns[i] = x.aliasname
-		if rows.stmt.tx.fc.columnNameToLower {
+		if rows.stmt.fc.columnNameToLower {
 			columns[i] = strings.ToLower(columns[i])
 		}
 	}
@@ -71,7 +71,7 @@ func (rows *firebirdsqlRows) Close() (er error) {
 
 func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 	if rows.ctx.Err() != nil {
-		rows.stmt.wp.opCancel(fb_cancel_raise)
+		rows.stmt.fc.wp.opCancel(fb_cancel_raise)
 		return rows.ctx.Err()
 	}
 
@@ -95,11 +95,11 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 	if rows.currentChunkRow == nil && rows.moreData == true {
 		// Get one chunk
 		var chunk *list.List
-		err = rows.stmt.wp.opFetch(rows.stmt.stmtHandle, rows.stmt.blr)
+		err = rows.stmt.fc.wp.opFetch(rows.stmt.stmtHandle, rows.stmt.blr)
 		if err != nil {
 			return err
 		}
-		chunk, rows.moreData, err = rows.stmt.wp.opFetchResponse(rows.stmt.stmtHandle, rows.stmt.tx.transHandle, rows.stmt.xsqlda)
+		chunk, rows.moreData, err = rows.stmt.fc.wp.opFetchResponse(rows.stmt.stmtHandle, rows.stmt.fc.tx.transHandle, rows.stmt.xsqlda)
 
 		if err == nil {
 			rows.currentChunkRow = chunk.Front()
@@ -117,7 +117,7 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 		if rows.stmt.xsqlda[i].sqltype == SQL_TYPE_BLOB && v != nil {
 			blobId := v.([]byte)
 			var blob []byte
-			blob, err = rows.stmt.wp.getBlobSegments(blobId, rows.stmt.tx.transHandle)
+			blob, err = rows.stmt.fc.wp.getBlobSegments(blobId, rows.stmt.fc.tx.transHandle)
 			if rows.stmt.xsqlda[i].sqlsubtype == 1 {
 				dest[i] = bytes.NewBuffer(blob).String()
 			} else {

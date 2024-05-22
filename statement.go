@@ -29,28 +29,29 @@ import (
 )
 
 type firebirdsqlStmt struct {
-	wp         *wireProtocol
-	stmtHandle int32
-	tx         *firebirdsqlTx
-	xsqlda     []xSQLVAR
-	blr        []byte
-	stmtType   int32
+	fc          *firebirdsqlConn
+	queryString string
+	stmtHandle  int32
+	xsqlda      []xSQLVAR
+	blr         []byte
+	stmtType    int32
 }
 
 func (stmt *firebirdsqlStmt) Close() (err error) {
-	err = stmt.wp.opFreeStatement(stmt.stmtHandle, 2) // DSQL_drop
+	err = stmt.fc.wp.opFreeStatement(stmt.stmtHandle, 2) // DSQL_drop
+	stmt.stmtHandle = -1
 	if err != nil {
 		return err
 	}
 
-	if stmt.wp.acceptType == ptype_lazy_send {
-		stmt.wp.lazyResponseCount++
+	if stmt.fc.wp.acceptType == ptype_lazy_send {
+		stmt.fc.wp.lazyResponseCount++
 	} else {
-		_, _, _, err = stmt.wp.opResponse()
+		_, _, _, err = stmt.fc.wp.opResponse()
 	}
 
-	if stmt.tx.isAutocommit {
-		stmt.tx.Commit()
+	if stmt.fc.tx.isAutocommit {
+		stmt.fc.tx.Commit()
 	}
 	return
 }
@@ -67,31 +68,31 @@ func (stmt *firebirdsqlStmt) sendOpCancel(ctx context.Context, done chan struct{
 	case <-ctx.Done():
 	}
 	if cancel {
-		stmt.wp.opCancel(fb_cancel_raise)
+		stmt.fc.wp.opCancel(fb_cancel_raise)
 	}
 }
 
 func (stmt *firebirdsqlStmt) exec(ctx context.Context, args []driver.Value) (result driver.Result, err error) {
-	err = stmt.wp.opExecute(stmt.stmtHandle, stmt.tx.transHandle, args)
+	err = stmt.fc.wp.opExecute(stmt.stmtHandle, stmt.fc.tx.transHandle, args)
 	if err != nil {
 		return
 	}
 
 	var done = make(chan struct{}, 1)
 	go stmt.sendOpCancel(ctx, done)
-	_, _, _, err = stmt.wp.opResponse()
+	_, _, _, err = stmt.fc.wp.opResponse()
 	done <- struct{}{}
 
 	if err != nil {
 		return
 	}
 
-	err = stmt.wp.opInfoSql(stmt.stmtHandle, []byte{isc_info_sql_records})
+	err = stmt.fc.wp.opInfoSql(stmt.stmtHandle, []byte{isc_info_sql_records})
 	if err != nil {
 		return
 	}
 
-	_, _, buf, err := stmt.wp.opResponse()
+	_, _, buf, err := stmt.fc.wp.opResponse()
 	if err != nil {
 		return
 	}
@@ -123,14 +124,24 @@ func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (dr
 	var result []driver.Value
 	var done = make(chan struct{}, 1)
 
+	if stmt.stmtHandle == -1 {
+		if stmt.fc.tx.needBegin {
+			err := stmt.fc.tx.begin()
+			if err != nil {
+				return nil, err
+			}
+		}
+		stmt, err = newFirebirdsqlStmt(stmt.fc, stmt.queryString)
+	}
+
 	if stmt.stmtType == isc_info_sql_stmt_exec_procedure {
-		err = stmt.wp.opExecute2(stmt.stmtHandle, stmt.tx.transHandle, args, stmt.blr)
+		err = stmt.fc.wp.opExecute2(stmt.stmtHandle, stmt.fc.tx.transHandle, args, stmt.blr)
 		if err != nil {
 			return nil, err
 		}
 
 		go stmt.sendOpCancel(ctx, done)
-		result, err = stmt.wp.opSqlResponse(stmt.xsqlda)
+		result, err = stmt.fc.wp.opSqlResponse(stmt.xsqlda)
 		done <- struct{}{}
 		if err != nil {
 			return nil, err
@@ -138,18 +149,18 @@ func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (dr
 
 		rows = newFirebirdsqlRows(ctx, stmt, result)
 
-		_, _, _, err = stmt.wp.opResponse()
+		_, _, _, err = stmt.fc.wp.opResponse()
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		err := stmt.wp.opExecute(stmt.stmtHandle, stmt.tx.transHandle, args)
+		err := stmt.fc.wp.opExecute(stmt.stmtHandle, stmt.fc.tx.transHandle, args)
 		if err != nil {
 			return nil, err
 		}
 
 		go stmt.sendOpCancel(ctx, done)
-		_, _, _, err = stmt.wp.opResponse()
+		_, _, _, err = stmt.fc.wp.opResponse()
 		done <- struct{}{}
 
 		if err != nil {
@@ -167,40 +178,40 @@ func (stmt *firebirdsqlStmt) Query(args []driver.Value) (rows driver.Rows, err e
 
 func newFirebirdsqlStmt(fc *firebirdsqlConn, query string) (stmt *firebirdsqlStmt, err error) {
 	stmt = new(firebirdsqlStmt)
-	stmt.wp = fc.wp
-	stmt.tx = fc.tx
+	stmt.fc = fc
+	stmt.queryString = query
 
-	err = fc.wp.opAllocateStatement()
+	err = stmt.fc.wp.opAllocateStatement()
 	if err != nil {
 		return nil, err
 	}
 
-	if fc.wp.acceptType == ptype_lazy_send {
-		fc.wp.lazyResponseCount++
+	if stmt.fc.wp.acceptType == ptype_lazy_send {
+		stmt.fc.wp.lazyResponseCount++
 		stmt.stmtHandle = -1
 	} else {
-		stmt.stmtHandle, _, _, err = fc.wp.opResponse()
+		stmt.stmtHandle, _, _, err = stmt.fc.wp.opResponse()
 		if err != nil {
 			return
 		}
 	}
 
-	err = fc.wp.opPrepareStatement(stmt.stmtHandle, stmt.tx.transHandle, query)
+	err = stmt.fc.wp.opPrepareStatement(stmt.stmtHandle, stmt.fc.tx.transHandle, query)
 	if err != nil {
 		return nil, err
 	}
 
-	if fc.wp.acceptType == ptype_lazy_send && fc.wp.lazyResponseCount > 0 {
-		fc.wp.lazyResponseCount--
-		stmt.stmtHandle, _, _, _ = fc.wp.opResponse()
+	if stmt.fc.wp.acceptType == ptype_lazy_send && stmt.fc.wp.lazyResponseCount > 0 {
+		stmt.fc.wp.lazyResponseCount--
+		stmt.stmtHandle, _, _, _ = stmt.fc.wp.opResponse()
 	}
 
-	_, _, buf, err := fc.wp.opResponse()
+	_, _, buf, err := stmt.fc.wp.opResponse()
 	if err != nil {
 		return
 	}
 
-	stmt.stmtType, stmt.xsqlda, err = fc.wp.parse_xsqlda(buf, stmt.stmtHandle)
+	stmt.stmtType, stmt.xsqlda, err = stmt.fc.wp.parse_xsqlda(buf, stmt.stmtHandle)
 	if err != nil {
 		return nil, err
 	}
