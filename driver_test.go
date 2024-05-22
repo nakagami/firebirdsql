@@ -192,6 +192,16 @@ func TestBasic(t *testing.T) {
 		t.Fatalf("Error bad record count: %v", n)
 	}
 
+	// Issue #169
+	stmt, _ = conn.Prepare("select * from foo where a=?")
+	for k := 1; k < 5; k++ {
+		rows, err := stmt.Query(k)
+		require.NoError(t, err)
+		rows.Next()
+		err = rows.Close()
+		require.NoError(t, err)
+	}
+
 	conn.Close()
 }
 
