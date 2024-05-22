@@ -1134,6 +1134,73 @@ func TestGoIssue164(t *testing.T) {
 	require.NoError(t, rows.Close())
 }
 
+func TestGoIssue170(t *testing.T) {
+	testDsn := GetTestDSN("test_issue170") + "?charset=None"
+	conn, err := sql.Open("firebirdsql_createdb", testDsn)
+	require.NoError(t, err)
+
+	query := `
+        CREATE TABLE T2 (
+            ENTERO_NN INTEGER NOT NULL,
+            ENTERO INTEGER,
+            TEXTO_NN VARCHAR(30) NOT NULL,
+            TEXTO VARCHAR(3000),
+            FECHA_NN DATE NOT NULL,
+            FECHA DATE,
+            HORA_NN TIME NOT NULL,
+            HORA TIME,
+            MOMENTO_NN TIMESTAMP NOT NULL,
+            MOMENTO TIMESTAMP,
+            MEMO BLOB SUB_TYPE TEXT,
+            BINARIO BLOB SUB_TYPE BINARY,
+            SIMPLE_NN FLOAT NOT NULL,
+            SIMPLE FLOAT,
+            DOBLE_NN DOUBLE PRECISION NOT NULL,
+            DOBLE DOUBLE PRECISION,
+            LETRAS_NN CHAR(30) NOT NULL,
+            LETRAS CHAR(30),
+            CONSTRAINT PK_T2 PRIMARY KEY (ENTERO_NN)
+        )
+	`
+	_, err = conn.Exec(query)
+	require.NoError(t, err)
+
+	_, err = conn.Exec(`
+        INSERT INTO T2
+        (ENTERO_NN, ENTERO, TEXTO_NN, TEXTO, FECHA_NN, FECHA, HORA_NN, HORA, MOMENTO_NN, MOMENTO, MEMO, BINARIO, SIMPLE_NN, SIMPLE, DOBLE_NN, DOBLE, LETRAS_NN, LETRAS)
+        VALUES(1, 1, 'uno', 'uno', '2024-06-04', '2024-06-04', '12:50:00', '12:50:00', '2024-06-04 12:50:00', '2024-06-04 12:50:00', 'memo', NULL, 1234.0, 1234.0, 12345678, 12345678, 'HOLA', 'ESCAROLA')
+	`)
+	require.NoError(t, err)
+	_, err = conn.Exec(`
+INSERT INTO T2
+(ENTERO_NN, ENTERO, TEXTO_NN, TEXTO, FECHA_NN, FECHA, HORA_NN, HORA, MOMENTO_NN, MOMENTO, MEMO, BINARIO, SIMPLE_NN, SIMPLE, DOBLE_NN, DOBLE, LETRAS_NN, LETRAS)
+VALUES(2, NULL, 'dos', NULL, '2024-06-04', NULL, '12:50:00', NULL, '2024-06-04 12:50:00', NULL, NULL, NULL, 1234.0, NULL, 12345678, NULL, 'HOLA', NULL);
+	`)
+	require.NoError(t, err)
+
+	rows, err := conn.Query("select * from T2")
+	require.NoError(t, err)
+
+	rows.Next()
+
+	rows.Close()
+	conn.Close()
+}
+
+func TestGoIssue172(t *testing.T) {
+	testDsn := GetTestDSN("test_constraint_type_")
+	conn, err := sql.Open("firebirdsql_createdb", testDsn)
+	require.NoError(t, err)
+
+	rows, err := conn.Query("select RDB$CONSTRAINT_TYPE from RDB$RELATION_CONSTRAINTS")
+	require.NoError(t, err)
+
+	var text string
+	require.True(t, rows.Next())
+	require.NoError(t, rows.Scan(&text))
+	require.NoError(t, rows.Close())
+}
+
 func TestTimeoutQueryContextDuringScan(t *testing.T) {
 	testDsn := GetTestDSN("test_timeout_query_context_scan_")
 	conn, err := sql.Open("firebirdsql_createdb", testDsn)
