@@ -1191,6 +1191,10 @@ func TestGoIssue172(t *testing.T) {
 	testDsn := GetTestDSN("test_constraint_type_")
 	conn, err := sql.Open("firebirdsql_createdb", testDsn)
 	require.NoError(t, err)
+	firebird_major_version := get_firebird_major_version(conn)
+	if firebird_major_version < 3 {
+		return
+	}
 
 	rows, err := conn.Query("select RDB$CONSTRAINT_TYPE from RDB$RELATION_CONSTRAINTS")
 	require.NoError(t, err)
