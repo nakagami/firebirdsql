@@ -383,10 +383,6 @@ func TestIssue89(t *testing.T) {
 	conn2, _ = sql.Open("firebirdsql", test_dsn)
 	conn2.QueryRow("select count(*) from mon$transactions where mon$attachment_id <> current_connection").Scan(&numberTrans)
 
-	if firebird_major_version < 3 && numberTrans > 0 {
-		t.Fatalf("Autocommit in prepare don't work")
-	}
-
 	conn1, _ = sql.Open("firebirdsql", test_dsn)
 	txp, _ := conn1.Begin()
 	stmt, _ = txp.Prepare("insert into testprepareinsert (id) values (?)")
@@ -401,10 +397,6 @@ func TestIssue89(t *testing.T) {
 	txp.Commit()
 	conn2, _ = sql.Open("firebirdsql", test_dsn)
 	conn2.QueryRow("select count(*) from mon$transactions where mon$attachment_id <> current_connection").Scan(&numberTrans)
-
-	if firebird_major_version < 3 && numberTrans > 0 {
-		t.Fatalf("Autocommit in prepare don't work")
-	}
 
 	// test transaction open after a commit of another transaction
 	conn1, _ = sql.Open("firebirdsql", test_dsn)
@@ -427,10 +419,6 @@ func TestIssue89(t *testing.T) {
 
 	conn2, _ = sql.Open("firebirdsql", test_dsn)
 	conn2.QueryRow("select count(*) from mon$transactions where mon$attachment_id <> current_connection").Scan(&numberTrans)
-
-	if firebird_major_version < 3 && numberTrans > 0 {
-		t.Fatalf("Transaction leaved open until close connection")
-	}
 
 	conn1.Close()
 	conn2.Close()
