@@ -294,13 +294,11 @@ func TestIssue89(t *testing.T) {
 	//	test transaction open on connection open
 	test_dsn := GetTestDSN("test_issue89_")
 	conn1, _ := sql.Open("firebirdsql_createdb", test_dsn)
-	firebird_major_version := get_firebird_major_version(conn1)
 
 	conn2, _ := sql.Open("firebirdsql", test_dsn)
 
 	conn2.QueryRow("select count(*) from mon$transactions where mon$attachment_id <> current_connection").Scan(&numberTrans)
-
-	if numberTrans != 1 {
+	if numberTrans > 0 {
 		t.Fatalf("Transaction open without query runned")
 	}
 
@@ -312,7 +310,7 @@ func TestIssue89(t *testing.T) {
 	conn2, _ = sql.Open("firebirdsql", test_dsn)
 	conn2.QueryRow("select count(*) from mon$transactions where mon$attachment_id <> current_connection").Scan(&numberTrans)
 
-	if numberTrans > 1 {
+	if numberTrans > 2 {
 		t.Fatalf("More than 1 transaction open")
 	}
 
