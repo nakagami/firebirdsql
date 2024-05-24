@@ -202,6 +202,32 @@ func TestBasic(t *testing.T) {
 		require.NoError(t, err)
 	}
 
+	// Issue #174
+	stmt1, err := conn.Prepare("select * from foo where a=?")
+	require.NoError(t, err)
+
+	stmt2, err := conn.Prepare("select * from foo where a=?")
+	require.NoError(t, err)
+	for k := 0; k < 3; k++ {
+		rows1, err := stmt1.Query(k)
+		require.NoError(t, err)
+
+		rows2, err := stmt2.Query(1)
+		require.NoError(t, err)
+
+		err = rows1.Close()
+		require.NoError(t, err)
+
+		err = rows2.Close()
+		require.NoError(t, err)
+	}
+
+	err = stmt1.Close()
+	require.NoError(t, err)
+
+	err = stmt2.Close()
+	require.NoError(t, err)
+
 	conn.Close()
 }
 

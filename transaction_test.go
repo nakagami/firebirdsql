@@ -300,7 +300,7 @@ func TestIssue89(t *testing.T) {
 
 	conn2.QueryRow("select count(*) from mon$transactions where mon$attachment_id <> current_connection").Scan(&numberTrans)
 
-	if numberTrans > 0 {
+	if numberTrans != 1 {
 		t.Fatalf("Transaction open without query runned")
 	}
 
@@ -332,7 +332,7 @@ func TestIssue89(t *testing.T) {
 	conn2, _ = sql.Open("firebirdsql", test_dsn)
 	conn2.QueryRow("select count(*) from mon$transactions where mon$attachment_id <> current_connection").Scan(&numberTrans)
 
-	if numberTrans > 0 {
+	if numberTrans != 1 {
 		t.Fatalf("Autocommit don't work")
 	}
 
@@ -362,7 +362,7 @@ func TestIssue89(t *testing.T) {
 	conn2, _ = sql.Open("firebirdsql", test_dsn)
 	conn2.QueryRow("select count(*) from mon$transactions where mon$attachment_id <> current_connection").Scan(&numberTrans)
 
-	if numberTrans > 0 {
+	if numberTrans != 1 {
 		t.Fatalf("Autocommit in prepare don't work")
 	}
 

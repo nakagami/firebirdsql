@@ -51,7 +51,7 @@ func (stmt *firebirdsqlStmt) Close() (err error) {
 	}
 
 	if stmt.fc.tx.isAutocommit {
-		stmt.fc.tx.Commit()
+		stmt.fc.tx.commitRetainging()
 	}
 	return
 }
