@@ -228,6 +228,23 @@ func TestBasic(t *testing.T) {
 	err = stmt2.Close()
 	require.NoError(t, err)
 
+	stmt, err = conn.Prepare("select * from foo where a=?")
+	require.NoError(t, err)
+
+	tx, err := conn.Begin()
+	require.NoError(t, err)
+	err = tx.Commit()
+	require.NoError(t, err)
+
+	rows, err = stmt.Query(1)
+	require.NoError(t, err)
+
+	rows.Close()
+	require.NoError(t, err)
+	err = conn.Close()
+	require.NoError(t, err)
+	// Issue #174 end
+
 	conn.Close()
 }
 
