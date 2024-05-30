@@ -124,13 +124,14 @@ func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (dr
 	var result []driver.Value
 	var done = make(chan struct{}, 1)
 
-	if stmt.stmtHandle == -1 {
-		if stmt.fc.tx.needBegin {
-			err := stmt.fc.tx.begin()
-			if err != nil {
-				return nil, err
-			}
+	if stmt.fc.tx.needBegin {
+		err := stmt.fc.tx.begin()
+		if err != nil {
+			return nil, err
 		}
+	}
+
+	if stmt.stmtHandle == -1 {
 		stmt, err = newFirebirdsqlStmt(stmt.fc, stmt.queryString)
 	}
 
