@@ -33,6 +33,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/encoding/japanese"
+	"golang.org/x/text/encoding/korean"
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/encoding/traditionalchinese"
 	"math/big"
 	"net"
 	"os"
@@ -1388,6 +1393,7 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 	for _, param := range params {
 		switch f := param.(type) {
 		case string:
+			f = p.encodeString(f)
 			b := str_to_bytes(f)
 			if len(b) < MAX_CHAR_LENGTH {
 				blr, v = _bytesToBlr(b)
@@ -1498,4 +1504,119 @@ func (p *wireProtocol) opCancel(kind int) error {
 	p.packInt(int32(kind))
 	_, err := p.sendPackets()
 	return err
+}
+
+func (p *wireProtocol) encodeString(str string) string {
+	switch p.charset {
+	case "OCTETS":
+		return str
+	case "UNICODE_FSS", "UTF8":
+		return str
+	case "SJIS_0208":
+		enc := japanese.ShiftJIS.NewEncoder()
+		v, _ := enc.String(str)
+		return v
+	case "EUCJ_0208":
+		enc := japanese.EUCJP.NewEncoder()
+		v, _ := enc.String(str)
+		return v
+	case "ISO8859_1":
+		enc := charmap.ISO8859_1.NewEncoder()
+		v, _ := enc.String(str)
+		return v
+	case "ISO8859_2":
+		enc := charmap.ISO8859_2.NewEncoder()
+		v, _ := enc.String(str)
+		return v
+	case "ISO8859_3":
+		enc := charmap.ISO8859_3.NewEncoder()
+		v, _ := enc.String(str)
+		return v
+	case "ISO8859_4":
+		enc := charmap.ISO8859_5.NewEncoder()
+		v, _ := enc.String(str)
+		return v
+	case "ISO8859_5":
+		enc := charmap.ISO8859_5.NewEncoder()
+		v, _ := enc.String(str)
+		return v
+	case "ISO8859_6":
+		enc := charmap.ISO8859_6.NewEncoder()
+		v, _ := enc.String(str)
+		return v
+	case "ISO8859_7":
+		enc := charmap.ISO8859_7.NewEncoder()
+		v, _ := enc.String(str)
+		return v
+	case "ISO8859_8":
+		enc := charmap.ISO8859_8.NewEncoder()
+		v, _ := enc.String(str)
+		return v
+	case "ISO8859_9":
+		enc := charmap.ISO8859_9.NewEncoder()
+		v, _ := enc.String(str)
+		return v
+	case "ISO8859_13":
+		enc := charmap.ISO8859_13.NewEncoder()
+		v, _ := enc.String(str)
+		return v
+	case "KSC_5601":
+		enc := korean.EUCKR.NewEncoder()
+		v, _ := enc.String(str)
+		return v
+	case "WIN1250":
+		enc := charmap.Windows1250.NewEncoder()
+		v, _ := enc.String(str)
+		return v
+	case "WIN1251":
+		enc := charmap.Windows1251.NewEncoder()
+		v, _ := enc.String(str)
+		return v
+	case "WIN1252":
+		enc := charmap.Windows1252.NewEncoder()
+		v, _ := enc.String(str)
+		return v
+	case "WIN1253":
+		enc := charmap.Windows1252.NewEncoder()
+		v, _ := enc.String(str)
+		return v
+	case "WIN1254":
+		enc := charmap.Windows1252.NewEncoder()
+		v, _ := enc.String(str)
+		return v
+	case "BIG_5":
+		enc := traditionalchinese.Big5.NewEncoder()
+		v, _ := enc.String(str)
+		return v
+	case "GB_2312":
+		enc := simplifiedchinese.HZGB2312.NewEncoder()
+		v, _ := enc.String(str)
+		return v
+	case "WIN1255":
+		enc := charmap.Windows1255.NewEncoder()
+		v, _ := enc.String(str)
+		return v
+	case "WIN1256":
+		enc := charmap.Windows1256.NewEncoder()
+		v, _ := enc.String(str)
+		return v
+	case "WIN1257":
+		enc := charmap.Windows1257.NewEncoder()
+		v, _ := enc.String(str)
+		return v
+	case "KOI8R":
+		enc := charmap.KOI8R.NewEncoder()
+		v, _ := enc.String(str)
+		return v
+	case "KOI8U":
+		enc := charmap.KOI8U.NewEncoder()
+		v, _ := enc.String(str)
+		return v
+	case "WIN1258":
+		enc := charmap.Windows1258.NewEncoder()
+		v, _ := enc.String(str)
+		return v
+	default:
+		return str // If the specified charset is not supported, return the input string without any modification or encoding.
+	}
 }
