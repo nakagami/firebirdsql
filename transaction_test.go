@@ -294,7 +294,7 @@ func TestIssue89(t *testing.T) {
 	//	test transaction open on connection open
 	test_dsn := GetTestDSN("test_issue89_")
 	conn1, _ := sql.Open("firebirdsql_createdb", test_dsn)
-	firebird_major_version := get_firebird_major_version(conn1)
+	firebird_major_version := get_firebird_major_version()
 
 	conn2, _ := sql.Open("firebirdsql", test_dsn)
 
