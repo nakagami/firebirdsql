@@ -203,6 +203,7 @@ func TestBasic(t *testing.T) {
 	}
 
 	// Issue #174
+	// https://github.com/nakagami/firebirdsql/issues/174#issue-2312621571
 	stmt1, err := conn.Prepare("select * from foo where a=?")
 	require.NoError(t, err)
 
@@ -228,6 +229,7 @@ func TestBasic(t *testing.T) {
 	err = stmt2.Close()
 	require.NoError(t, err)
 
+	// https://github.com/nakagami/firebirdsql/issues/174#issuecomment-2134693366
 	stmt, err = conn.Prepare("select * from foo where a=?")
 	require.NoError(t, err)
 
@@ -241,6 +243,39 @@ func TestBasic(t *testing.T) {
 
 	rows.Close()
 	require.NoError(t, err)
+
+	// https://github.com/nakagami/firebirdsql/issues/174#issuecomment-2139296394
+	// START TX1
+	tx, err = conn.Begin()
+	require.NoError(t, err)
+
+	stmt1, err = conn.Prepare(`select * from foo where a=?`)
+	require.NoError(t, err)
+	rows1, err := tx.Stmt(stmt1).Query(1)
+	require.NoError(t, err)
+	err = rows1.Close()
+	require.NoError(t, err)
+	err = stmt1.Close()
+	require.NoError(t, err)
+
+	stmt2, err = conn.Prepare(`select * from foo where a=?`)
+	require.NoError(t, err)
+	_, err = tx.Stmt(stmt2).Exec(333)
+	require.NoError(t, err)
+
+	err = tx.Commit()
+	require.NoError(t, err)
+	// END TX1
+
+	// START TX2
+	tx, err = conn.Begin()
+	require.NoError(t, err)
+	_, err = tx.Stmt(stmt2).Exec(333)
+	require.NoError(t, err)
+	err = tx.Rollback()
+	require.NoError(t, err)
+	// END TX2
+
 	err = conn.Close()
 	require.NoError(t, err)
 	// Issue #174 end

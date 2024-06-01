@@ -38,6 +38,9 @@ type firebirdsqlStmt struct {
 }
 
 func (stmt *firebirdsqlStmt) Close() (err error) {
+	if stmt.stmtHandle == -1 { // alredy closed
+		return
+	}
 	err = stmt.fc.wp.opFreeStatement(stmt.stmtHandle, 2) // DSQL_drop
 	stmt.stmtHandle = -1
 	if err != nil {
