@@ -1222,6 +1222,39 @@ func TestGoIssue172(t *testing.T) {
 	require.NoError(t, rows.Close())
 }
 
+func TestKSC_5601(t *testing.T) {
+	testDsn := GetTestDSN("test_KSC_5601_") + "?charset=KSC_5601"
+	conn, err := sql.Open("firebirdsql_createdb", testDsn)
+	require.NoError(t, err)
+
+	query := `CREATE TABLE t (text CHAR(6))`
+	_, err = conn.Exec(query)
+	require.NoError(t, err)
+
+	_, err = conn.Exec("INSERT INTO t VALUES ('안녕하세요.')")
+	require.NoError(t, err)
+
+	rows, err := conn.Query("SELECT text FROM t")
+	require.NoError(t, err)
+
+	var text string
+	require.True(t, rows.Next())
+	require.NoError(t, rows.Scan(&text))
+	assert.Equal(t, "안녕하세요.", text)
+	require.NoError(t, rows.Close())
+
+	_, err = conn.Exec("INSERT INTO t VALUES (?)", "안녕하세요.")
+	require.NoError(t, err)
+
+	rows, err = conn.Query("SELECT text FROM t")
+	require.NoError(t, err)
+
+	require.True(t, rows.Next())
+	require.NoError(t, rows.Scan(&text))
+	assert.Equal(t, "안녕하세요.", text)
+	require.NoError(t, rows.Close())
+}
+
 func TestTimeoutQueryContextDuringScan(t *testing.T) {
 	testDsn := GetTestDSN("test_timeout_query_context_scan_")
 	conn, err := sql.Open("firebirdsql_createdb", testDsn)
