@@ -33,6 +33,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/kardianos/osext"
+	"gitlab.com/nyarla/go-crypt"
+	"golang.org/x/crypto/chacha20"
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/encoding/japanese"
 	"golang.org/x/text/encoding/korean"
@@ -44,10 +47,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/kardianos/osext"
-	"gitlab.com/nyarla/go-crypt"
-	"golang.org/x/crypto/chacha20"
 	//"unsafe"
 )
 
@@ -226,7 +225,7 @@ func (p *wireProtocol) packBytes(b []byte) {
 }
 
 func (p *wireProtocol) packString(s string) {
-	p.buf = append(p.buf, xdrBytes([]byte(s))...)
+	p.buf = append(p.buf, xdrBytes([]byte(p.encodeString(s)))...)
 }
 
 func (p *wireProtocol) appendBytes(bs []byte) {
