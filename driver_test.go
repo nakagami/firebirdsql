@@ -1142,6 +1142,13 @@ func TestGoIssue164(t *testing.T) {
 	require.NoError(t, rows.Scan(&text))
 	assert.Equal(t, "Б", text)
 	require.NoError(t, rows.Close())
+
+	var text2 string
+	stmt, err := conn.Prepare("select text from t where text=?")
+	require.NoError(t, err)
+	err = stmt.QueryRow(text).Scan(&text2)
+	require.NoError(t, err)
+	assert.Equal(t, "Б", text2)
 }
 
 func TestGoIssue170(t *testing.T) {
