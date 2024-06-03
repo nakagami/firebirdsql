@@ -38,6 +38,9 @@ type firebirdsqlStmt struct {
 }
 
 func (stmt *firebirdsqlStmt) Close() (err error) {
+	if stmt.stmtHandle == -1 { // alredy closed
+		return
+	}
 	err = stmt.fc.wp.opFreeStatement(stmt.stmtHandle, 2) // DSQL_drop
 	stmt.stmtHandle = -1
 	if err != nil {
@@ -51,7 +54,7 @@ func (stmt *firebirdsqlStmt) Close() (err error) {
 	}
 
 	if stmt.fc.tx.isAutocommit {
-		stmt.fc.tx.Commit()
+		stmt.fc.tx.commitRetainging()
 	}
 	return
 }
@@ -124,13 +127,14 @@ func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (dr
 	var result []driver.Value
 	var done = make(chan struct{}, 1)
 
-	if stmt.stmtHandle == -1 {
-		if stmt.fc.tx.needBegin {
-			err := stmt.fc.tx.begin()
-			if err != nil {
-				return nil, err
-			}
+	if stmt.fc.tx.needBegin {
+		err := stmt.fc.tx.begin()
+		if err != nil {
+			return nil, err
 		}
+	}
+
+	if stmt.stmtHandle == -1 {
 		stmt, err = newFirebirdsqlStmt(stmt.fc, stmt.queryString)
 	}
 
