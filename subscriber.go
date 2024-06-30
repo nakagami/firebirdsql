@@ -164,13 +164,23 @@ func (s *Subscription) connAuxRequest() (int32, *net.IP, int, error) {
 	}
 	family := bytes_to_int16(buf[0:2])
 	port := binary.BigEndian.Uint16(buf[2:4])
-	ip := net.IPv4(buf[4], buf[5], buf[6], buf[7])
 
-	if syscall.AF_INET != family {
-		return -1, nil, 0, fmt.Errorf("unsupported  family protocol: %x", family)
+	if family == syscall.AF_INET {
+		ip := net.IPv4(buf[4], buf[5], buf[6], buf[7])
+		return auxHandle, &ip, int(port), nil
+	} else if family == syscall.AF_INET6 {
+		fmt.Printf("buf:%v\n", buf)
+		ip := net.IPv4(buf[20], buf[21], buf[22], buf[23])
+		fmt.Println("family")
+		fmt.Println(family)
+		fmt.Println("port")
+		fmt.Println(port)
+		fmt.Println("ip")
+		fmt.Println(ip)
+		return auxHandle, &ip, int(port), nil
 	}
+	return -1, nil, 0, fmt.Errorf("unsupported  family protocol: %x", family)
 
-	return auxHandle, &ip, int(port), nil
 }
 
 func (s *Subscription) NotifyClose(receiver chan error) {
