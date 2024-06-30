@@ -6,8 +6,6 @@ package firebirdsql
 import (
 	"encoding/binary"
 	"fmt"
-	"net"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -97,12 +95,11 @@ func (s *Subscription) queueEvents(eventID int32) error {
 }
 
 func (s *Subscription) getEventManager() (*eventManager, error) {
-	auxHandle, addr, port, err := s.connAuxRequest()
+	auxHandle, hostPort, err := s.connAuxRequest()
 	if err != nil {
 		return nil, err
 	}
-	address := addr.String() + ":" + strconv.Itoa(port)
-	newManager, err := newEventManager(address, auxHandle)
+	newManager, err := newEventManager(hostPort, auxHandle)
 	if err != nil {
 		return nil, err
 	}
@@ -153,34 +150,29 @@ func (s *Subscription) unsubscribeNoNotify() error {
 	return s.Unsubscribe()
 }
 
-// returns network, address, error
-func (s *Subscription) connAuxRequest() (int32, *net.IP, int, error) {
+// returns "ip_address:port"
+func (s *Subscription) connAuxRequest() (auxHandle int32, hostPort string, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.fc.wp.opConnectRequest()
 	auxHandle, _, buf, err := s.fc.wp.opResponse()
 	if err != nil {
-		return -1, nil, 0, err
+		return
 	}
 	family := bytes_to_int16(buf[0:2])
 	port := binary.BigEndian.Uint16(buf[2:4])
 
 	if family == syscall.AF_INET {
-		ip := net.IPv4(buf[4], buf[5], buf[6], buf[7])
-		return auxHandle, &ip, int(port), nil
+		hostPort = fmt.Sprintf("%d.%d.%d.%d:%d", buf[4], buf[5], buf[6], buf[7], port)
+		return
 	} else if family == syscall.AF_INET6 {
+		// TODO:
 		fmt.Printf("buf:%v\n", buf)
-		ip := net.IPv4(buf[20], buf[21], buf[22], buf[23])
-		fmt.Println("family")
-		fmt.Println(family)
-		fmt.Println("port")
-		fmt.Println(port)
-		fmt.Println("ip")
-		fmt.Println(ip)
-		return auxHandle, &ip, int(port), nil
+		hostPort = fmt.Sprintf("%d.%d.%d.%d:%d", buf[20], buf[21], buf[22], buf[23], port)
+		return
 	}
-	return -1, nil, 0, fmt.Errorf("unsupported  family protocol: %x", family)
-
+	err = fmt.Errorf("unsupported  family protocol: %x", family)
+	return
 }
 
 func (s *Subscription) NotifyClose(receiver chan error) {
