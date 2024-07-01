@@ -9,12 +9,12 @@ on:
 jobs:
 
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
-        go: ['1.18', '1.19', '1.20']
+        go: ['1.20', '1.21', '1.22']
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Set up Firebird
       run: |
@@ -25,7 +25,7 @@ jobs:
         grep '=' /etc/firebird/3.0/SYSDBA.password |sed 's/^/export /' >test_user.env
 
     - name: Set up Go ${{ matrix.go }}
-      uses: actions/setup-go@v3
+      uses: actions/setup-go@v5
       with:
         go-version: ${{ matrix.go }}
 
