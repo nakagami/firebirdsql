@@ -6,6 +6,8 @@ package firebirdsql
 import (
 	"encoding/binary"
 	"fmt"
+	"net/netip"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -95,11 +97,11 @@ func (s *Subscription) queueEvents(eventID int32) error {
 }
 
 func (s *Subscription) getEventManager() (*eventManager, error) {
-	auxHandle, hostPort, err := s.connAuxRequest()
+	auxHandle, addrPort, err := s.connAuxRequest()
 	if err != nil {
 		return nil, err
 	}
-	newManager, err := newEventManager(hostPort, auxHandle)
+	newManager, err := newEventManager(addrPort.String(), auxHandle)
 	if err != nil {
 		return nil, err
 	}
@@ -150,29 +152,34 @@ func (s *Subscription) unsubscribeNoNotify() error {
 	return s.Unsubscribe()
 }
 
-// returns "ip_address:port"
-func (s *Subscription) connAuxRequest() (auxHandle int32, hostPort string, err error) {
+func (s *Subscription) connAuxRequest() (int32, *netip.AddrPort, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.fc.wp.opConnectRequest()
 	auxHandle, _, buf, err := s.fc.wp.opResponse()
 	if err != nil {
-		return
+		return -1, nil, err
 	}
 	family := bytes_to_int16(buf[0:2])
 	port := binary.BigEndian.Uint16(buf[2:4])
 
-	if family == syscall.AF_INET {
-		hostPort = fmt.Sprintf("%d.%d.%d.%d:%d", buf[4], buf[5], buf[6], buf[7], port)
-		return
-	} else if family == syscall.AF_INET6 {
-		// TODO:
-		fmt.Printf("buf:%v\n", buf)
-		hostPort = fmt.Sprintf("%d.%d.%d.%d:%d", buf[20], buf[21], buf[22], buf[23], port)
-		return
+	if family != syscall.AF_INET && family != syscall.AF_INET6 {
+		err = fmt.Errorf("unsupported  family protocol: %x", family)
+		return -1, nil, err
 	}
-	err = fmt.Errorf("unsupported  family protocol: %x", family)
-	return
+
+	var addr netip.Addr
+	if family == syscall.AF_INET {
+		addr = netip.AddrFrom4([4]byte(buf[4:8]))
+	} else if family == syscall.AF_INET6 {
+		if reflect.DeepEqual(buf[4:20], []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff}) {
+			addr = netip.MustParseAddr(fmt.Sprintf("::ffff:%d.%d.%d.%d", buf[20], buf[21], buf[22], buf[23]))
+		} else {
+			addr = netip.AddrFrom16([16]byte(buf[4:20]))
+		}
+	}
+	addrPort := netip.AddrPortFrom(addr, port)
+	return auxHandle, &addrPort, nil
 }
 
 func (s *Subscription) NotifyClose(receiver chan error) {
