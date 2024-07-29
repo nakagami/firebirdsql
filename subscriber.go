@@ -166,7 +166,7 @@ func (s *Subscription) connAuxRequest() (int32, *netip.AddrPort, error) {
 	var addr netip.Addr
 	if family == syscall.AF_INET {
 		addr = netip.AddrFrom4([4]byte(buf[4:8]))
-	} else if family == syscall.AF_INET6 || family == syscall.AF_IRDA {
+	} else if family == syscall.AF_INET6 {
 		if reflect.DeepEqual(buf[4:20], []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff}) {
 			addr = netip.AddrFrom4([4]byte(buf[20:24]))
 		} else {
