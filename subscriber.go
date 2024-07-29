@@ -163,20 +163,19 @@ func (s *Subscription) connAuxRequest() (int32, *netip.AddrPort, error) {
 	family := bytes_to_int16(buf[0:2])
 	port := binary.BigEndian.Uint16(buf[2:4])
 
-	if family != syscall.AF_INET && family != syscall.AF_INET6 {
-		err = fmt.Errorf("unsupported  family protocol: %x", family)
-		return -1, nil, err
-	}
-
 	var addr netip.Addr
 	if family == syscall.AF_INET {
 		addr = netip.AddrFrom4([4]byte(buf[4:8]))
-	} else if family == syscall.AF_INET6 {
+	} else if family == syscall.AF_INET6 || family == syscall.AF_IRDA {
 		if reflect.DeepEqual(buf[4:20], []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff}) {
-			addr = netip.MustParseAddr(fmt.Sprintf("::ffff:%d.%d.%d.%d", buf[20], buf[21], buf[22], buf[23]))
+			addr = netip.AddrFrom4([4]byte(buf[20:24]))
 		} else {
 			addr = netip.AddrFrom16([16]byte(buf[4:20]))
 		}
+	} else {
+
+		err = fmt.Errorf("unsupported  family protocol: %x", family)
+		return -1, nil, err
 	}
 	addrPort := netip.AddrPortFrom(addr, port)
 	return auxHandle, &addrPort, nil
