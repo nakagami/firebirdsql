@@ -219,9 +219,9 @@ func (mm *MaintenanceManager) CommitTransaction(database string, transaction int
 	spb := NewXPBWriterFromTag(isc_action_svc_repair)
 	spb.PutString(isc_spb_dbname, database)
 	if fitsUint32(transaction) {
-		spb.PutInt32(isc_spb_rpr_rollback_trans, int32(transaction))
+		spb.PutInt32(isc_spb_rpr_commit_trans, int32(transaction))
 	} else {
-		spb.PutInt64(isc_spb_rpr_rollback_trans_64, transaction)
+		spb.PutInt64(isc_spb_rpr_commit_trans_64, transaction)
 	}
 	return mm.attach(spb.Bytes(), nil)
 }
