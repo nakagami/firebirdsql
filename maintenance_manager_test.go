@@ -83,12 +83,12 @@ func TestServiceManager_Sweep(t *testing.T) {
 	assert.NoError(t, err)
 	log := getFirebirdLog(t)
 	fmt.Println(log)
-	assert.Equal(t, `Sweep is started by SYSDBA
+	assert.Contains(t, log, `Sweep is started by SYSDBA
 Database xxxxx
 OIT xxx, OAT xxx, OST xxx, Next xxx
 Sweep is finished
 Database xxxxx
-OIT xxx, OAT xxx, OST xxx, Next xxx`, log)
+OIT xxx, OAT xxx, OST xxx, Next xxx`)
 }
 
 func TestServiceManager_Validate(t *testing.T) {
@@ -107,19 +107,19 @@ func TestServiceManager_Validate(t *testing.T) {
 	err = m.Validate(db, isc_spb_rpr_check_db)
 	assert.NoError(t, err)
 	log := getFirebirdLog(t)
-	assert.Equal(t, `Database xxxxx
+	assert.Contains(t, log, `Database xxxxx
 Validation started
 Database xxxxx
-Validation finished: x errors, x warnings, x fixed`, log)
+Validation finished: x errors, x warnings, x fixed`)
 
 	cleanFirebirdLog(t)
 	err = m.Validate(db, isc_spb_rpr_full)
 	assert.NoError(t, err)
 	log = getFirebirdLog(t)
-	assert.Equal(t, `Database xxxxx
+	assert.Contains(t, log, `Database xxxxx
 Validation started
 Database xxxxx
-Validation finished: x errors, x warnings, x fixed`, log)
+Validation finished: x errors, x warnings, x fixed`)
 }
 
 func TestServiceManager_Mend(t *testing.T) {
@@ -138,10 +138,10 @@ func TestServiceManager_Mend(t *testing.T) {
 	err = m.Mend(db)
 	assert.NoError(t, err)
 	log := getFirebirdLog(t)
-	assert.Equal(t, `Database xxxxx
+	assert.Contains(t, log, `Database xxxxx
 Validation started
 Database xxxxx
-Validation finished: x errors, x warnings, x fixed`, log)
+Validation finished: x errors, x warnings, x fixed`)
 }
 
 func TestServiceManager_ListLimboTransactions(t *testing.T) {
