@@ -1620,6 +1620,7 @@ func (p *wireProtocol) encodeString(str string) string {
 	default:
 		return str // If the specified charset is not supported, return the input string without any modification or encoding.
 	}
+}
 
 func (p *wireProtocol) opServiceAttach() error {
 	p.debugPrint("opServiceAttach()")
