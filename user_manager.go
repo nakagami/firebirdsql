@@ -17,63 +17,98 @@ type UserManager struct {
 }
 
 type UserManagerOptions struct {
-	ServiceManagerOptions
 	SecurityDB string
+}
+
+type UserManagerOption func(*UserManagerOptions)
+
+func WithSecurityDB(securityDB string) UserManagerOption {
+	return func(opts *UserManagerOptions) {
+		opts.SecurityDB = securityDB
+	}
 }
 
 func GetDefaultUserManagerOptions() UserManagerOptions {
 	return UserManagerOptions{
-		ServiceManagerOptions: GetDefaultServiceManagerOptions(),
-		SecurityDB:            "",
+		SecurityDB: "",
 	}
 }
 
-func (umo UserManagerOptions) WithSecurityDB(securityDB string) UserManagerOptions {
-	umo.SecurityDB = securityDB
-	return umo
+func NewUserManagerOptions(opts ...UserManagerOption) UserManagerOptions {
+	res := GetDefaultUserManagerOptions()
+	for _, opt := range opts {
+		opt(&res)
+	}
+	return res
 }
 
-func NewUser(username string) *User {
-	return &User{
-		Username: &username,
-		UserId:   -1,
-		GroupId:  -1,
+type UserOption func(*User)
+
+func WithUsername(username string) UserOption {
+	return func(opts *User) {
+		opts.Username = &username
 	}
 }
 
-func (u *User) WithPassword(password string) *User {
-	u.Password = &password
-	return u
+func WithPassword(password string) UserOption {
+	return func(opts *User) {
+		opts.Password = &password
+	}
 }
 
-func (u *User) WithFirstName(firstname string) *User {
-	u.FirstName = &firstname
-	return u
+func WithFirstName(firstname string) UserOption {
+	return func(opts *User) {
+		opts.FirstName = &firstname
+	}
 }
 
-func (u *User) WithMiddleName(middlename string) *User {
-	u.MiddleName = &middlename
-	return u
+func WithMiddleName(middlename string) UserOption {
+	return func(opts *User) {
+		opts.MiddleName = &middlename
+	}
 }
 
-func (u *User) WithLastName(lastname string) *User {
-	u.LastName = &lastname
-	return u
+func WithLastName(lastname string) UserOption {
+	return func(opts *User) {
+		opts.LastName = &lastname
+	}
 }
 
-func (u *User) WithUserId(userId int32) *User {
-	u.UserId = userId
-	return u
+func WithUserId(userId int32) UserOption {
+	return func(opts *User) {
+		opts.UserId = userId
+	}
 }
 
-func (u *User) WithGroupId(groupId int32) *User {
-	u.GroupId = groupId
-	return u
+func WithGroupId(groupId int32) UserOption {
+	return func(opts *User) {
+		opts.GroupId = groupId
+	}
 }
 
-func (u *User) WithAdmin(admin bool) *User {
-	u.Admin = &admin
-	return u
+func WithAdmin() UserOption {
+	return func(opts *User) {
+		res := true
+		opts.Admin = &res
+	}
+}
+
+func WithoutAdmin() UserOption {
+	return func(opts *User) {
+		res := false
+		opts.Admin = &res
+	}
+}
+
+func NewUser(opts ...UserOption) User {
+	res := User{
+		UserId:  -1,
+		GroupId: -1,
+	}
+	for _, opt := range opts {
+		opt(&res)
+	}
+	return res
 }
 
 func (u *User) GetSpb() []byte {
@@ -109,18 +144,18 @@ func (u *User) GetSpb() []byte {
 	return srb.Bytes()
 }
 
-func NewUserManager(addr string, user string, password string, options UserManagerOptions) (*UserManager, error) {
+func NewUserManager(addr string, user string, password string, smo ServiceManagerOptions, umo UserManagerOptions) (*UserManager, error) {
 	var (
 		sm  *ServiceManager
 		err error
 	)
 
-	if sm, err = NewServiceManager(addr, user, password, options.ServiceManagerOptions); err != nil {
+	if sm, err = NewServiceManager(addr, user, password, smo); err != nil {
 		return nil, err
 	}
 	return &UserManager{
 		sm,
-		options.SecurityDB,
+		umo.SecurityDB,
 	}, nil
 }
 
@@ -139,19 +174,19 @@ func (um *UserManager) userAction(action byte, user *User) error {
 	return um.sm.ServiceStart(spb.Bytes())
 }
 
-func (um *UserManager) AddUser(user *User) error {
-	err := um.userAction(isc_action_svc_add_user, user)
+func (um *UserManager) AddUser(user User) error {
+	err := um.userAction(isc_action_svc_add_user, &user)
 	return err
 }
 
-func (um *UserManager) DeleteUser(user *User) error {
-	del := NewUser(*user.Username)
-	err := um.userAction(isc_action_svc_delete_user, del)
+func (um *UserManager) DeleteUser(user User) error {
+	del := NewUser(WithUsername(*user.Username))
+	err := um.userAction(isc_action_svc_delete_user, &del)
 	return err
 }
 
-func (um *UserManager) ModifyUser(user *User) error {
-	err := um.userAction(isc_action_svc_modify_user, user)
+func (um *UserManager) ModifyUser(user User) error {
+	err := um.userAction(isc_action_svc_modify_user, &user)
 	return err
 }
 
@@ -191,7 +226,8 @@ func (um *UserManager) GetUsers() ([]User, error) {
 					if user != nil {
 						users = append(users, *user)
 					}
-					user = NewUser(srb.GetString())
+					u := NewUser(WithUsername(srb.GetString()))
+					user = &u
 				case isc_spb_sec_firstname:
 					s := srb.GetString()
 					user.FirstName = &s

@@ -32,6 +32,8 @@ type ServiceManagerOptions struct {
 	AuthPlugin string
 }
 
+type ServiceManagerOption func(*ServiceManagerOptions)
+
 func GetServiceInfoSPBPreamble() []byte {
 	return []byte{isc_spb_version, isc_spb_current_version}
 }
@@ -52,6 +54,32 @@ func GetDefaultServiceManagerOptions() ServiceManagerOptions {
 		WireCrypt:  true,
 		AuthPlugin: "Srp256",
 	}
+}
+
+func WithWireCrypt() ServiceManagerOption {
+	return func(opts *ServiceManagerOptions) {
+		opts.WireCrypt = true
+	}
+}
+
+func WithoutWireCrypt() ServiceManagerOption {
+	return func(opts *ServiceManagerOptions) {
+		opts.WireCrypt = false
+	}
+}
+
+func WithAuthPlugin(authPlugin string) ServiceManagerOption {
+	return func(opts *ServiceManagerOptions) {
+		opts.AuthPlugin = authPlugin
+	}
+}
+
+func NewServiceManagerOptions(opts ...ServiceManagerOption) ServiceManagerOptions {
+	res := GetDefaultServiceManagerOptions()
+	for _, opt := range opts {
+		opt(&res)
+	}
+	return res
 }
 
 func (sm ServiceManagerOptions) WithoutWireCrypt() ServiceManagerOptions {

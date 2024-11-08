@@ -14,6 +14,8 @@ type BackupOptions struct {
 	Expand                                bool
 }
 
+type BackupOption func(*BackupOptions)
+
 type RestoreOptions struct {
 	Replace              bool
 	DeactivateIndexes    bool
@@ -24,6 +26,8 @@ type RestoreOptions struct {
 	PageSize             int32
 	CacheBuffers         int32
 }
+
+type RestoreOption func(*RestoreOptions)
 
 func GetDefaultBackupOptions() BackupOptions {
 	return BackupOptions{
@@ -37,6 +41,98 @@ func GetDefaultBackupOptions() BackupOptions {
 	}
 }
 
+func WithIgnoreChecksums() BackupOption {
+	return func(opts *BackupOptions) {
+		opts.IgnoreChecksums = true
+	}
+}
+
+func WithoutIgnoreChecksums() BackupOption {
+	return func(opts *BackupOptions) {
+		opts.IgnoreChecksums = false
+	}
+}
+
+func WithIgnoreLimboTransactions() BackupOption {
+	return func(opts *BackupOptions) {
+		opts.IgnoreLimboTransactions = true
+	}
+}
+
+func WithoutIgnoreLimboTransactions() BackupOption {
+	return func(opts *BackupOptions) {
+		opts.IgnoreLimboTransactions = false
+	}
+}
+
+func WithMetadataOnly() BackupOption {
+	return func(opts *BackupOptions) {
+		opts.MetadataOnly = true
+	}
+}
+
+func WithoutMetadataOnly() BackupOption {
+	return func(opts *BackupOptions) {
+		opts.MetadataOnly = false
+	}
+}
+
+func WithGarbageCollect() BackupOption {
+	return func(opts *BackupOptions) {
+		opts.GarbageCollect = true
+	}
+}
+
+func WithoutGarbageCollect() BackupOption {
+	return func(opts *BackupOptions) {
+		opts.GarbageCollect = false
+	}
+}
+
+func WithTransportable() BackupOption {
+	return func(opts *BackupOptions) {
+		opts.Transportable = true
+	}
+}
+
+func WithoutTransportable() BackupOption {
+	return func(opts *BackupOptions) {
+		opts.Transportable = false
+	}
+}
+
+func WithConvertExternalTablesToInternalTables() BackupOption {
+	return func(opts *BackupOptions) {
+		opts.ConvertExternalTablesToInternalTables = true
+	}
+}
+
+func WithoutConvertExternalTablesToInternalTables() BackupOption {
+	return func(opts *BackupOptions) {
+		opts.ConvertExternalTablesToInternalTables = false
+	}
+}
+
+func WithExpand() BackupOption {
+	return func(opts *BackupOptions) {
+		opts.Expand = true
+	}
+}
+
+func WithoutExpand() BackupOption {
+	return func(opts *BackupOptions) {
+		opts.Expand = false
+	}
+}
+
+func NewBackupOptions(opts ...BackupOption) BackupOptions {
+	res := GetDefaultBackupOptions()
+	for _, opt := range opts {
+		opt(&res)
+	}
+	return res
+}
+
 func GetDefaultRestoreOptions() RestoreOptions {
 	return RestoreOptions{
 		Replace:              false,
@@ -48,6 +144,92 @@ func GetDefaultRestoreOptions() RestoreOptions {
 		PageSize:             0,
 		CacheBuffers:         0,
 	}
+}
+
+func WithReplace() RestoreOption {
+	return func(opts *RestoreOptions) {
+		opts.Replace = true
+	}
+}
+
+func WithoutReplace() RestoreOption {
+	return func(opts *RestoreOptions) {
+		opts.Replace = false
+	}
+}
+
+func WithDeactivateIndexes() RestoreOption {
+	return func(opts *RestoreOptions) {
+		opts.DeactivateIndexes = true
+	}
+}
+
+func WithRestoreShadows() RestoreOption {
+	return func(opts *RestoreOptions) {
+		opts.RestoreShadows = true
+	}
+}
+
+func WithoutRestoreShadows() RestoreOption {
+	return func(opts *RestoreOptions) {
+		opts.RestoreShadows = false
+	}
+}
+
+func WithEnforceConstraints() RestoreOption {
+	return func(opts *RestoreOptions) {
+		opts.EnforceConstraints = true
+	}
+}
+
+func WithoutEnforceConstraints() RestoreOption {
+	return func(opts *RestoreOptions) {
+		opts.EnforceConstraints = false
+	}
+}
+
+func WithCommitAfterEachTable() RestoreOption {
+	return func(opts *RestoreOptions) {
+		opts.CommitAfterEachTable = true
+	}
+}
+
+func WithoutCommitAfterEachTable() RestoreOption {
+	return func(opts *RestoreOptions) {
+		opts.CommitAfterEachTable = false
+	}
+}
+
+func WithUseAllPageSpace() RestoreOption {
+	return func(opts *RestoreOptions) {
+		opts.UseAllPageSpace = true
+	}
+}
+
+func WithoutUseAllPageSpace() RestoreOption {
+	return func(opts *RestoreOptions) {
+		opts.UseAllPageSpace = false
+	}
+}
+
+func WithPageSize(pageSize int32) RestoreOption {
+	return func(opts *RestoreOptions) {
+		opts.PageSize = pageSize
+	}
+}
+
+func WithCacheBuffers(cacheBuffers int32) RestoreOption {
+	return func(opts *RestoreOptions) {
+		opts.CacheBuffers = cacheBuffers
+	}
+}
+
+func NewRestoreOptions(opts ...RestoreOption) RestoreOptions {
+	res := GetDefaultRestoreOptions()
+	for _, opt := range opts {
+		opt(&res)
+	}
+	return res
 }
 
 func NewBackupManager(addr string, user string, password string, options ServiceManagerOptions) (*BackupManager, error) {

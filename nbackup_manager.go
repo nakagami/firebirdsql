@@ -12,6 +12,8 @@ type NBackupOptions struct {
 	PreserveSequence bool
 }
 
+type NBackupOption func(*NBackupOptions)
+
 func GetDefaultNBackupOptions() NBackupOptions {
 	return NBackupOptions{
 		Level:            -1,
@@ -36,6 +38,62 @@ func (o NBackupOptions) GetOptionsMask() int32 {
 	}
 
 	return optionsMask
+}
+
+func WithLevel(level int) NBackupOption {
+	return func(opts *NBackupOptions) {
+		opts.Level = int32(level)
+	}
+}
+
+func WithGuid(guid string) NBackupOption {
+	return func(opts *NBackupOptions) {
+		opts.Guid = guid
+	}
+}
+
+func WithoutDBTriggers() NBackupOption {
+	return func(opts *NBackupOptions) {
+		opts.NoDBTriggers = true
+	}
+}
+
+func WithDBTriggers() NBackupOption {
+	return func(opts *NBackupOptions) {
+		opts.NoDBTriggers = false
+	}
+}
+
+func WithInPlaceRestore() NBackupOption {
+	return func(opts *NBackupOptions) {
+		opts.InPlaceRestore = false
+	}
+}
+
+func WithPlaceRestore() NBackupOption {
+	return func(opts *NBackupOptions) {
+		opts.InPlaceRestore = true
+	}
+}
+
+func WithPreserveSequence() NBackupOption {
+	return func(opts *NBackupOptions) {
+		opts.PreserveSequence = true
+	}
+}
+
+func WithoutPreserveSequence() NBackupOption {
+	return func(opts *NBackupOptions) {
+		opts.PreserveSequence = false
+	}
+}
+
+func NewNBackupOptions(opts ...NBackupOption) NBackupOptions {
+	res := GetDefaultNBackupOptions()
+	for _, opt := range opts {
+		opt(&res)
+	}
+	return res
 }
 
 func NewNBackupManager(addr string, user string, password string, options ServiceManagerOptions) (*NBackupManager, error) {

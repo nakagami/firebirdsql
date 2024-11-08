@@ -52,3 +52,10 @@ func TestBackupManager(t *testing.T) {
 	err = bm.Restore(dbBackup, dbPathRest, opt, nil)
 	require.NoError(t, err, "Restore")
 }
+
+func TestBackupOptions(t *testing.T) {
+	opts := NewBackupOptions()
+	assert.Equal(t, BackupOptions{IgnoreChecksums: false, IgnoreLimboTransactions: false, MetadataOnly: false, GarbageCollect: true, Transportable: true, ConvertExternalTablesToInternalTables: true, Expand: false}, opts)
+	opts = NewBackupOptions(WithIgnoreChecksums(), WithIgnoreLimboTransactions(), WithMetadataOnly(), WithoutGarbageCollect(), WithoutTransportable(), WithoutConvertExternalTablesToInternalTables(), WithExpand())
+	assert.Equal(t, BackupOptions{IgnoreChecksums: true, IgnoreLimboTransactions: true, MetadataOnly: true, GarbageCollect: false, Transportable: false, ConvertExternalTablesToInternalTables: false, Expand: true}, opts)
+}

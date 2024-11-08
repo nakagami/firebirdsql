@@ -64,3 +64,10 @@ func TestServiceManager_Info(t *testing.T) {
 	assert.NoError(t, err, "GetDbStatsString")
 	assert.NotEmpty(t, s, "GetDbStatsString")
 }
+
+func TestServiceManagerOptions(t *testing.T) {
+	opts := NewServiceManagerOptions()
+	assert.Equal(t, ServiceManagerOptions{WireCrypt: true, AuthPlugin: "Srp256"}, opts)
+	opts = NewServiceManagerOptions(WithoutWireCrypt(), WithAuthPlugin("LegacyAuth"))
+	assert.Equal(t, ServiceManagerOptions{WireCrypt: false, AuthPlugin: "LegacyAuth"}, opts)
+}
