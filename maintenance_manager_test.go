@@ -295,6 +295,10 @@ func TestServiceManager_SetSweepInterval(t *testing.T) {
 }
 
 func TestServiceManager_NoLinger(t *testing.T) {
+	if get_firebird_major_version(t) < 3 {
+		t.Skip("firebird 2.5 do not support isc_spb_prp_nolinger")
+	}
+
 	db, _, err := CreateTestDatabase("test_nolinger_")
 	require.NoError(t, err)
 
