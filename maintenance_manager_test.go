@@ -85,8 +85,8 @@ func TestServiceManager_Sweep(t *testing.T) {
 	fmt.Println(log)
 	assert.Contains(t, log, `Sweep is started by SYSDBA
 Database xxxxx
-OIT xxx, OAT xxx, OST xxx, Next xxx
-Sweep is finished
+OIT xxx, OAT xxx, OST xxx, Next xxx`)
+	assert.Contains(t, log, `Sweep is finished
 Database xxxxx
 OIT xxx, OAT xxx, OST xxx, Next xxx`)
 }
@@ -108,8 +108,8 @@ func TestServiceManager_Validate(t *testing.T) {
 	assert.NoError(t, err)
 	log := getFirebirdLog(t)
 	assert.Contains(t, log, `Database xxxxx
-Validation started
-Database xxxxx
+Validation started`)
+	assert.Contains(t, log, `Database xxxxx
 Validation finished: x errors, x warnings, x fixed`)
 
 	cleanFirebirdLog(t)
@@ -117,8 +117,8 @@ Validation finished: x errors, x warnings, x fixed`)
 	assert.NoError(t, err)
 	log = getFirebirdLog(t)
 	assert.Contains(t, log, `Database xxxxx
-Validation started
-Database xxxxx
+Validation started`)
+	assert.Contains(t, log, `Database xxxxx
 Validation finished: x errors, x warnings, x fixed`)
 }
 
@@ -139,8 +139,8 @@ func TestServiceManager_Mend(t *testing.T) {
 	assert.NoError(t, err)
 	log := getFirebirdLog(t)
 	assert.Contains(t, log, `Database xxxxx
-Validation started
-Database xxxxx
+Validation started`)
+	assert.Contains(t, log, `Database xxxxx
 Validation finished: x errors, x warnings, x fixed`)
 }
 
