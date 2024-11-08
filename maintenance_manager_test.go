@@ -68,7 +68,7 @@ func grabStringOutput(run func() error, resChan chan string) (string, error) {
 }
 
 func TestServiceManager_Sweep(t *testing.T) {
-	if get_firebird_major_version() < 3 {
+	if get_firebird_major_version(t) < 3 {
 		t.Skip("skip for 2.5, because it running in container")
 	}
 
@@ -92,7 +92,7 @@ OIT xxx, OAT xxx, OST xxx, Next xxx`, log)
 }
 
 func TestServiceManager_Validate(t *testing.T) {
-	if get_firebird_major_version() < 3 {
+	if get_firebird_major_version(t) < 3 {
 		t.Skip("skip for 2.5, because it running in container")
 	}
 
@@ -123,7 +123,7 @@ Validation finished: x errors, x warnings, x fixed`, log)
 }
 
 func TestServiceManager_Mend(t *testing.T) {
-	if get_firebird_major_version() < 3 {
+	if get_firebird_major_version(t) < 3 {
 		t.Skip("skip for 2.5, because it running in container")
 	}
 

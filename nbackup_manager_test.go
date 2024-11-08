@@ -46,7 +46,7 @@ func TestNBackupManagerSingleLevel(t *testing.T) {
 }
 
 func TestNBackupManagerFixup(t *testing.T) {
-	if get_firebird_major_version() < 4 {
+	if get_firebird_major_version(t) < 4 {
 		t.Skip("fixup in Service Manager API supported since 4.0")
 	}
 

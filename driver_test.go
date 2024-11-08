@@ -67,16 +67,13 @@ var (
 		end`
 )
 
-func get_firebird_major_version() int {
+func get_firebird_major_version(t *testing.T) int {
 	sm, err := NewServiceManager("localhost:3050", GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
-	if err != nil {
-		panic("unable to get connect service manager")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, sm)
 	defer sm.Close()
 	version, err := sm.GetServerVersion()
-	if err != nil {
-		panic("unable to get server version")
-	}
+	require.NoError(t, err)
 	return version.Major
 }
 
@@ -494,7 +491,7 @@ func TestBoolean(t *testing.T) {
 		t.Fatalf("Error connecting: %v", err)
 	}
 
-	firebird_major_version := get_firebird_major_version()
+	firebird_major_version := get_firebird_major_version(t)
 	if firebird_major_version < 3 {
 		return
 	}
@@ -553,7 +550,7 @@ func TestDecFloat(t *testing.T) {
 		t.Fatalf("Error connecting: %v", err)
 	}
 
-	firebird_major_version := get_firebird_major_version()
+	firebird_major_version := get_firebird_major_version(t)
 	if firebird_major_version < 4 {
 		return
 	}
@@ -607,7 +604,7 @@ func TestTimeZone(t *testing.T) {
 		t.Fatalf("Error connecting: %v", err)
 	}
 
-	firebird_major_version := get_firebird_major_version()
+	firebird_major_version := get_firebird_major_version(t)
 	if firebird_major_version < 4 {
 		return
 	}
@@ -652,7 +649,7 @@ func TestInt128(t *testing.T) {
 		t.Fatalf("Error connecting: %v", err)
 	}
 
-	firebird_major_version := get_firebird_major_version()
+	firebird_major_version := get_firebird_major_version(t)
 	if firebird_major_version < 4 {
 		return
 	}
@@ -687,7 +684,7 @@ func TestNegativeInt128(t *testing.T) {
 		t.Fatalf("Error connecting: %v", err)
 	}
 
-	firebird_major_version := get_firebird_major_version()
+	firebird_major_version := get_firebird_major_version(t)
 	if firebird_major_version < 4 {
 		return
 	}
@@ -1326,7 +1323,7 @@ func TestGoIssue172(t *testing.T) {
 	testDsn := GetTestDSN("test_constraint_type_")
 	conn, err := sql.Open("firebirdsql_createdb", testDsn)
 	require.NoError(t, err)
-	firebird_major_version := get_firebird_major_version()
+	firebird_major_version := get_firebird_major_version(t)
 	if firebird_major_version < 3 {
 		return
 	}
