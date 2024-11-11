@@ -44,6 +44,8 @@ type StatisticsOptions struct {
 	Tables                    []string
 }
 
+type StatisticsOption func(*StatisticsOptions)
+
 type SrvDbInfo struct {
 	AttachmentsCount int
 	DatabaseCount    int
@@ -70,6 +72,80 @@ func GetDefaultStatisticsOptions() StatisticsOptions {
 		RecordVersions:            false,
 		Tables:                    []string{},
 	}
+}
+
+func WithUserDataPages() StatisticsOption {
+	return func(opts *StatisticsOptions) {
+		opts.UserDataPages = true
+	}
+}
+
+func WithoutUserDataPages() StatisticsOption {
+	return func(opts *StatisticsOptions) {
+		opts.UserDataPages = false
+	}
+}
+
+func WithUserIndexPages() StatisticsOption {
+	return func(opts *StatisticsOptions) {
+		opts.UserIndexPages = true
+	}
+}
+
+func WithoutIndexPages() StatisticsOption {
+	return func(opts *StatisticsOptions) {
+		opts.UserIndexPages = false
+	}
+}
+
+func WithOnlyHeaderPages() StatisticsOption {
+	return func(opts *StatisticsOptions) {
+		opts.OnlyHeaderPages = true
+	}
+}
+
+func WithoutOnlyHeaderPages() StatisticsOption {
+	return func(opts *StatisticsOptions) {
+		opts.OnlyHeaderPages = false
+	}
+}
+
+func WithSystemRelationsAndIndexes() StatisticsOption {
+	return func(opts *StatisticsOptions) {
+		opts.SystemRelationsAndIndexes = true
+	}
+}
+
+func WithoutSystemRelationsAndIndexes() StatisticsOption {
+	return func(opts *StatisticsOptions) {
+		opts.SystemRelationsAndIndexes = false
+	}
+}
+
+func WithRecordVersions() StatisticsOption {
+	return func(opts *StatisticsOptions) {
+		opts.RecordVersions = true
+	}
+}
+
+func WithoutRecordVersions() StatisticsOption {
+	return func(opts *StatisticsOptions) {
+		opts.RecordVersions = false
+	}
+}
+
+func WithTables(tables []string) StatisticsOption {
+	return func(opts *StatisticsOptions) {
+		opts.Tables = tables
+	}
+}
+
+func NewStatisticsOptions(opts ...StatisticsOption) StatisticsOptions {
+	res := GetDefaultStatisticsOptions()
+	for _, opt := range opts {
+		opt(&res)
+	}
+	return res
 }
 
 func GetDefaultServiceManagerOptions() ServiceManagerOptions {

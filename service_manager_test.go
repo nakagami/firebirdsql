@@ -81,9 +81,7 @@ func TestServiceManager_Info(t *testing.T) {
 	assert.NoError(t, err, "GetFbLogString")
 	assert.NotEmpty(t, s, "GetFbLogString")
 
-	opt := GetDefaultStatisticsOptions()
-	opt.OnlyHeaderPages = true
-	s, err = sm.GetDbStatsString(dbPath, opt)
+	s, err = sm.GetDbStatsString(dbPath, NewStatisticsOptions(WithOnlyHeaderPages()))
 	assert.NoError(t, err, "GetDbStatsString")
 	assert.NotEmpty(t, s, "GetDbStatsString")
 }
