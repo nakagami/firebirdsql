@@ -67,35 +67,72 @@ var (
 		end`
 )
 
-func get_firebird_major_version(conn *sql.DB) int {
-	var s string
-	conn.QueryRow("SELECT rdb$get_context('SYSTEM', 'ENGINE_VERSION') from rdb$database").Scan(&s)
-	major_version, _ := strconv.Atoi(s[:strings.Index(s, ".")])
-	return major_version
+func get_firebird_major_version(t *testing.T) int {
+	sm, err := NewServiceManager("localhost:3050", GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
+	require.NoError(t, err)
+	require.NotNil(t, sm)
+	defer sm.Close()
+	version, err := sm.GetServerVersion()
+	require.NoError(t, err)
+	return version.Major
+}
+
+func GetTestDatabase(prefix string) string {
+	randBytes := make([]byte, 16)
+	rand.Read(randBytes)
+	return filepath.Join(os.TempDir(), prefix+hex.EncodeToString(randBytes)+".fdb")
+}
+
+func GetTestBackup(prefix string) string {
+	randBytes := make([]byte, 16)
+	rand.Read(randBytes)
+	return filepath.Join(os.TempDir(), prefix+hex.EncodeToString(randBytes)+".fbk")
 }
 
 func GetTestDSN(prefix string) string {
-	var tmppath string
-	randBytes := make([]byte, 16)
-	rand.Read(randBytes)
+	return GetTestDSNFromDatabase(GetTestDatabase(prefix))
+}
 
-	tmppath = filepath.Join(os.TempDir(), prefix+hex.EncodeToString(randBytes)+".fdb")
+func GetTestDSNFromDatabase(dbPath string) string {
+	return GetTestDSNFromDatabaseUserPassword(dbPath, GetTestUser(), GetTestPassword())
+}
+
+func GetTestDSNFromDatabaseUserPassword(dbPath string, testUser string, testPassword string) string {
 	if runtime.GOOS == "windows" {
-		tmppath = "/" + tmppath
+		dbPath = "/" + dbPath
 	}
+	return testUser + ":" + testPassword + "@localhost:3050" + dbPath
+}
 
-	test_user := "sysdba"
-	if isc_user := os.Getenv("ISC_USER"); isc_user != "" {
-		test_user = isc_user
+func GetTestUser() string {
+	testUser := "sysdba"
+	if iscUser := os.Getenv("ISC_USER"); iscUser != "" {
+		testUser = iscUser
 	}
+	return testUser
+}
 
-	test_password := "masterkey"
-	if isc_password := os.Getenv("ISC_PASSWORD"); isc_password != "" {
-		test_password = isc_password
+func GetTestPassword() string {
+	testPassword := "masterkey"
+	if iscPassword := os.Getenv("ISC_PASSWORD"); iscPassword != "" {
+		testPassword = iscPassword
 	}
+	return testPassword
+}
 
-	retorno := test_user + ":" + test_password + "@localhost:3050"
-	return retorno + tmppath
+func CreateTestDatabase(prefix string) (file string, dsn string, err error) {
+	file = GetTestDatabase(prefix)
+	dsn = GetTestDSNFromDatabase(file)
+	conn, err := sql.Open("firebirdsql_createdb", dsn)
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+	_, err = conn.Exec("select * from rdb$database")
+	if err != nil {
+		return
+	}
+	return
 }
 
 func TestBasic(t *testing.T) {
@@ -454,7 +491,7 @@ func TestBoolean(t *testing.T) {
 		t.Fatalf("Error connecting: %v", err)
 	}
 
-	firebird_major_version := get_firebird_major_version(conn)
+	firebird_major_version := get_firebird_major_version(t)
 	if firebird_major_version < 3 {
 		return
 	}
@@ -513,7 +550,7 @@ func TestDecFloat(t *testing.T) {
 		t.Fatalf("Error connecting: %v", err)
 	}
 
-	firebird_major_version := get_firebird_major_version(conn)
+	firebird_major_version := get_firebird_major_version(t)
 	if firebird_major_version < 4 {
 		return
 	}
@@ -567,7 +604,7 @@ func TestTimeZone(t *testing.T) {
 		t.Fatalf("Error connecting: %v", err)
 	}
 
-	firebird_major_version := get_firebird_major_version(conn)
+	firebird_major_version := get_firebird_major_version(t)
 	if firebird_major_version < 4 {
 		return
 	}
@@ -612,7 +649,7 @@ func TestInt128(t *testing.T) {
 		t.Fatalf("Error connecting: %v", err)
 	}
 
-	firebird_major_version := get_firebird_major_version(conn)
+	firebird_major_version := get_firebird_major_version(t)
 	if firebird_major_version < 4 {
 		return
 	}
@@ -647,7 +684,7 @@ func TestNegativeInt128(t *testing.T) {
 		t.Fatalf("Error connecting: %v", err)
 	}
 
-	firebird_major_version := get_firebird_major_version(conn)
+	firebird_major_version := get_firebird_major_version(t)
 	if firebird_major_version < 4 {
 		return
 	}
@@ -1286,7 +1323,7 @@ func TestGoIssue172(t *testing.T) {
 	testDsn := GetTestDSN("test_constraint_type_")
 	conn, err := sql.Open("firebirdsql_createdb", testDsn)
 	require.NoError(t, err)
-	firebird_major_version := get_firebird_major_version(conn)
+	firebird_major_version := get_firebird_major_version(t)
 	if firebird_major_version < 3 {
 		return
 	}
