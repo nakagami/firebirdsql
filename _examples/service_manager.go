@@ -31,6 +31,16 @@ import (
 )
 
 func main() {
+	// Create some test database
+	conn, err := sql.Open("firebirdsql_createdb", "sysdba:test@localhost/tmp/gofirebirdsqltest.fdb")
+	defer conn.Close()
+	if err != nil || conn == nil {
+		panic(err)
+	}
+	err = conn.Ping()
+	if err != nil {
+		panic(err)
+	}
 	// Base service manager tools
 	sm, err := firebirdsql.NewServiceManager("localhost:3050", "sysdba", "test", firebirdsql.NewServiceManagerOptions())
 	defer sm.Close()
@@ -47,6 +57,13 @@ func main() {
 		panic(err)
 	}
 	fmt.Printf("Server version: %s, installed in %s\n", version.Raw, homeDir)
+
+	//Database statistics
+	dbStats, err := sm.GetDbStatsString("/tmp/gofirebirdsqltest.fdb", firebirdsql.NewStatisticsOptions(firebirdsql.WithOnlyHeaderPages()))
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(dbStats)
 
 	// User management
 	um, err := firebirdsql.NewUserManager("localhost:3050", "sysdba", "test", firebirdsql.NewServiceManagerOptions(), firebirdsql.NewUserManagerOptions())
@@ -69,15 +86,6 @@ func main() {
 	_ = um.DeleteUser(firebirdsql.NewUser(firebirdsql.WithUsername("testuser")))
 
 	// Backup manager
-	conn, err := sql.Open("firebirdsql_createdb", "sysdba:test@localhost/tmp/gofirebirdsqltest.fdb")
-	defer conn.Close()
-	if err != nil || conn == nil {
-		panic(err)
-	}
-	err = conn.Ping()
-	if err != nil {
-		panic(err)
-	}
 
 	// Backup manager (gbak utility)
 	bm, err := firebirdsql.NewBackupManager("localhost:3050", "sysdba", "test", firebirdsql.NewServiceManagerOptions())
