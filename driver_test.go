@@ -1433,3 +1433,13 @@ func TestReuseConnectionAfterTimeout(t *testing.T) {
 	_, err = conn.QueryContext(ctx, "select * from rdb$database")
 	require.NoError(t, err)
 }
+
+func TestAuth(t *testing.T) {
+	conn, err := sql.Open("firebirdsql", GetTestUser()+":wrongpassword@localhost/employee")
+	err = conn.Ping()
+	assert.EqualError(t, err, "auth error")
+
+	conn, err = sql.Open("firebirdsql", "notexisting:wrongpassword@localhost/employee")
+	err = conn.Ping()
+	assert.EqualError(t, err, "auth error")
+}
