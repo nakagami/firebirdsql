@@ -1,7 +1,7 @@
 /*******************************************************************************
 The MIT License (MIT)
 
-Copyright (c) 2013-2019 Hajime Nakagami
+Copyright (c) 2013-2024 Hajime Nakagami
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
@@ -501,8 +501,9 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 						return
 					}
 
-					if DEBUG_SRP && op != op_cont_auth {
-						panic("auth error")
+					if op != op_cont_auth {
+						err = errors.New("Your user name and password are not defined. Ask your database administrator to set up a Firebird login.\n")
+						return
 					}
 
 					b, _ = p.recvPackets(4)
@@ -521,6 +522,10 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 					ln = int(bytes_to_bint32(b))
 					_, _ = p.recvPacketsAlignment(ln) // keys
 				}
+				if len(data) == 0 {
+					err = errors.New("Your user name and password are not defined. Ask your database administrator to set up a Firebird login.\n")
+					return
+				}
 
 				ln = int(bytes_to_int16(data[:2]))
 				serverSalt := data[2 : ln+2]
@@ -533,7 +538,7 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 			} else if p.pluginName == "Legacy_Auth" {
 				authData = bytes.NewBufferString(crypt.Crypt(password, "9z")[2:]).Bytes()
 			} else {
-				err = errors.New("_parse_connect_response() Unauthorized")
+				err = errors.New("Your user name and password are not defined. Ask your database administrator to set up a Firebird login.\n")
 				return
 			}
 		}
@@ -1250,8 +1255,8 @@ func (p *wireProtocol) opResponse() (int32, []byte, []byte, error) {
 	}
 
 	if bytes_to_bint32(b) != op_response {
-		if DEBUG_SRP && bytes_to_bint32(b) == op_cont_auth {
-			panic("auth error")
+		if bytes_to_bint32(b) == op_cont_auth {
+			return 0, nil, nil, errors.New("Your user name and password are not defined. Ask your database administrator to set up a Firebird login.\n")
 		}
 		return 0, nil, nil, NewErrOpResonse(bytes_to_bint32(b))
 	}
