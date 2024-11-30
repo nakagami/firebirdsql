@@ -522,6 +522,10 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 					ln = int(bytes_to_bint32(b))
 					_, _ = p.recvPacketsAlignment(ln) // keys
 				}
+				if len(data) == 0 {
+					err = errors.New("auth error")
+					return
+				}
 
 				ln = int(bytes_to_int16(data[:2]))
 				serverSalt := data[2 : ln+2]
