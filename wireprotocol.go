@@ -502,7 +502,7 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 					}
 
 					if op != op_cont_auth {
-						err = errors.New("auth error")
+						err = errors.New("Your user name and password are not defined. Ask your database administrator to set up a Firebird login.\n")
 						return
 					}
 
@@ -523,7 +523,7 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 					_, _ = p.recvPacketsAlignment(ln) // keys
 				}
 				if len(data) == 0 {
-					err = errors.New("auth error")
+					err = errors.New("Your user name and password are not defined. Ask your database administrator to set up a Firebird login.\n")
 					return
 				}
 
@@ -538,7 +538,7 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 			} else if p.pluginName == "Legacy_Auth" {
 				authData = bytes.NewBufferString(crypt.Crypt(password, "9z")[2:]).Bytes()
 			} else {
-				err = errors.New("auth error")
+				err = errors.New("Your user name and password are not defined. Ask your database administrator to set up a Firebird login.\n")
 				return
 			}
 		}
@@ -1256,7 +1256,7 @@ func (p *wireProtocol) opResponse() (int32, []byte, []byte, error) {
 
 	if bytes_to_bint32(b) != op_response {
 		if bytes_to_bint32(b) == op_cont_auth {
-			return 0, nil, nil, errors.New("auth error")
+			return 0, nil, nil, errors.New("Your user name and password are not defined. Ask your database administrator to set up a Firebird login.\n")
 		}
 		return 0, nil, nil, NewErrOpResonse(bytes_to_bint32(b))
 	}

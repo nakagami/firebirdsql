@@ -1437,9 +1437,9 @@ func TestReuseConnectionAfterTimeout(t *testing.T) {
 func TestAuth(t *testing.T) {
 	conn, err := sql.Open("firebirdsql", GetTestUser()+":wrongpassword@localhost/employee")
 	err = conn.Ping()
-	assert.EqualError(t, err, "auth error")
+	assert.EqualError(t, err, "Your user name and password are not defined. Ask your database administrator to set up a Firebird login.\n")
 
 	conn, err = sql.Open("firebirdsql", "notexisting:wrongpassword@localhost/employee")
 	err = conn.Ping()
-	assert.EqualError(t, err, "auth error")
+	assert.EqualError(t, err, "Your user name and password are not defined. Ask your database administrator to set up a Firebird login.\n")
 }
