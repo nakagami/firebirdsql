@@ -501,8 +501,9 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 						return
 					}
 
-					if DEBUG_SRP && op != op_cont_auth {
-						panic("auth error")
+					if op != op_cont_auth {
+						err = errors.New("auth error")
+						return
 					}
 
 					b, _ = p.recvPackets(4)
@@ -533,7 +534,7 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 			} else if p.pluginName == "Legacy_Auth" {
 				authData = bytes.NewBufferString(crypt.Crypt(password, "9z")[2:]).Bytes()
 			} else {
-				err = errors.New("_parse_connect_response() Unauthorized")
+				err = errors.New("auth error")
 				return
 			}
 		}
@@ -1250,8 +1251,8 @@ func (p *wireProtocol) opResponse() (int32, []byte, []byte, error) {
 	}
 
 	if bytes_to_bint32(b) != op_response {
-		if DEBUG_SRP && bytes_to_bint32(b) == op_cont_auth {
-			panic("auth error")
+		if bytes_to_bint32(b) == op_cont_auth {
+			return 0, nil, nil, errors.New("auth error")
 		}
 		return 0, nil, nil, NewErrOpResonse(bytes_to_bint32(b))
 	}
