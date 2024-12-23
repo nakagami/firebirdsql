@@ -110,7 +110,8 @@ func TestServiceManager_Sweep(t *testing.T) {
 Database xxxxx
 OIT xxx, OAT xxx, OST xxx, Next xxx`)
 	assert.Contains(t, log, `Sweep is finished
-Database xxxxx
+Database xxxxx`)
+	assert.Contains(t, log, `
 OIT xxx, OAT xxx, OST xxx, Next xxx`)
 }
 
