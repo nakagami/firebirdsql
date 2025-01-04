@@ -290,8 +290,15 @@ func (x *xSQLVAR) parseTimestamp(raw_value []byte, timezone string) time.Time {
 
 func (x *xSQLVAR) parseTimeTz(raw_value []byte) time.Time {
 	h, m, s, n := x._parseTime(raw_value[:4])
-	tz := x._parseTimezone(raw_value[4:6])
-	loc := x._parseTimezone(raw_value[6:8])
+	var tz, loc *time.Location
+	timezone_id := bytes_to_buint16(raw_value[4:6])
+	if timezone_id == 0 {
+		tz, _ = time.LoadLocation("GMT")
+		loc = tz
+	} else {
+		tz = x._parseTimezone(raw_value[4:6])
+		loc = x._parseTimezone(raw_value[6:8])
+	}
 	now := time.Now()
 	t := time.Date(now.Year(), now.Month(), now.Day(), h, m, s, n, tz).In(loc)
 	zone, offset := t.Zone()
@@ -301,6 +308,11 @@ func (x *xSQLVAR) parseTimeTz(raw_value []byte) time.Time {
 func (x *xSQLVAR) parseTimestampTz(raw_value []byte) time.Time {
 	year, month, day := x._parseDate(raw_value[:4])
 	h, m, s, n := x._parseTime(raw_value[4:8])
+	timezone_id := bytes_to_buint16(raw_value[8:10])
+	if timezone_id == 0 {
+		tz, _ := time.LoadLocation("GMT")
+		return time.Date(year, time.Month(month), day, h, m, s, n, tz)
+	}
 	tz := x._parseTimezone(raw_value[8:10])
 	offset := x._parseTimezone(raw_value[10:12])
 	return time.Date(year, time.Month(month), day, h, m, s, n, tz).In(offset)
