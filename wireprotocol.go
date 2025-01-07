@@ -24,18 +24,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
-	"bufio"
 	"bytes"
 	"container/list"
-	"crypto/rc4"
-	"crypto/sha256"
 	"database/sql/driver"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/kardianos/osext"
 	"gitlab.com/nyarla/go-crypt"
-	"golang.org/x/crypto/chacha20"
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/encoding/japanese"
 	"golang.org/x/text/encoding/korean"
@@ -73,90 +69,6 @@ func _INFO_SQL_SELECT_DESCRIBE_VARS() []byte {
 		isc_info_sql_alias,
 		isc_info_sql_describe_end,
 	}
-}
-
-type wireChannel struct {
-	conn           net.Conn
-	reader         *bufio.Reader
-	writer         *bufio.Writer
-	plugin         string
-	rc4reader      *rc4.Cipher
-	rc4writer      *rc4.Cipher
-	chacha20reader *chacha20.Cipher
-	chacha20writer *chacha20.Cipher
-}
-
-func newWireChannel(conn net.Conn) (wireChannel, error) {
-	var err error
-	c := new(wireChannel)
-	c.conn = conn
-	c.reader = bufio.NewReader(c.conn)
-	c.writer = bufio.NewWriter(c.conn)
-
-	return *c, err
-}
-
-func (c *wireChannel) setCryptKey(plugin string, sessionKey []byte, nonce []byte) (err error) {
-	c.plugin = plugin
-	if plugin == "ChaCha" {
-		digest := sha256.New()
-		digest.Write(sessionKey)
-		key := digest.Sum(nil)
-		c.chacha20reader, err = chacha20.NewUnauthenticatedCipher(key, nonce)
-		c.chacha20writer, err = chacha20.NewUnauthenticatedCipher(key, nonce)
-	} else if plugin == "Arc4" {
-		c.rc4reader, err = rc4.NewCipher(sessionKey)
-		c.rc4writer, err = rc4.NewCipher(sessionKey)
-	} else {
-		err = errors.New(fmt.Sprintf("Unknown wire encrypto plugin name:%s", plugin))
-	}
-
-	return
-}
-
-func (c *wireChannel) Read(buf []byte) (n int, err error) {
-	if c.plugin != "" {
-		src := make([]byte, len(buf))
-		n, err = c.reader.Read(src)
-		if c.plugin == "ChaCha" {
-			c.chacha20reader.XORKeyStream(buf, src[0:n])
-		} else if c.plugin == "Arc4" {
-			c.rc4reader.XORKeyStream(buf, src[0:n])
-		}
-		return
-	}
-	return c.reader.Read(buf)
-}
-
-func (c *wireChannel) Write(buf []byte) (n int, err error) {
-	if c.plugin != "" {
-		dst := make([]byte, len(buf))
-		if c.plugin == "ChaCha" {
-			c.chacha20writer.XORKeyStream(dst, buf)
-		} else if c.plugin == "Arc4" {
-			c.rc4writer.XORKeyStream(dst, buf)
-		}
-		written := 0
-		for written < len(buf) {
-			n, err = c.writer.Write(dst[written:])
-			if err != nil {
-				return
-			}
-			written += n
-		}
-		n = written
-	} else {
-		n, err = c.writer.Write(buf)
-	}
-	return
-}
-
-func (c *wireChannel) Flush() error {
-	return c.writer.Flush()
-}
-
-func (c *wireChannel) Close() error {
-	return c.conn.Close()
 }
 
 type wireProtocol struct {
