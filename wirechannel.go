@@ -29,7 +29,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"golang.org/x/crypto/chacha20"
+	"github.com/nakagami/chacha20"
 	"net"
 	//"unsafe"
 )
