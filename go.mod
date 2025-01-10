@@ -6,7 +6,7 @@ toolchain go1.22.2
 
 require (
 	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0
-	github.com/nakagami/chacha20 v0.0.0
+	github.com/nakagami/chacha20 v0.0.1
 	github.com/shopspring/decimal v1.2.0
 	github.com/stretchr/testify v1.8.1
 	gitlab.com/nyarla/go-crypt v0.0.0-20160106005555-d9a5dc2b789b

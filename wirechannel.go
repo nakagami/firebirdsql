@@ -61,8 +61,8 @@ func (c *wireChannel) setCryptKey(plugin string, sessionKey []byte, nonce []byte
 		digest := sha256.New()
 		digest.Write(sessionKey)
 		key := digest.Sum(nil)
-		c.chacha20reader, err = chacha20.NewCipher(key, nonce)
-		c.chacha20writer, err = chacha20.NewCipher(key, nonce)
+		c.chacha20reader, err = chacha20.NewCipher(key, nonce, 0)
+		c.chacha20writer, err = chacha20.NewCipher(key, nonce, 0)
 	} else if plugin == "Arc4" {
 		c.rc4reader, err = rc4.NewCipher(sessionKey)
 		c.rc4writer, err = rc4.NewCipher(sessionKey)
