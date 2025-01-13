@@ -43,6 +43,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"golang.org/x/exp/slices"
+	"reflect"
 	//"unsafe"
 )
 
@@ -330,24 +332,33 @@ func (p *wireProtocol) _parse_op_response() (int32, []byte, []byte, error) {
 }
 
 func (p *wireProtocol) _guess_wire_crypt(buf []byte) (string, []byte) {
-	params := map[byte][]byte{}
+	var available_plugins []string
+	plugin_nonce := make([][]byte, 0, 2)
+
 	i := 0
 	for i = 0; i < len(buf); {
-		k := buf[i]
+		t := buf[i]
 		i++
 		ln := int(buf[i])
 		i++
 		v := buf[i : i+ln]
 		i += ln
-		params[k] = v
-	}
-	v, ok := params[3]
-	if ok {
-		if string(v[:7]) == "ChaCha\x00" {
-			return "ChaCha", v[7 : len(v)-4]
+		if t == 1 {
+			available_plugins = strings.Split(string(v), " ")
+		} else if t == 3 {
+			plugin_nonce = append(plugin_nonce, v)
 		}
 	}
-	return "Arc4", nil
+	if slices.Contains(available_plugins, "ChaCha") {
+		for _, nonce := range plugin_nonce {
+			if reflect.DeepEqual(nonce[:7], []byte{'C', 'h', 'a', 'C', 'h', 'a', 0}) {
+				return "ChaCha", nonce[7: 7+12]
+			}
+		}
+	} else if slices.Contains(available_plugins, "Arc4") {
+		return "Arc4", nil
+	}
+	return "", nil
 }
 
 func (p *wireProtocol) _parse_connect_response(user string, password string, options map[string]string, clientPublic *big.Int, clientSecret *big.Int) (err error) {
