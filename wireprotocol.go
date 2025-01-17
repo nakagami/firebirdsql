@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"github.com/kardianos/osext"
 	"gitlab.com/nyarla/go-crypt"
+	"golang.org/x/exp/slices"
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/encoding/japanese"
 	"golang.org/x/text/encoding/korean"
@@ -40,12 +41,11 @@ import (
 	"math/big"
 	"net"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
-	"golang.org/x/exp/slices"
-	"reflect"
-	//"unsafe"
+	// "unsafe"
 )
 
 const (
@@ -349,10 +349,16 @@ func (p *wireProtocol) _guess_wire_crypt(buf []byte) (string, []byte) {
 			plugin_nonce = append(plugin_nonce, v)
 		}
 	}
-	if slices.Contains(available_plugins, "ChaCha") {
+	if slices.Contains(available_plugins, "ChaCha64") {
+		for _, nonce := range plugin_nonce {
+			if reflect.DeepEqual(nonce[:9], []byte{'C', 'h', 'a', 'C', 'h', 'a', '6', '4', 0}) {
+				return "ChaCha64", nonce[9:]
+			}
+		}
+	} else if slices.Contains(available_plugins, "ChaCha") {
 		for _, nonce := range plugin_nonce {
 			if reflect.DeepEqual(nonce[:7], []byte{'C', 'h', 'a', 'C', 'h', 'a', 0}) {
-				return "ChaCha", nonce[7: 7+12]
+				return "ChaCha", nonce[7 : 7+12]
 			}
 		}
 	} else if slices.Contains(available_plugins, "Arc4") {

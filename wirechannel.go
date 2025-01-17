@@ -30,6 +30,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/nakagami/chacha20"
+	"golang.org/x/exp/slices"
 	"net"
 	//"unsafe"
 )
@@ -57,7 +58,7 @@ func newWireChannel(conn net.Conn) (wireChannel, error) {
 
 func (c *wireChannel) setCryptKey(plugin string, sessionKey []byte, nonce []byte) (err error) {
 	c.plugin = plugin
-	if plugin == "ChaCha" {
+	if slices.Contains([]string{"ChaCha64", "ChaCha"}, plugin) {
 		digest := sha256.New()
 		digest.Write(sessionKey)
 		key := digest.Sum(nil)
@@ -77,7 +78,7 @@ func (c *wireChannel) Read(buf []byte) (n int, err error) {
 	if c.plugin != "" {
 		src := make([]byte, len(buf))
 		n, err = c.reader.Read(src)
-		if c.plugin == "ChaCha" {
+		if slices.Contains([]string{"ChaCha64", "ChaCha"}, c.plugin) {
 			c.chacha20reader.XORKeyStream(buf, src[0:n])
 		} else if c.plugin == "Arc4" {
 			c.rc4reader.XORKeyStream(buf, src[0:n])
@@ -90,7 +91,7 @@ func (c *wireChannel) Read(buf []byte) (n int, err error) {
 func (c *wireChannel) Write(buf []byte) (n int, err error) {
 	if c.plugin != "" {
 		dst := make([]byte, len(buf))
-		if c.plugin == "ChaCha" {
+		if slices.Contains([]string{"ChaCha64", "ChaCha"}, c.plugin) {
 			c.chacha20writer.XORKeyStream(dst, buf)
 		} else if c.plugin == "Arc4" {
 			c.rc4writer.XORKeyStream(dst, buf)
