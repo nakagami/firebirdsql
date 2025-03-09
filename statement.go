@@ -47,7 +47,7 @@ func (stmt *firebirdsqlStmt) Close() (err error) {
 		return err
 	}
 
-	if stmt.fc.wp.acceptType == ptype_lazy_send {
+	if (stmt.fc.wp.acceptType & ptype_MASK) == ptype_lazy_send {
 		stmt.fc.wp.lazyResponseCount++
 	} else {
 		_, _, _, err = stmt.fc.wp.opResponse()
@@ -190,7 +190,7 @@ func newFirebirdsqlStmt(fc *firebirdsqlConn, query string) (stmt *firebirdsqlStm
 		return nil, err
 	}
 
-	if stmt.fc.wp.acceptType == ptype_lazy_send {
+	if (stmt.fc.wp.acceptType & ptype_MASK) == ptype_lazy_send {
 		stmt.fc.wp.lazyResponseCount++
 		stmt.stmtHandle = -1
 	} else {
@@ -205,7 +205,7 @@ func newFirebirdsqlStmt(fc *firebirdsqlConn, query string) (stmt *firebirdsqlStm
 		return nil, err
 	}
 
-	if stmt.fc.wp.acceptType == ptype_lazy_send && stmt.fc.wp.lazyResponseCount > 0 {
+	if (stmt.fc.wp.acceptType&ptype_MASK) == ptype_lazy_send && stmt.fc.wp.lazyResponseCount > 0 {
 		stmt.fc.wp.lazyResponseCount--
 		stmt.stmtHandle, _, _, _ = stmt.fc.wp.opResponse()
 	}

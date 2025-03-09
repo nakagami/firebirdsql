@@ -651,7 +651,7 @@ func (p *wireProtocol) getBlobSegments(blobId []byte, transHandle int32) ([]byte
 	}
 
 	p.opCloseBlob(blobHandle)
-	if p.acceptType == ptype_lazy_send {
+	if (p.acceptType & ptype_MASK) == ptype_lazy_send {
 		p.lazyResponseCount++
 	} else {
 		_, _, _, err = p.opResponse()
