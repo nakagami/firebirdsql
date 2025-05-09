@@ -554,7 +554,11 @@ func (x *xSQLVAR) value(raw_value []byte, timezone string, charset string) (v in
 	case SQL_TYPE_BOOLEAN:
 		v = raw_value[0] != 0
 	case SQL_TYPE_BLOB:
-		v = raw_value
+		if x.sqlsubtype == 1 && charset != "None" {
+			v = x.parseString(raw_value, charset)
+		} else {
+			v = raw_value
+		}
 	case SQL_TYPE_DEC_FIXED:
 		v = decimalFixedToDecimal(raw_value, int32(x.sqlscale))
 	case SQL_TYPE_DEC64:
