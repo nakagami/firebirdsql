@@ -30,6 +30,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math/big"
+	"net"
+	"os"
+	"reflect"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/kardianos/osext"
 	"gitlab.com/nyarla/go-crypt"
 	"golang.org/x/exp/slices"
@@ -38,13 +46,6 @@ import (
 	"golang.org/x/text/encoding/korean"
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/encoding/traditionalchinese"
-	"math/big"
-	"net"
-	"os"
-	"reflect"
-	"strconv"
-	"strings"
-	"time"
 	// "unsafe"
 )
 
@@ -317,18 +318,37 @@ func (p *wireProtocol) _parse_status_vector() (*list.List, int, string, error) {
 }
 
 func (p *wireProtocol) _parse_op_response() (int32, []byte, []byte, error) {
+	// Receive first packet: Object handle, ID, and buffer length
 	b, err := p.recvPackets(16)
-	h := bytes_to_bint32(b[0:4])            // Object handle
-	oid := b[4:12]                          // Object ID
-	buf_len := int(bytes_to_bint32(b[12:])) // buffer length
-	buf, err := p.recvPacketsAlignment(buf_len)
-
-	gds_code_list, sql_code, message, err := p._parse_status_vector()
-	if gds_code_list.Len() > 0 || sql_code != 0 {
-		err = errors.New(message)
+	if err != nil {
+		return 0, nil, nil, err
 	}
 
-	return h, oid, buf, err
+	h := bytes_to_bint32(b[0:4])            // Object handle
+	oid := b[4:12]                          // Object ID
+	buf_len := int(bytes_to_bint32(b[12:])) // Buffer length
+
+	// Receive data buffer if length is greater than zero
+	var buf []byte
+	if buf_len > 0 {
+		buf, err = p.recvPacketsAlignment(buf_len)
+		if err != nil {
+			return h, oid, nil, err
+		}
+	}
+
+	// Parse status vector for database-side errors
+	gds_code_list, sql_code, message, err := p._parse_status_vector()
+	if err != nil {
+		return h, oid, buf, err
+	}
+
+	// Check if any Firebird errors were returned in the status vector
+	if gds_code_list.Len() > 0 || sql_code != 0 {
+		return h, oid, buf, errors.New(message)
+	}
+
+	return h, oid, buf, nil
 }
 
 func (p *wireProtocol) _guess_wire_crypt(buf []byte) (string, []byte) {
