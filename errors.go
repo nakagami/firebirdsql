@@ -36,3 +36,12 @@ func NewErrOpResonse(opRCode int32) error { return &ErrOpResponse{opRCode: opRCo
 func (e *ErrOpResponse) Error() string    { return fmt.Sprintf("Error op_response:%d", e.opRCode) }
 
 var ErrOpSqlResponse = errors.New("Error op_sql_response")
+
+type FbError struct {
+	GDSCodes []int
+	Message  string
+}
+
+func (e *FbError) Error() string {
+	return e.Message
+}
