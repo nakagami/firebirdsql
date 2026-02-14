@@ -57,6 +57,11 @@ func (stmt *firebirdsqlStmt) QueryContext(ctx context.Context, namedargs []drive
 
 func (fc *firebirdsqlConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
 	if opts.ReadOnly {
+		// Preserve existing behaviour: readonly always uses READ COMMITTED RO.
+		// The only extra knob we currently support here is NOWAIT.
+		if (sql.IsolationLevel)(opts.Isolation) == LevelReadCommittedNoWait {
+			return fc.begin(ISOLATION_LEVEL_READ_COMMITED_RO_NOWAIT)
+		}
 		return fc.begin(ISOLATION_LEVEL_READ_COMMITED_RO)
 	}
 
@@ -65,6 +70,8 @@ func (fc *firebirdsqlConn) BeginTx(ctx context.Context, opts driver.TxOptions) (
 		return fc.begin(ISOLATION_LEVEL_READ_COMMITED)
 	case sql.LevelReadCommitted:
 		return fc.begin(ISOLATION_LEVEL_READ_COMMITED)
+	case LevelReadCommittedNoWait:
+		return fc.begin(ISOLATION_LEVEL_READ_COMMITED_NOWAIT)
 	case sql.LevelRepeatableRead:
 		return fc.begin(ISOLATION_LEVEL_REPEATABLE_READ)
 	case sql.LevelSerializable:

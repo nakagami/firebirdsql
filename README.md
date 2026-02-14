@@ -86,6 +86,19 @@ param1, param2... are
 | wire_crypt | Enable wire data encryption or not. | true | For Firebird 3.0+ |
 | charset | Firebird Charecter Set | | |
 
+## Transactions: READ COMMITTED + NOWAIT
+
+Firebird supports `NOWAIT` transactions (lock conflicts return immediately instead of waiting).
+The standard `database/sql` `sql.TxOptions` doesn't have a knob for `NOWAIT`, so this driver exposes a driver-specific isolation level constant:
+
+```go
+tx, err := db.BeginTx(ctx, &sql.TxOptions{
+	Isolation: firebirdsql.LevelReadCommittedNoWait,
+})
+```
+
+This maps to a transaction TPB containing `READ COMMITTED`, `RECORD VERSION`, and `NOWAIT`.
+
 ## GORM for Firebird
 
 See https://github.com/flylink888/gorm-firebird

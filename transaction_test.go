@@ -24,10 +24,45 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
+	"bytes"
 	"database/sql"
 	"testing"
 	"time"
 )
+
+func TestTPBForIsolationLevelReadCommittedNoWait(t *testing.T) {
+	tpb, err := tpbForIsolationLevel(ISOLATION_LEVEL_READ_COMMITED_NOWAIT)
+	if err != nil {
+		t.Fatalf("tpbForIsolationLevel(): %v", err)
+	}
+	want := []byte{
+		byte(isc_tpb_version3),
+		byte(isc_tpb_write),
+		byte(isc_tpb_nowait),
+		byte(isc_tpb_read_committed),
+		byte(isc_tpb_rec_version),
+	}
+	if !bytes.Equal(tpb, want) {
+		t.Fatalf("tpb mismatch\n got: %v\nwant: %v", tpb, want)
+	}
+}
+
+func TestTPBForIsolationLevelReadCommittedRONoWait(t *testing.T) {
+	tpb, err := tpbForIsolationLevel(ISOLATION_LEVEL_READ_COMMITED_RO_NOWAIT)
+	if err != nil {
+		t.Fatalf("tpbForIsolationLevel(): %v", err)
+	}
+	want := []byte{
+		byte(isc_tpb_version3),
+		byte(isc_tpb_read),
+		byte(isc_tpb_nowait),
+		byte(isc_tpb_read_committed),
+		byte(isc_tpb_rec_version),
+	}
+	if !bytes.Equal(tpb, want) {
+		t.Fatalf("tpb mismatch\n got: %v\nwant: %v", tpb, want)
+	}
+}
 
 func TestTransaction(t *testing.T) {
 	var n int

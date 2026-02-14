@@ -542,6 +542,18 @@ const (
 	ISOLATION_LEVEL_REPEATABLE_READ
 	ISOLATION_LEVEL_SERIALIZABLE
 	ISOLATION_LEVEL_READ_COMMITED_RO
+	// NOWAIT variants (lock conflicts return immediately instead of waiting)
+	ISOLATION_LEVEL_READ_COMMITED_NOWAIT
+	ISOLATION_LEVEL_READ_COMMITED_RO_NOWAIT
+)
+
+// Driver-specific transaction isolation levels for database/sql.
+//
+// database/sql doesn't have a way to express Firebird's NOWAIT/LOCK TIMEOUT,
+// so this driver exposes a custom value for use in sql.TxOptions.Isolation.
+const (
+	// LevelReadCommittedNoWait starts a READ COMMITTED transaction with NOWAIT lock resolution.
+	LevelReadCommittedNoWait = 1000
 )
 
 // Event

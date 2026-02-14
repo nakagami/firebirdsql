@@ -31,47 +31,71 @@ type firebirdsqlTx struct {
 	needBegin      bool
 }
 
-func (tx *firebirdsqlTx) begin() (err error) {
-	var tpb []byte
-	switch tx.isolationLevel {
+func tpbForIsolationLevel(isolationLevel int) ([]byte, error) {
+	switch isolationLevel {
 	case ISOLATION_LEVEL_READ_COMMITED_LEGACY:
-		tpb = []byte{
+		return []byte{
 			byte(isc_tpb_version3),
 			byte(isc_tpb_write),
 			byte(isc_tpb_wait),
 			byte(isc_tpb_read_committed),
 			byte(isc_tpb_no_rec_version),
-		}
+		}, nil
 	case ISOLATION_LEVEL_READ_COMMITED:
-		tpb = []byte{
+		return []byte{
 			byte(isc_tpb_version3),
 			byte(isc_tpb_write),
 			byte(isc_tpb_wait),
 			byte(isc_tpb_read_committed),
 			byte(isc_tpb_rec_version),
-		}
+		}, nil
+	case ISOLATION_LEVEL_READ_COMMITED_NOWAIT:
+		return []byte{
+			byte(isc_tpb_version3),
+			byte(isc_tpb_write),
+			byte(isc_tpb_nowait),
+			byte(isc_tpb_read_committed),
+			byte(isc_tpb_rec_version),
+		}, nil
 	case ISOLATION_LEVEL_REPEATABLE_READ:
-		tpb = []byte{
+		return []byte{
 			byte(isc_tpb_version3),
 			byte(isc_tpb_write),
 			byte(isc_tpb_wait),
 			byte(isc_tpb_concurrency),
-		}
+		}, nil
 	case ISOLATION_LEVEL_SERIALIZABLE:
-		tpb = []byte{
+		return []byte{
 			byte(isc_tpb_version3),
 			byte(isc_tpb_write),
 			byte(isc_tpb_wait),
 			byte(isc_tpb_consistency),
-		}
+		}, nil
 	case ISOLATION_LEVEL_READ_COMMITED_RO:
-		tpb = []byte{
+		return []byte{
 			byte(isc_tpb_version3),
 			byte(isc_tpb_read),
 			byte(isc_tpb_wait),
 			byte(isc_tpb_read_committed),
 			byte(isc_tpb_rec_version),
-		}
+		}, nil
+	case ISOLATION_LEVEL_READ_COMMITED_RO_NOWAIT:
+		return []byte{
+			byte(isc_tpb_version3),
+			byte(isc_tpb_read),
+			byte(isc_tpb_nowait),
+			byte(isc_tpb_read_committed),
+			byte(isc_tpb_rec_version),
+		}, nil
+	default:
+		return nil, ErrInvalidIsolationLevel
+	}
+}
+
+func (tx *firebirdsqlTx) begin() (err error) {
+	tpb, err := tpbForIsolationLevel(tx.isolationLevel)
+	if err != nil {
+		return err
 	}
 	err = tx.fc.wp.opTransaction(tpb)
 	if err != nil {
