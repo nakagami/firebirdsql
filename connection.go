@@ -79,6 +79,9 @@ func (fc *firebirdsqlConn) Close() (err error) {
 }
 
 func (fc *firebirdsqlConn) prepare(ctx context.Context, query string) (driver.Stmt, error) {
+	if fc.tx == nil {
+		return nil, driver.ErrBadConn
+	}
 	if fc.tx.needBegin {
 		err := fc.tx.begin()
 		if err != nil {
