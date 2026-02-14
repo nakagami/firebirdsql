@@ -260,22 +260,28 @@ func (p *wireProtocol) recvPacketsAlignment(n int) ([]byte, error) {
 	return buf[0:n], err
 }
 
-func (p *wireProtocol) _parse_status_vector() (*list.List, int, string, error) {
+func (p *wireProtocol) _parse_status_vector() ([]int, int, string, error) {
 	sql_code := 0
 	gds_code := 0
-	gds_codes := list.New()
+	gds_codes := make([]int, 0)
 	num_arg := 0
 	message := ""
 
 	b, err := p.recvPackets(4)
+	if err != nil {
+		return gds_codes, sql_code, message, err
+	}
 	n := bytes_to_bint32(b)
 	for n != isc_arg_end {
 		switch {
 		case n == isc_arg_gds:
 			b, err = p.recvPackets(4)
+			if err != nil {
+				return gds_codes, sql_code, message, err
+			}
 			gds_code = int(bytes_to_bint32(b))
 			if gds_code != 0 {
-				gds_codes.PushBack(gds_code)
+				gds_codes = append(gds_codes, gds_code)
 				if msg, ok := errmsgs[gds_code]; ok {
 					message += msg
 				} else {
@@ -285,6 +291,9 @@ func (p *wireProtocol) _parse_status_vector() (*list.List, int, string, error) {
 			}
 		case n == isc_arg_number:
 			b, err = p.recvPackets(4)
+			if err != nil {
+				return gds_codes, sql_code, message, err
+			}
 			num := int(bytes_to_bint32(b))
 			if gds_code == 335544436 {
 				sql_code = num
@@ -293,24 +302,45 @@ func (p *wireProtocol) _parse_status_vector() (*list.List, int, string, error) {
 			message = strings.Replace(message, "@"+strconv.Itoa(num_arg), strconv.Itoa(num), 1)
 		case n == isc_arg_string:
 			b, err = p.recvPackets(4)
+			if err != nil {
+				return gds_codes, sql_code, message, err
+			}
 			nbytes := int(bytes_to_bint32(b))
 			b, err = p.recvPacketsAlignment(nbytes)
+			if err != nil {
+				return gds_codes, sql_code, message, err
+			}
 			s := bytes_to_str(b)
 			num_arg++
 			message = strings.Replace(message, "@"+strconv.Itoa(num_arg), s, 1)
 		case n == isc_arg_interpreted:
 			b, err = p.recvPackets(4)
+			if err != nil {
+				return gds_codes, sql_code, message, err
+			}
 			nbytes := int(bytes_to_bint32(b))
 			b, err = p.recvPacketsAlignment(nbytes)
+			if err != nil {
+				return gds_codes, sql_code, message, err
+			}
 			s := bytes_to_str(b)
 			message += s
 		case n == isc_arg_sql_state:
 			b, err = p.recvPackets(4)
+			if err != nil {
+				return gds_codes, sql_code, message, err
+			}
 			nbytes := int(bytes_to_bint32(b))
 			b, err = p.recvPacketsAlignment(nbytes)
+			if err != nil {
+				return gds_codes, sql_code, message, err
+			}
 			_ = bytes_to_str(b) // skip status code
 		}
 		b, err = p.recvPackets(4)
+		if err != nil {
+			return gds_codes, sql_code, message, err
+		}
 		n = bytes_to_bint32(b)
 	}
 
@@ -338,14 +368,18 @@ func (p *wireProtocol) _parse_op_response() (int32, []byte, []byte, error) {
 	}
 
 	// Parse status vector for database-side errors
-	gds_code_list, sql_code, message, err := p._parse_status_vector()
-	if err != nil {
-		return h, oid, buf, err
+	gds_codes, sql_code, message, errV := p._parse_status_vector()
+	if errV != nil {
+		// Wrap protocol/network error
+		return h, oid, buf, fmt.Errorf("protocol error during status vector parsing: %w", errV)
 	}
 
 	// Check if any Firebird errors were returned in the status vector
-	if gds_code_list.Len() > 0 || sql_code != 0 {
-		return h, oid, buf, errors.New(message)
+	if len(gds_codes) > 0 || sql_code != 0 {
+		return h, oid, buf, &FbError{
+			GDSCodes: gds_codes,
+			Message:  message,
+		}
 	}
 
 	return h, oid, buf, nil
