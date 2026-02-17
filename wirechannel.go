@@ -25,12 +25,14 @@ package firebirdsql
 
 import (
 	"bufio"
+	"compress/zlib"
 	"crypto/rc4"
 	"crypto/sha256"
 	"errors"
 	"fmt"
 	"github.com/nakagami/chacha20"
 	"golang.org/x/exp/slices"
+	"io"
 	"net"
 	//"unsafe"
 )
@@ -44,6 +46,8 @@ type wireChannel struct {
 	rc4writer      *rc4.Cipher
 	chacha20reader *chacha20.Cipher
 	chacha20writer *chacha20.Cipher
+	compressor     *zlib.Writer
+	decompressor   io.ReadCloser
 }
 
 func newWireChannel(conn net.Conn) (wireChannel, error) {
@@ -74,7 +78,26 @@ func (c *wireChannel) setCryptKey(plugin string, sessionKey []byte, nonce []byte
 	return
 }
 
+func (c *wireChannel) enableCompression() error {
+	// Initialize zlib compression with default compression level
+	c.compressor = zlib.NewWriter(c.writer)
+	var err error
+	c.decompressor, err = zlib.NewReader(c.reader)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (c *wireChannel) Read(buf []byte) (n int, err error) {
+	if c.decompressor != nil {
+		// When compression is enabled, read from the decompressor
+		// which will automatically pull from the underlying reader
+		n, err = c.decompressor.Read(buf)
+		return
+	}
+	
+	// Original code without compression
 	if c.plugin != "" {
 		src := make([]byte, len(buf))
 		n, err = c.reader.Read(src)
@@ -89,6 +112,22 @@ func (c *wireChannel) Read(buf []byte) (n int, err error) {
 }
 
 func (c *wireChannel) Write(buf []byte) (n int, err error) {
+	if c.compressor != nil {
+		// Compress the data
+		_, err = c.compressor.Write(buf)
+		if err != nil {
+			return 0, err
+		}
+		// Flush with sync marker (similar to zlib.Z_SYNC_FLUSH)
+		err = c.compressor.Flush()
+		if err != nil {
+			return 0, err
+		}
+		// Return the number of bytes consumed from the input buffer
+		return len(buf), nil
+	}
+	
+	// Original code without compression
 	if c.plugin != "" {
 		dst := make([]byte, len(buf))
 		if slices.Contains([]string{"ChaCha64", "ChaCha"}, c.plugin) {

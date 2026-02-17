@@ -64,6 +64,18 @@ See also _example
 user:password@servername[:port_number]/database_name_or_file[?params1=value1[&param2=value2]...]
 ```
 
+Examples:
+```bash
+# Basic connection
+user:password@localhost/path/to/database.fdb
+
+# With wire compression enabled (for better performance over slow networks)
+user:password@localhost/path/to/database.fdb?wire_compress=true
+
+# With multiple parameters
+user:password@localhost/path/to/database.fdb?wire_crypt=true&wire_compress=true&role=admin
+```
+
 
 ### General
 
@@ -84,6 +96,7 @@ param1, param2... are
 | role | Role name | | |
 | timezone | Time Zone name | | For Firebird 4.0+ |
 | wire_crypt | Enable wire data encryption or not. | true | For Firebird 3.0+ |
+| wire_compress | Enable wire protocol compression. | false | For Firebird 3.0+ (protocol version 13+) |
 | charset | Firebird Charecter Set | | |
 
 ## Transactions: READ COMMITTED + NOWAIT
