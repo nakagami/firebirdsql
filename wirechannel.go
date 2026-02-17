@@ -25,7 +25,7 @@ package firebirdsql
 
 import (
 	"bufio"
-	"compress/flate"
+	"compress/zlib"
 	"crypto/rc4"
 	"crypto/sha256"
 	"errors"
@@ -46,7 +46,7 @@ type wireChannel struct {
 	rc4writer      *rc4.Cipher
 	chacha20reader *chacha20.Cipher
 	chacha20writer *chacha20.Cipher
-	compressor     *flate.Writer
+	compressor     *zlib.Writer
 	decompressor   io.ReadCloser
 }
 
@@ -79,13 +79,13 @@ func (c *wireChannel) setCryptKey(plugin string, sessionKey []byte, nonce []byte
 }
 
 func (c *wireChannel) enableCompression() error {
-	// Initialize compression with default compression level
+	// Initialize zlib compression with default compression level
+	c.compressor = zlib.NewWriter(c.writer)
 	var err error
-	c.compressor, err = flate.NewWriter(c.writer, flate.DefaultCompression)
+	c.decompressor, err = zlib.NewReader(c.reader)
 	if err != nil {
 		return err
 	}
-	c.decompressor = flate.NewReader(c.reader)
 	return nil
 }
 
