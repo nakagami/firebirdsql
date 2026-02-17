@@ -114,16 +114,17 @@ func (c *wireChannel) Read(buf []byte) (n int, err error) {
 func (c *wireChannel) Write(buf []byte) (n int, err error) {
 	if c.compressor != nil {
 		// Compress the data
-		n, err = c.compressor.Write(buf)
+		_, err = c.compressor.Write(buf)
 		if err != nil {
-			return
+			return 0, err
 		}
 		// Flush with sync marker (similar to zlib.Z_SYNC_FLUSH)
 		err = c.compressor.Flush()
 		if err != nil {
-			return
+			return 0, err
 		}
-		return
+		// Return the number of bytes consumed from the input buffer
+		return len(buf), nil
 	}
 	
 	// Original code without compression

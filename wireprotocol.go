@@ -724,9 +724,9 @@ func (p *wireProtocol) getBlobSegments(blobId []byte, transHandle int32) ([]byte
 func (p *wireProtocol) opConnect(dbName string, user string, password string, options map[string]string, clientPublic *big.Int) error {
 	p.debugPrint("opConnect")
 	wire_crypt := true
-	wire_crypt, _ = strconv.ParseBool(options["wire_crypt"])
+	wire_crypt, _ = strconv.ParseBool(options["wire_crypt"]) // errors default to false
 	wire_compress := false
-	wire_compress, _ = strconv.ParseBool(options["wire_compress"])
+	wire_compress, _ = strconv.ParseBool(options["wire_compress"]) // errors default to false
 	
 	var protocols []string
 	if wire_compress {
