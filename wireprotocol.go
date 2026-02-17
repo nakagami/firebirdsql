@@ -448,6 +448,12 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 	p.user = user
 	p.password = password
 
+	// Check if server accepted compression
+	if (p.acceptType & pflag_compress) != 0 {
+		p.conn.enableCompression()
+		p.acceptType = p.acceptType & ptype_MASK
+	}
+
 	if opcode == op_cond_accept || opcode == op_accept_data {
 		var readLength, ln int
 
@@ -719,16 +725,34 @@ func (p *wireProtocol) opConnect(dbName string, user string, password string, op
 	p.debugPrint("opConnect")
 	wire_crypt := true
 	wire_crypt, _ = strconv.ParseBool(options["wire_crypt"])
-	protocols := []string{
+	wire_compress := false
+	wire_compress, _ = strconv.ParseBool(options["wire_compress"])
+	
+	var protocols []string
+	if wire_compress {
+		// PROTOCOL_VERSION, Arch type (Generic=1), min, max|pflag_compress, weight
+		protocols = []string{
+			"0000000a00000001000000000000000500000002", // 10, 1, 0, 5, 2
+			"ffff800b00000001000000000000000500000004", // 11, 1, 0, 5, 4
+			"ffff800c00000001000000000000000500000006", // 12, 1, 0, 5, 6
+			"ffff800d00000001000000000000010500000008", // 13, 1, 0, 0x105, 8
+			"ffff800e0000000100000000000001050000000a", // 14, 1, 0, 0x105, 10
+			"ffff800f0000000100000000000001050000000c", // 15, 1, 0, 0x105, 12
+			"ffff80100000000100000000000001050000000e", // 16, 1, 0, 0x105, 14
+			"ffff801100000001000000000000010500000010", // 17, 1, 0, 0x105, 16
+		}
+	} else {
 		// PROTOCOL_VERSION, Arch type (Generic=1), min, max, weight
-		"0000000a00000001000000000000000500000002", // 10, 1, 0, 5, 2
-		"ffff800b00000001000000000000000500000004", // 11, 1, 0, 5, 4
-		"ffff800c00000001000000000000000500000006", // 12, 1, 0, 5, 6
-		"ffff800d00000001000000000000000500000008", // 13, 1, 0, 5, 8
-		"ffff800e0000000100000000000000050000000a", // 14, 1, 0, 5, 10
-		"ffff800f0000000100000000000000050000000c", // 15, 1, 0, 5, 12
-		"ffff80100000000100000000000000050000000e", // 16, 1, 0, 5, 14
-		"ffff801100000001000000000000000500000010", // 17, 1, 0, 5, 16
+		protocols = []string{
+			"0000000a00000001000000000000000500000002", // 10, 1, 0, 5, 2
+			"ffff800b00000001000000000000000500000004", // 11, 1, 0, 5, 4
+			"ffff800c00000001000000000000000500000006", // 12, 1, 0, 5, 6
+			"ffff800d00000001000000000000000500000008", // 13, 1, 0, 5, 8
+			"ffff800e0000000100000000000000050000000a", // 14, 1, 0, 5, 10
+			"ffff800f0000000100000000000000050000000c", // 15, 1, 0, 5, 12
+			"ffff80100000000100000000000000050000000e", // 16, 1, 0, 5, 14
+			"ffff801100000001000000000000000500000010", // 17, 1, 0, 5, 16
+		}
 	}
 	p.packInt(op_connect)
 	p.packInt(op_attach)

@@ -25,12 +25,14 @@ package firebirdsql
 
 import (
 	"bufio"
+	"compress/flate"
 	"crypto/rc4"
 	"crypto/sha256"
 	"errors"
 	"fmt"
 	"github.com/nakagami/chacha20"
 	"golang.org/x/exp/slices"
+	"io"
 	"net"
 	//"unsafe"
 )
@@ -44,6 +46,8 @@ type wireChannel struct {
 	rc4writer      *rc4.Cipher
 	chacha20reader *chacha20.Cipher
 	chacha20writer *chacha20.Cipher
+	compressor     *flate.Writer
+	decompressor   io.ReadCloser
 }
 
 func newWireChannel(conn net.Conn) (wireChannel, error) {
@@ -74,7 +78,26 @@ func (c *wireChannel) setCryptKey(plugin string, sessionKey []byte, nonce []byte
 	return
 }
 
+func (c *wireChannel) enableCompression() error {
+	// Initialize compression with default compression level
+	var err error
+	c.compressor, err = flate.NewWriter(c.writer, flate.DefaultCompression)
+	if err != nil {
+		return err
+	}
+	c.decompressor = flate.NewReader(c.reader)
+	return nil
+}
+
 func (c *wireChannel) Read(buf []byte) (n int, err error) {
+	if c.decompressor != nil {
+		// When compression is enabled, read from the decompressor
+		// which will automatically pull from the underlying reader
+		n, err = c.decompressor.Read(buf)
+		return
+	}
+	
+	// Original code without compression
 	if c.plugin != "" {
 		src := make([]byte, len(buf))
 		n, err = c.reader.Read(src)
@@ -89,6 +112,21 @@ func (c *wireChannel) Read(buf []byte) (n int, err error) {
 }
 
 func (c *wireChannel) Write(buf []byte) (n int, err error) {
+	if c.compressor != nil {
+		// Compress the data
+		n, err = c.compressor.Write(buf)
+		if err != nil {
+			return
+		}
+		// Flush with sync marker (similar to zlib.Z_SYNC_FLUSH)
+		err = c.compressor.Flush()
+		if err != nil {
+			return
+		}
+		return
+	}
+	
+	// Original code without compression
 	if c.plugin != "" {
 		dst := make([]byte, len(buf))
 		if slices.Contains([]string{"ChaCha64", "ChaCha"}, c.plugin) {
