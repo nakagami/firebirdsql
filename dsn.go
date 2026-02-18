@@ -82,6 +82,7 @@ func parseDSN(dsns string) (*firebirdDsn, error) {
 		"role":                 "",
 		"timezone":             "",
 		"wire_crypt":           "true",
+		"wire_compress":        "false",
 	}
 
 	for k, v := range default_options {
