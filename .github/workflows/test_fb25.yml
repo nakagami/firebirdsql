@@ -11,7 +11,7 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     env:
-      DOCKER_API_VERSION: "1.44" # これを追加
+      DOCKER_API_VERSION: "1.44"
     strategy:
       matrix:
         go: ['1.22', '1.23']
