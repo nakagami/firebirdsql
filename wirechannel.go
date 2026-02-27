@@ -96,7 +96,7 @@ func (c *wireChannel) Read(buf []byte) (n int, err error) {
 		n, err = c.decompressor.Read(buf)
 		return
 	}
-	
+
 	// Original code without compression
 	if c.plugin != "" {
 		src := make([]byte, len(buf))
@@ -126,7 +126,7 @@ func (c *wireChannel) Write(buf []byte) (n int, err error) {
 		// Return the number of bytes consumed from the input buffer
 		return len(buf), nil
 	}
-	
+
 	// Original code without compression
 	if c.plugin != "" {
 		dst := make([]byte, len(buf))

@@ -148,4 +148,3 @@ func TestDSNWireCompressParameter(t *testing.T) {
 		}
 	}
 }
-

@@ -727,7 +727,7 @@ func (p *wireProtocol) opConnect(dbName string, user string, password string, op
 	wire_crypt, _ = strconv.ParseBool(options["wire_crypt"]) // errors default to false
 	wire_compress := false
 	wire_compress, _ = strconv.ParseBool(options["wire_compress"]) // errors default to false
-	
+
 	var protocols []string
 	if wire_compress {
 		// PROTOCOL_VERSION, Arch type (Generic=1), min, max|pflag_compress, weight
