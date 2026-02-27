@@ -226,6 +226,33 @@ func _convert_time(t time.Time) []byte {
 	return bint32_to_bytes(int32(v))
 }
 
+func _convert_timestamp(t time.Time) []byte {
+	return bytes.Join([][]byte{
+		_convert_date(t),
+		_convert_time(t),
+	}, nil)
+}
+
+func _convert_time_tz(t time.Time) []byte {
+	tz_name := t.Location().String()
+	u := t.UTC()
+	v := (u.Hour()*3600+u.Minute()*60+u.Second())*10000 + u.Nanosecond()/100000
+	return bytes.Join([][]byte{
+		bint32_to_bytes(int32(v)),
+		bint32_to_bytes(getTimezoneIDByName(tz_name)),
+	}, nil)
+}
+
+func _convert_timestamp_tz(t time.Time) []byte {
+	tz_name := t.Location().String()
+	u := t.UTC()
+	return bytes.Join([][]byte{
+		_convert_date(u),
+		_convert_time(u),
+		bint32_to_bytes(getTimezoneIDByName(tz_name)),
+	}, nil)
+}
+
 func _dateToBlr(t time.Time) ([]byte, []byte) {
 	v := _convert_date(t)
 	blr := []byte{12}
@@ -233,18 +260,28 @@ func _dateToBlr(t time.Time) ([]byte, []byte) {
 }
 
 func _timeToBlr(t time.Time) ([]byte, []byte) {
-	v := _convert_time(t)
-	blr := []byte{13}
+	var v, blr []byte
+	tz_name := t.Location().String()
+	if tz_name != "Local" {
+		v = _convert_time_tz(t)
+		blr = []byte{28}
+	} else {
+		v = _convert_time(t)
+		blr = []byte{13}
+	}
 	return blr, v
 }
 
 func _timestampToBlr(t time.Time) ([]byte, []byte) {
-	v := bytes.Join([][]byte{
-		_convert_date(t),
-		_convert_time(t),
-	}, nil)
-
-	blr := []byte{35}
+	var v, blr []byte
+	tz_name := t.Location().String()
+	if tz_name != "Local" {
+		v = _convert_timestamp_tz(t)
+		blr = []byte{29}
+	} else {
+		v = _convert_timestamp(t)
+		blr = []byte{35}
+	}
 	return blr, v
 }
 

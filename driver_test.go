@@ -642,6 +642,53 @@ func TestTimeZone(t *testing.T) {
 	conn.Close()
 }
 
+func TestTimeZoneInsert(t *testing.T) {
+	conn, err := sql.Open("firebirdsql_createdb", GetTestDSN("test_timezone_insert_"))
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	defer conn.Close()
+
+	firebird_major_version := get_firebird_major_version(t)
+	if firebird_major_version < 4 {
+		return
+	}
+
+	_, err = conn.Exec(`
+               CREATE TABLE test_timezone_insert (
+                       id INTEGER NOT NULL,
+                       ts TIMESTAMP WITH TIME ZONE,
+                       PRIMARY KEY (id)
+               )
+       `)
+	if err != nil {
+		t.Fatalf("Error creating table: %v", err)
+	}
+
+	loc, err := time.LoadLocation("Asia/Seoul")
+	if err != nil {
+		t.Fatalf("Error loading location: %v", err)
+	}
+	insertTime := time.Date(1967, 8, 11, 23, 45, 1, 0, loc)
+
+	_, err = conn.Exec("INSERT INTO test_timezone_insert (id, ts) VALUES (1, ?)", insertTime)
+	if err != nil {
+		t.Fatalf("Error inserting: %v", err)
+	}
+
+	var id int
+	var ts time.Time
+	err = conn.QueryRow("SELECT id, ts FROM test_timezone_insert WHERE id = 1").Scan(&id, &ts)
+	if err != nil {
+		t.Fatalf("Error selecting: %v", err)
+	}
+
+	// The inserted time and retrieved time should represent the same instant
+	if !insertTime.Equal(ts) {
+		t.Fatalf("Expected %v, got %v", insertTime, ts)
+	}
+}
+
 func TestInt128(t *testing.T) {
 	// https://github.com/nakagami/firebirdsql/issues/129
 	conn, err := sql.Open("firebirdsql_createdb", GetTestDSN("test_int128_"))
