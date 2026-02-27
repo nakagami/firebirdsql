@@ -259,10 +259,10 @@ func _dateToBlr(t time.Time) ([]byte, []byte) {
 	return blr, v
 }
 
-func _timeToBlr(t time.Time) ([]byte, []byte) {
+func _timeToBlr(t time.Time, protocolVersion int32) ([]byte, []byte) {
 	var v, blr []byte
 	tz_name := t.Location().String()
-	if tz_name != "Local" {
+	if protocolVersion >= PROTOCOL_VERSION16 && tz_name != "Local" {
 		v = _convert_time_tz(t)
 		blr = []byte{28}
 	} else {
@@ -272,10 +272,10 @@ func _timeToBlr(t time.Time) ([]byte, []byte) {
 	return blr, v
 }
 
-func _timestampToBlr(t time.Time) ([]byte, []byte) {
+func _timestampToBlr(t time.Time, protocolVersion int32) ([]byte, []byte) {
 	var v, blr []byte
 	tz_name := t.Location().String()
-	if tz_name != "Local" {
+	if protocolVersion >= PROTOCOL_VERSION16 && tz_name != "Local" {
 		v = _convert_timestamp_tz(t)
 		blr = []byte{29}
 	} else {
