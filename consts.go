@@ -264,6 +264,7 @@ const (
 	isc_spb_bkp_non_transportable  = 0x20
 	isc_spb_bkp_convert            = 0x40
 	isc_spb_bkp_expand             = 0x8
+	isc_spb_bkp_zip                = 0x010000
 
 	// restore
 	isc_spb_res_buffers        = 9

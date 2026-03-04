@@ -12,6 +12,7 @@ type BackupOptions struct {
 	Transportable                         bool
 	ConvertExternalTablesToInternalTables bool
 	Expand                                bool
+	Zip                                   bool
 }
 
 type BackupOption func(*BackupOptions)
@@ -38,6 +39,7 @@ func GetDefaultBackupOptions() BackupOptions {
 		Transportable:                         true,
 		ConvertExternalTablesToInternalTables: true,
 		Expand:                                false,
+		Zip:                                   false,
 	}
 }
 
@@ -122,6 +124,18 @@ func WithExpand() BackupOption {
 func WithoutExpand() BackupOption {
 	return func(opts *BackupOptions) {
 		opts.Expand = false
+	}
+}
+
+func WithZip() BackupOption {
+	return func(opts *BackupOptions) {
+		opts.Zip = true
+	}
+}
+
+func WithoutZip() BackupOption {
+	return func(opts *BackupOptions) {
+		opts.Zip = false
 	}
 }
 
@@ -272,6 +286,10 @@ func (bm *BackupManager) Backup(database string, backup string, options BackupOp
 
 	if options.Expand {
 		optionsMask |= isc_spb_bkp_expand
+	}
+
+	if options.Zip {
+		optionsMask |= isc_spb_bkp_zip
 	}
 
 	spb := NewXPBWriterFromTag(isc_action_svc_backup)
