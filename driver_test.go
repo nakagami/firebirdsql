@@ -676,6 +676,13 @@ func TestTimeZoneInsert(t *testing.T) {
 		t.Fatalf("Error inserting: %v", err)
 	}
 
+//	insertTime2, _ := time.Parse(time.RFC3339, "1967-08-11T23:45:01+09:00")
+	insertTime2, _ := time.Parse(time.RFC3339, "1967-08-11T23:45:01+08:00")
+	_, err = conn.Exec("INSERT INTO test_timezone_insert (id, ts) VALUES (2, ?)", insertTime2)
+	if err != nil {
+		t.Fatalf("Error inserting: %v", err)
+	}
+
 	var id int
 	var ts time.Time
 	err = conn.QueryRow("SELECT id, ts FROM test_timezone_insert WHERE id = 1").Scan(&id, &ts)
@@ -686,6 +693,23 @@ func TestTimeZoneInsert(t *testing.T) {
 	// The inserted time and retrieved time should represent the same instant
 	if !insertTime.Equal(ts) {
 		t.Fatalf("Expected %v, got %v", insertTime, ts)
+	}
+
+	err = conn.QueryRow("SELECT id, ts FROM test_timezone_insert WHERE id = 2").Scan(&id, &ts)
+	if err != nil {
+		t.Fatalf("Error selecting: %v", err)
+	}
+	fmt.Printf("xxx\n")
+	tz_str := insertTime2.Location().String()
+	fmt.Printf("tz_str=%v\n", tz_str)
+	tz_name, offset := insertTime2.Zone()
+	fmt.Printf("tz_name,offset=%v,%v\n", tz_name, offset)
+	fmt.Printf("ts:%v\n", insertTime2)
+	fmt.Printf("ts:%v\n", ts)
+
+	// The inserted time and retrieved time should represent the same instant
+	if !insertTime2.Equal(ts) {
+		t.Fatalf("Expected %v, got %v", insertTime2, ts)
 	}
 }
 
