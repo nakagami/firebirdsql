@@ -54,7 +54,7 @@ func int64_to_bytes(i64 int64) []byte {
 		byte(i64 >> 24 & 0xFF),
 		byte(i64 >> 32 & 0xFF),
 		byte(i64 >> 40 & 0xFF),
-		byte(i64 >> 40 & 0xFF),
+		byte(i64 >> 48 & 0xFF),
 		byte(i64 >> 56 & 0xFF),
 	}
 	return bs
