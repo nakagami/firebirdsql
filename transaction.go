@@ -131,7 +131,7 @@ func (tx *firebirdsqlTx) Commit() (err error) {
 func (tx *firebirdsqlTx) Rollback() (err error) {
 	err = tx.fc.wp.opRollback(tx.transHandle)
 	if err != nil {
-		return nil
+		return err
 	}
 	_, _, _, err = tx.fc.wp.opResponse()
 	tx.isAutocommit = tx.fc.isAutocommit
