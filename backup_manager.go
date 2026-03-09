@@ -356,7 +356,7 @@ func (bm *BackupManager) Restore(backup string, database string, options Restore
 	}
 
 	if options.CacheBuffers > 0 {
-		spb.PutInt32(isc_spb_res_buffers, options.PageSize)
+		spb.PutInt32(isc_spb_res_buffers, options.CacheBuffers)
 	}
 
 	if conn, err = bm.connBuilder(); err != nil {
