@@ -348,7 +348,7 @@ func (x *xSQLVAR) parseString(raw_value []byte, charset string) interface{} {
 		v, _ := dec.Bytes(raw_value)
 		return string(v)
 	case "ISO8859_4":
-		dec := charmap.ISO8859_5.NewDecoder()
+		dec := charmap.ISO8859_4.NewDecoder()
 		v, _ := dec.Bytes(raw_value)
 		return string(v)
 	case "ISO8859_5":
@@ -392,11 +392,11 @@ func (x *xSQLVAR) parseString(raw_value []byte, charset string) interface{} {
 		v, _ := dec.Bytes(raw_value)
 		return string(v)
 	case "WIN1253":
-		dec := charmap.Windows1252.NewDecoder()
+		dec := charmap.Windows1253.NewDecoder()
 		v, _ := dec.Bytes(raw_value)
 		return string(v)
 	case "WIN1254":
-		dec := charmap.Windows1252.NewDecoder()
+		dec := charmap.Windows1254.NewDecoder()
 		v, _ := dec.Bytes(raw_value)
 		return string(v)
 	case "BIG_5":
