@@ -13,6 +13,7 @@ type BackupOptions struct {
 	ConvertExternalTablesToInternalTables bool
 	Expand                                bool
 	Zip                                   bool
+	ParallelWorkers                       int32
 }
 
 type BackupOption func(*BackupOptions)
@@ -26,6 +27,7 @@ type RestoreOptions struct {
 	UseAllPageSpace      bool
 	PageSize             int32
 	CacheBuffers         int32
+	ParallelWorkers      int32
 }
 
 type RestoreOption func(*RestoreOptions)
@@ -40,6 +42,7 @@ func GetDefaultBackupOptions() BackupOptions {
 		ConvertExternalTablesToInternalTables: true,
 		Expand:                                false,
 		Zip:                                   false,
+		ParallelWorkers:                       0,
 	}
 }
 
@@ -139,6 +142,18 @@ func WithoutZip() BackupOption {
 	}
 }
 
+func WithBackupParallelWorkers(parallelWorkers int32) BackupOption {
+	return func(opts *BackupOptions) {
+		opts.ParallelWorkers = parallelWorkers
+	}
+}
+
+func WithoutBackupParallelWorkers() BackupOption {
+	return func(opts *BackupOptions) {
+		opts.ParallelWorkers = 0
+	}
+}
+
 func NewBackupOptions(opts ...BackupOption) BackupOptions {
 	res := GetDefaultBackupOptions()
 	for _, opt := range opts {
@@ -157,6 +172,7 @@ func GetDefaultRestoreOptions() RestoreOptions {
 		UseAllPageSpace:      false,
 		PageSize:             0,
 		CacheBuffers:         0,
+		ParallelWorkers:      0,
 	}
 }
 
@@ -238,6 +254,18 @@ func WithCacheBuffers(cacheBuffers int32) RestoreOption {
 	}
 }
 
+func WithRestoreParallelWorkers(parallelWorkers int32) RestoreOption {
+	return func(opts *RestoreOptions) {
+		opts.ParallelWorkers = parallelWorkers
+	}
+}
+
+func WithoutRestoreParallelWorkers() RestoreOption {
+	return func(opts *RestoreOptions) {
+		opts.ParallelWorkers = 0
+	}
+}
+
 func NewRestoreOptions(opts ...RestoreOption) RestoreOptions {
 	res := GetDefaultRestoreOptions()
 	for _, opt := range opts {
@@ -297,6 +325,10 @@ func (bm *BackupManager) Backup(database string, backup string, options BackupOp
 	spb.PutString(isc_spb_bkp_file, backup)
 	spb.PutInt32(isc_spb_options, optionsMask)
 
+	if options.ParallelWorkers > 0 {
+		spb.PutInt32(isc_spb_bkp_parallel_workers, options.ParallelWorkers)
+	}
+
 	if verbose != nil {
 		spb.PutTag(isc_spb_verbose)
 	}
@@ -346,6 +378,10 @@ func (bm *BackupManager) Restore(backup string, database string, options Restore
 	spb.PutString(isc_spb_dbname, database)
 	spb.PutString(isc_spb_bkp_file, backup)
 	spb.PutInt32(isc_spb_options, optionsMask)
+
+	if options.ParallelWorkers > 0 {
+		spb.PutInt32(isc_spb_res_parallel_workers, options.ParallelWorkers)
+	}
 
 	if verbose != nil {
 		spb.PutTag(isc_spb_verbose)

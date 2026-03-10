@@ -264,20 +264,22 @@ const (
 	isc_spb_bkp_non_transportable  = 0x20
 	isc_spb_bkp_convert            = 0x40
 	isc_spb_bkp_expand             = 0x8
+	isc_spb_bkp_parallel_workers   = 21
 	isc_spb_bkp_zip                = 0x010000
 
 	// restore
-	isc_spb_res_buffers        = 9
-	isc_spb_res_page_size      = 10
-	isc_spb_res_length         = 11
-	isc_spb_res_access_mode    = 12
-	isc_spb_res_deactivate_idx = 0x0100
-	isc_spb_res_no_shadow      = 0x0200
-	isc_spb_res_no_validity    = 0x0400
-	isc_spb_res_one_at_a_time  = 0x0800
-	isc_spb_res_replace        = 0x1000
-	isc_spb_res_create         = 0x2000
-	isc_spb_res_use_all_space  = 0x4000
+	isc_spb_res_buffers          = 9
+	isc_spb_res_page_size        = 10
+	isc_spb_res_length           = 11
+	isc_spb_res_access_mode      = 12
+	isc_spb_res_parallel_workers = 21
+	isc_spb_res_deactivate_idx   = 0x0100
+	isc_spb_res_no_shadow        = 0x0200
+	isc_spb_res_no_validity      = 0x0400
+	isc_spb_res_one_at_a_time    = 0x0800
+	isc_spb_res_replace          = 0x1000
+	isc_spb_res_create           = 0x2000
+	isc_spb_res_use_all_space    = 0x4000
 
 	// Parameters for isc_action_svc_nbak
 	isc_spb_nbk_level         = 5
