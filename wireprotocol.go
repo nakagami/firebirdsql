@@ -1555,7 +1555,7 @@ func (p *wireProtocol) encodeString(str string) string {
 		v, _ := enc.String(str)
 		return v
 	case "ISO8859_4":
-		enc := charmap.ISO8859_5.NewEncoder()
+		enc := charmap.ISO8859_4.NewEncoder()
 		v, _ := enc.String(str)
 		return v
 	case "ISO8859_5":
@@ -1599,11 +1599,11 @@ func (p *wireProtocol) encodeString(str string) string {
 		v, _ := enc.String(str)
 		return v
 	case "WIN1253":
-		enc := charmap.Windows1252.NewEncoder()
+		enc := charmap.Windows1253.NewEncoder()
 		v, _ := enc.String(str)
 		return v
 	case "WIN1254":
-		enc := charmap.Windows1252.NewEncoder()
+		enc := charmap.Windows1254.NewEncoder()
 		v, _ := enc.String(str)
 		return v
 	case "BIG_5":
