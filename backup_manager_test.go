@@ -55,7 +55,18 @@ func TestBackupManager(t *testing.T) {
 
 func TestBackupOptions(t *testing.T) {
 	opts := NewBackupOptions()
-	assert.Equal(t, BackupOptions{IgnoreChecksums: false, IgnoreLimboTransactions: false, MetadataOnly: false, GarbageCollect: true, Transportable: true, ConvertExternalTablesToInternalTables: true, Expand: false}, opts)
-	opts = NewBackupOptions(WithIgnoreChecksums(), WithIgnoreLimboTransactions(), WithMetadataOnly(), WithoutGarbageCollect(), WithoutTransportable(), WithoutConvertExternalTablesToInternalTables(), WithExpand())
-	assert.Equal(t, BackupOptions{IgnoreChecksums: true, IgnoreLimboTransactions: true, MetadataOnly: true, GarbageCollect: false, Transportable: false, ConvertExternalTablesToInternalTables: false, Expand: true}, opts)
+	assert.Equal(t, BackupOptions{IgnoreChecksums: false, IgnoreLimboTransactions: false, MetadataOnly: false, GarbageCollect: true, Transportable: true, ConvertExternalTablesToInternalTables: true, Expand: false, Zip: false, ParallelWorkers: 0}, opts)
+	opts = NewBackupOptions(WithIgnoreChecksums(), WithIgnoreLimboTransactions(), WithMetadataOnly(), WithoutGarbageCollect(), WithoutTransportable(), WithoutConvertExternalTablesToInternalTables(), WithExpand(), WithZip(), WithBackupParallelWorkers(4))
+	assert.Equal(t, BackupOptions{IgnoreChecksums: true, IgnoreLimboTransactions: true, MetadataOnly: true, GarbageCollect: false, Transportable: false, ConvertExternalTablesToInternalTables: false, Expand: true, Zip: true, ParallelWorkers: 4}, opts)
+	opts = NewBackupOptions(WithBackupParallelWorkers(4), WithoutBackupParallelWorkers())
+	assert.Equal(t, BackupOptions{IgnoreChecksums: false, IgnoreLimboTransactions: false, MetadataOnly: false, GarbageCollect: true, Transportable: true, ConvertExternalTablesToInternalTables: true, Expand: false, Zip: false, ParallelWorkers: 0}, opts)
+}
+
+func TestRestoreOptions(t *testing.T) {
+	opts := NewRestoreOptions()
+	assert.Equal(t, RestoreOptions{Replace: false, DeactivateIndexes: false, RestoreShadows: true, EnforceConstraints: true, CommitAfterEachTable: false, UseAllPageSpace: false, PageSize: 0, CacheBuffers: 0, ParallelWorkers: 0}, opts)
+	opts = NewRestoreOptions(WithReplace(), WithDeactivateIndexes(), WithoutRestoreShadows(), WithoutEnforceConstraints(), WithCommitAfterEachTable(), WithUseAllPageSpace(), WithPageSize(8192), WithCacheBuffers(1024), WithRestoreParallelWorkers(8))
+	assert.Equal(t, RestoreOptions{Replace: true, DeactivateIndexes: true, RestoreShadows: false, EnforceConstraints: false, CommitAfterEachTable: true, UseAllPageSpace: true, PageSize: 8192, CacheBuffers: 1024, ParallelWorkers: 8}, opts)
+	opts = NewRestoreOptions(WithRestoreParallelWorkers(8), WithoutRestoreParallelWorkers())
+	assert.Equal(t, RestoreOptions{Replace: false, DeactivateIndexes: false, RestoreShadows: true, EnforceConstraints: true, CommitAfterEachTable: false, UseAllPageSpace: false, PageSize: 0, CacheBuffers: 0, ParallelWorkers: 0}, opts)
 }
