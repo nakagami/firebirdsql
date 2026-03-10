@@ -89,13 +89,13 @@ func WithDBTriggers() NBackupOption {
 
 func WithInPlaceRestore() NBackupOption {
 	return func(opts *NBackupOptions) {
-		opts.InPlaceRestore = false
+		opts.InPlaceRestore = true
 	}
 }
 
 func WithPlaceRestore() NBackupOption {
 	return func(opts *NBackupOptions) {
-		opts.InPlaceRestore = true
+		opts.InPlaceRestore = false
 	}
 }
 
