@@ -257,8 +257,6 @@ func NewBackupManager(addr string, user string, password string, options Service
 
 func (bm *BackupManager) Backup(database string, backup string, options BackupOptions, verbose chan string) error {
 	var optionsMask int32
-	var err error
-	var conn *ServiceManager
 
 	if options.IgnoreChecksums {
 		optionsMask |= isc_spb_bkp_ignore_checksums
@@ -301,20 +299,11 @@ func (bm *BackupManager) Backup(database string, backup string, options BackupOp
 		spb.PutTag(isc_spb_verbose)
 	}
 
-	if conn, err = bm.connBuilder(); err != nil {
-		return err
-	}
-	defer func(conn *ServiceManager) {
-		_ = conn.Close()
-	}(conn)
-
 	return bm.attach(spb.Bytes(), verbose)
 }
 
 func (bm *BackupManager) Restore(backup string, database string, options RestoreOptions, verbose chan string) error {
-	var optionsMask int32 = 0
-	var err error
-	var conn *ServiceManager
+	var optionsMask int32
 
 	if options.Replace {
 		optionsMask |= isc_spb_res_replace
@@ -358,13 +347,6 @@ func (bm *BackupManager) Restore(backup string, database string, options Restore
 	if options.CacheBuffers > 0 {
 		spb.PutInt32(isc_spb_res_buffers, options.PageSize)
 	}
-
-	if conn, err = bm.connBuilder(); err != nil {
-		return err
-	}
-	defer func(conn *ServiceManager) {
-		_ = conn.Close()
-	}(conn)
 
 	return bm.attach(spb.Bytes(), verbose)
 }
