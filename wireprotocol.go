@@ -1524,7 +1524,10 @@ func (p *wireProtocol) opCancel(kind int) error {
 }
 
 func (p *wireProtocol) encodeString(str string) string {
-	return encodeCharset(str, p.charset)
+	if v, ok := encodeCharset(str, p.charset); ok {
+		return v
+	}
+	return str
 }
 
 func (p *wireProtocol) opServiceAttach() error {

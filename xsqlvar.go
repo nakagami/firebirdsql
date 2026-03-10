@@ -320,8 +320,8 @@ func (x *xSQLVAR) parseString(raw_value []byte, charset string) interface{} {
 	if charset == "UNICODE_FSS" || charset == "UTF8" {
 		return string(raw_value)
 	}
-	if charsetEncoding(charset) != nil {
-		return decodeCharset(raw_value, charset)
+	if v, ok := decodeCharset(raw_value, charset); ok {
+		return v
 	}
 	return raw_value
 }

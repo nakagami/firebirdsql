@@ -68,20 +68,20 @@ func charsetEncoding(charset string) encoding.Encoding {
 	}
 }
 
-func decodeCharset(raw []byte, charset string) string {
+func decodeCharset(raw []byte, charset string) (string, bool) {
 	enc := charsetEncoding(charset)
 	if enc == nil {
-		return string(raw)
+		return "", false
 	}
 	v, _ := enc.NewDecoder().Bytes(raw)
-	return string(v)
+	return string(v), true
 }
 
-func encodeCharset(str string, charset string) string {
+func encodeCharset(str string, charset string) (string, bool) {
 	enc := charsetEncoding(charset)
 	if enc == nil {
-		return str
+		return "", false
 	}
 	v, _ := enc.NewEncoder().String(str)
-	return v
+	return v, true
 }
