@@ -9,47 +9,77 @@ import (
 	"golang.org/x/text/encoding/traditionalchinese"
 )
 
-var charsetEncodings = map[string]encoding.Encoding{
-	"SJIS_0208":  japanese.ShiftJIS,
-	"EUCJ_0208":  japanese.EUCJP,
-	"ISO8859_1":  charmap.ISO8859_1,
-	"ISO8859_2":  charmap.ISO8859_2,
-	"ISO8859_3":  charmap.ISO8859_3,
-	"ISO8859_4":  charmap.ISO8859_4,
-	"ISO8859_5":  charmap.ISO8859_5,
-	"ISO8859_6":  charmap.ISO8859_6,
-	"ISO8859_7":  charmap.ISO8859_7,
-	"ISO8859_8":  charmap.ISO8859_8,
-	"ISO8859_9":  charmap.ISO8859_9,
-	"ISO8859_13": charmap.ISO8859_13,
-	"KSC_5601":   korean.EUCKR,
-	"WIN1250":    charmap.Windows1250,
-	"WIN1251":    charmap.Windows1251,
-	"WIN1252":    charmap.Windows1252,
-	"WIN1253":    charmap.Windows1253,
-	"WIN1254":    charmap.Windows1254,
-	"BIG_5":      traditionalchinese.Big5,
-	"GB_2312":    simplifiedchinese.HZGB2312,
-	"WIN1255":    charmap.Windows1255,
-	"WIN1256":    charmap.Windows1256,
-	"WIN1257":    charmap.Windows1257,
-	"KOI8R":      charmap.KOI8R,
-	"KOI8U":      charmap.KOI8U,
-	"WIN1258":    charmap.Windows1258,
+func charsetEncoding(charset string) encoding.Encoding {
+	switch charset {
+	case "SJIS_0208":
+		return japanese.ShiftJIS
+	case "EUCJ_0208":
+		return japanese.EUCJP
+	case "ISO8859_1":
+		return charmap.ISO8859_1
+	case "ISO8859_2":
+		return charmap.ISO8859_2
+	case "ISO8859_3":
+		return charmap.ISO8859_3
+	case "ISO8859_4":
+		return charmap.ISO8859_4
+	case "ISO8859_5":
+		return charmap.ISO8859_5
+	case "ISO8859_6":
+		return charmap.ISO8859_6
+	case "ISO8859_7":
+		return charmap.ISO8859_7
+	case "ISO8859_8":
+		return charmap.ISO8859_8
+	case "ISO8859_9":
+		return charmap.ISO8859_9
+	case "ISO8859_13":
+		return charmap.ISO8859_13
+	case "KSC_5601":
+		return korean.EUCKR
+	case "WIN1250":
+		return charmap.Windows1250
+	case "WIN1251":
+		return charmap.Windows1251
+	case "WIN1252":
+		return charmap.Windows1252
+	case "WIN1253":
+		return charmap.Windows1253
+	case "WIN1254":
+		return charmap.Windows1254
+	case "BIG_5":
+		return traditionalchinese.Big5
+	case "GB_2312":
+		return simplifiedchinese.HZGB2312
+	case "WIN1255":
+		return charmap.Windows1255
+	case "WIN1256":
+		return charmap.Windows1256
+	case "WIN1257":
+		return charmap.Windows1257
+	case "KOI8R":
+		return charmap.KOI8R
+	case "KOI8U":
+		return charmap.KOI8U
+	case "WIN1258":
+		return charmap.Windows1258
+	default:
+		return nil
+	}
 }
 
-func decodeCharset(raw []byte, charset string) (string, bool) {
-	enc, ok := charsetEncodings[charset]
-	if !ok {
-		return "", false
+func decodeCharset(raw []byte, charset string) string {
+	enc := charsetEncoding(charset)
+	if enc == nil {
+		return string(raw)
 	}
 	v, _ := enc.NewDecoder().Bytes(raw)
-	return string(v), true
+	return string(v)
 }
 
 func encodeCharset(str string, charset string) string {
-	enc, ok := charsetEncodings[charset]
-	if !ok {
+	enc := charsetEncoding(charset)
+	if enc == nil {
 		return str
 	}
 	v, _ := enc.NewEncoder().String(str)
