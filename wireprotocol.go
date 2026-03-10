@@ -260,22 +260,28 @@ func (p *wireProtocol) recvPacketsAlignment(n int) ([]byte, error) {
 	return buf[0:n], err
 }
 
-func (p *wireProtocol) _parse_status_vector() (*list.List, int, string, error) {
+func (p *wireProtocol) _parse_status_vector() ([]int, int, string, error) {
 	sql_code := 0
 	gds_code := 0
-	gds_codes := list.New()
+	gds_codes := make([]int, 0)
 	num_arg := 0
 	message := ""
 
 	b, err := p.recvPackets(4)
+	if err != nil {
+		return gds_codes, sql_code, message, err
+	}
 	n := bytes_to_bint32(b)
 	for n != isc_arg_end {
 		switch {
 		case n == isc_arg_gds:
 			b, err = p.recvPackets(4)
+			if err != nil {
+				return gds_codes, sql_code, message, err
+			}
 			gds_code = int(bytes_to_bint32(b))
 			if gds_code != 0 {
-				gds_codes.PushBack(gds_code)
+				gds_codes = append(gds_codes, gds_code)
 				if msg, ok := errmsgs[gds_code]; ok {
 					message += msg
 				} else {
@@ -285,6 +291,9 @@ func (p *wireProtocol) _parse_status_vector() (*list.List, int, string, error) {
 			}
 		case n == isc_arg_number:
 			b, err = p.recvPackets(4)
+			if err != nil {
+				return gds_codes, sql_code, message, err
+			}
 			num := int(bytes_to_bint32(b))
 			if gds_code == 335544436 {
 				sql_code = num
@@ -293,24 +302,45 @@ func (p *wireProtocol) _parse_status_vector() (*list.List, int, string, error) {
 			message = strings.Replace(message, "@"+strconv.Itoa(num_arg), strconv.Itoa(num), 1)
 		case n == isc_arg_string:
 			b, err = p.recvPackets(4)
+			if err != nil {
+				return gds_codes, sql_code, message, err
+			}
 			nbytes := int(bytes_to_bint32(b))
 			b, err = p.recvPacketsAlignment(nbytes)
+			if err != nil {
+				return gds_codes, sql_code, message, err
+			}
 			s := bytes_to_str(b)
 			num_arg++
 			message = strings.Replace(message, "@"+strconv.Itoa(num_arg), s, 1)
 		case n == isc_arg_interpreted:
 			b, err = p.recvPackets(4)
+			if err != nil {
+				return gds_codes, sql_code, message, err
+			}
 			nbytes := int(bytes_to_bint32(b))
 			b, err = p.recvPacketsAlignment(nbytes)
+			if err != nil {
+				return gds_codes, sql_code, message, err
+			}
 			s := bytes_to_str(b)
 			message += s
 		case n == isc_arg_sql_state:
 			b, err = p.recvPackets(4)
+			if err != nil {
+				return gds_codes, sql_code, message, err
+			}
 			nbytes := int(bytes_to_bint32(b))
 			b, err = p.recvPacketsAlignment(nbytes)
+			if err != nil {
+				return gds_codes, sql_code, message, err
+			}
 			_ = bytes_to_str(b) // skip status code
 		}
 		b, err = p.recvPackets(4)
+		if err != nil {
+			return gds_codes, sql_code, message, err
+		}
 		n = bytes_to_bint32(b)
 	}
 
@@ -338,14 +368,18 @@ func (p *wireProtocol) _parse_op_response() (int32, []byte, []byte, error) {
 	}
 
 	// Parse status vector for database-side errors
-	gds_code_list, sql_code, message, err := p._parse_status_vector()
-	if err != nil {
-		return h, oid, buf, err
+	gds_codes, sql_code, message, errV := p._parse_status_vector()
+	if errV != nil {
+		// Wrap protocol/network error
+		return h, oid, buf, fmt.Errorf("protocol error during status vector parsing: %w", errV)
 	}
 
 	// Check if any Firebird errors were returned in the status vector
-	if gds_code_list.Len() > 0 || sql_code != 0 {
-		return h, oid, buf, errors.New(message)
+	if len(gds_codes) > 0 || sql_code != 0 {
+		return h, oid, buf, &FbError{
+			GDSCodes: gds_codes,
+			Message:  message,
+		}
 	}
 
 	return h, oid, buf, nil
@@ -413,6 +447,12 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 	p.acceptType = bytes_to_bint32(b[8:12])
 	p.user = user
 	p.password = password
+
+	// Check if server accepted compression
+	if (p.acceptType & pflag_compress) != 0 {
+		p.conn.enableCompression()
+		p.acceptType = p.acceptType & ptype_MASK
+	}
 
 	if opcode == op_cond_accept || opcode == op_accept_data {
 		var readLength, ln int
@@ -684,17 +724,35 @@ func (p *wireProtocol) getBlobSegments(blobId []byte, transHandle int32) ([]byte
 func (p *wireProtocol) opConnect(dbName string, user string, password string, options map[string]string, clientPublic *big.Int) error {
 	p.debugPrint("opConnect")
 	wire_crypt := true
-	wire_crypt, _ = strconv.ParseBool(options["wire_crypt"])
-	protocols := []string{
+	wire_crypt, _ = strconv.ParseBool(options["wire_crypt"]) // errors default to false
+	wire_compress := false
+	wire_compress, _ = strconv.ParseBool(options["wire_compress"]) // errors default to false
+
+	var protocols []string
+	if wire_compress {
+		// PROTOCOL_VERSION, Arch type (Generic=1), min, max|pflag_compress, weight
+		protocols = []string{
+			"0000000a00000001000000000000000500000002", // 10, 1, 0, 5, 2
+			"ffff800b00000001000000000000000500000004", // 11, 1, 0, 5, 4
+			"ffff800c00000001000000000000000500000006", // 12, 1, 0, 5, 6
+			"ffff800d00000001000000000000010500000008", // 13, 1, 0, 0x105, 8
+			"ffff800e0000000100000000000001050000000a", // 14, 1, 0, 0x105, 10
+			"ffff800f0000000100000000000001050000000c", // 15, 1, 0, 0x105, 12
+			"ffff80100000000100000000000001050000000e", // 16, 1, 0, 0x105, 14
+			"ffff801100000001000000000000010500000010", // 17, 1, 0, 0x105, 16
+		}
+	} else {
 		// PROTOCOL_VERSION, Arch type (Generic=1), min, max, weight
-		"0000000a00000001000000000000000500000002", // 10, 1, 0, 5, 2
-		"ffff800b00000001000000000000000500000004", // 11, 1, 0, 5, 4
-		"ffff800c00000001000000000000000500000006", // 12, 1, 0, 5, 6
-		"ffff800d00000001000000000000000500000008", // 13, 1, 0, 5, 8
-		"ffff800e0000000100000000000000050000000a", // 14, 1, 0, 5, 10
-		"ffff800f0000000100000000000000050000000c", // 15, 1, 0, 5, 12
-		"ffff80100000000100000000000000050000000e", // 16, 1, 0, 5, 14
-		"ffff801100000001000000000000000500000010", // 17, 1, 0, 5, 16
+		protocols = []string{
+			"0000000a00000001000000000000000500000002", // 10, 1, 0, 5, 2
+			"ffff800b00000001000000000000000500000004", // 11, 1, 0, 5, 4
+			"ffff800c00000001000000000000000500000006", // 12, 1, 0, 5, 6
+			"ffff800d00000001000000000000000500000008", // 13, 1, 0, 5, 8
+			"ffff800e0000000100000000000000050000000a", // 14, 1, 0, 5, 10
+			"ffff800f0000000100000000000000050000000c", // 15, 1, 0, 5, 12
+			"ffff80100000000100000000000000050000000e", // 16, 1, 0, 5, 14
+			"ffff801100000001000000000000000500000010", // 17, 1, 0, 5, 16
+		}
 	}
 	p.packInt(op_connect)
 	p.packInt(op_attach)
@@ -1377,9 +1435,9 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 			blr, v = _float64ToBlr(float64(f))
 		case time.Time:
 			if f.Year() == 0 {
-				blr, v = _timeToBlr(f)
+				blr, v = _timeToBlr(f, protocolVersion)
 			} else {
-				blr, v = _timestampToBlr(f)
+				blr, v = _timestampToBlr(f, protocolVersion)
 			}
 		case bool:
 			if f {
@@ -1497,7 +1555,7 @@ func (p *wireProtocol) encodeString(str string) string {
 		v, _ := enc.String(str)
 		return v
 	case "ISO8859_4":
-		enc := charmap.ISO8859_5.NewEncoder()
+		enc := charmap.ISO8859_4.NewEncoder()
 		v, _ := enc.String(str)
 		return v
 	case "ISO8859_5":
@@ -1541,11 +1599,11 @@ func (p *wireProtocol) encodeString(str string) string {
 		v, _ := enc.String(str)
 		return v
 	case "WIN1253":
-		enc := charmap.Windows1252.NewEncoder()
+		enc := charmap.Windows1253.NewEncoder()
 		v, _ := enc.String(str)
 		return v
 	case "WIN1254":
-		enc := charmap.Windows1252.NewEncoder()
+		enc := charmap.Windows1254.NewEncoder()
 		v, _ := enc.String(str)
 		return v
 	case "BIG_5":

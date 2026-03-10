@@ -264,6 +264,7 @@ const (
 	isc_spb_bkp_non_transportable  = 0x20
 	isc_spb_bkp_convert            = 0x40
 	isc_spb_bkp_expand             = 0x8
+	isc_spb_bkp_zip                = 0x010000
 
 	// restore
 	isc_spb_res_buffers        = 9
@@ -542,6 +543,18 @@ const (
 	ISOLATION_LEVEL_REPEATABLE_READ
 	ISOLATION_LEVEL_SERIALIZABLE
 	ISOLATION_LEVEL_READ_COMMITED_RO
+	// NOWAIT variants (lock conflicts return immediately instead of waiting)
+	ISOLATION_LEVEL_READ_COMMITED_NOWAIT
+	ISOLATION_LEVEL_READ_COMMITED_RO_NOWAIT
+)
+
+// Driver-specific transaction isolation levels for database/sql.
+//
+// database/sql doesn't have a way to express Firebird's NOWAIT/LOCK TIMEOUT,
+// so this driver exposes a custom value for use in sql.TxOptions.Isolation.
+const (
+	// LevelReadCommittedNoWait starts a READ COMMITTED transaction with NOWAIT lock resolution.
+	LevelReadCommittedNoWait = 1000
 )
 
 // Event

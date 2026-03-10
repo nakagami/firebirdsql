@@ -36,3 +36,16 @@ func NewErrOpResonse(opRCode int32) error { return &ErrOpResponse{opRCode: opRCo
 func (e *ErrOpResponse) Error() string    { return fmt.Sprintf("Error op_response:%d", e.opRCode) }
 
 var ErrOpSqlResponse = errors.New("Error op_sql_response")
+
+// ErrInvalidIsolationLevel is returned when an unsupported isolation level is requested.
+// This is an internal guard: normal code paths should only use supported levels.
+var ErrInvalidIsolationLevel = errors.New("invalid isolation level")
+
+type FbError struct {
+	GDSCodes []int
+	Message  string
+}
+
+func (e *FbError) Error() string {
+	return e.Message
+}
