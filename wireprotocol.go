@@ -143,7 +143,7 @@ func (p *wireProtocol) appendBytes(bs []byte) {
 }
 
 func getSrpClientPublicBytes(clientPublic *big.Int) (bs []byte) {
-	b := bytes.NewBufferString(hex.EncodeToString(bigIntToBytes(clientPublic))).Bytes()
+	b := []byte(hex.EncodeToString(bigIntToBytes(clientPublic)))
 	if len(b) > 254 {
 		bs = bytes.Join([][]byte{
 			[]byte{CNCT_specific_data, byte(255), 0}, b[:254],
@@ -164,11 +164,11 @@ func (p *wireProtocol) uid(user string, password string, authPluginName string, 
 	}
 	hostname, _ := os.Hostname()
 
-	sysUserBytes := bytes.NewBufferString(sysUser).Bytes()
-	hostnameBytes := bytes.NewBufferString(hostname).Bytes()
-	pluginListNameBytes := bytes.NewBufferString(PLUGIN_LIST).Bytes()
-	pluginNameBytes := bytes.NewBufferString(authPluginName).Bytes()
-	userBytes := bytes.NewBufferString(strings.ToUpper(user)).Bytes()
+	sysUserBytes := []byte(sysUser)
+	hostnameBytes := []byte(hostname)
+	pluginListNameBytes := []byte(PLUGIN_LIST)
+	pluginNameBytes := []byte(authPluginName)
+	userBytes := []byte(strings.ToUpper(user))
 	var wireCryptByte byte
 	if wireCrypt {
 		wireCryptByte = 1
@@ -180,7 +180,7 @@ func (p *wireProtocol) uid(user string, password string, authPluginName string, 
 	if authPluginName == "Srp" || authPluginName == "Srp256" {
 		specific_data = getSrpClientPublicBytes(clientPublic)
 	} else if authPluginName == "Legacy_Auth" {
-		b := bytes.NewBufferString(crypt.Crypt(password, "9z")[2:]).Bytes()
+		b := []byte(crypt.Crypt(password, "9z")[2:])
 		specific_data = bytes.Join([][]byte{
 			[]byte{CNCT_specific_data, byte(len(b)) + 1, 0}, b,
 		}, nil)
@@ -520,7 +520,7 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 						p.pluginName, serverSalt, data[4+ln:], serverPublic, authData, sessionKey)
 				}
 			} else if p.pluginName == "Legacy_Auth" {
-				authData = bytes.NewBufferString(crypt.Crypt(password, "9z")[2:]).Bytes()
+				authData = []byte(crypt.Crypt(password, "9z")[2:])
 			} else {
 				err = errors.New("Your user name and password are not defined. Ask your database administrator to set up a Firebird login.\n")
 				return
@@ -767,9 +767,9 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 	var page_size int32
 	page_size = 4096
 
-	encode := bytes.NewBufferString(p.charset).Bytes()
-	userBytes := bytes.NewBufferString(strings.ToUpper(user)).Bytes()
-	passwordBytes := bytes.NewBufferString(password).Bytes()
+	encode := []byte(p.charset)
+	userBytes := []byte(strings.ToUpper(user))
+	passwordBytes := []byte(password)
 	roleBytes := []byte(role)
 	dpb := bytes.Join([][]byte{
 		[]byte{isc_dpb_version1},
@@ -786,7 +786,7 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 	}, nil)
 
 	if p.authData != nil {
-		specificAuthData := bytes.NewBufferString(hex.EncodeToString(p.authData)).Bytes()
+		specificAuthData := []byte(hex.EncodeToString(p.authData))
 		dpb = bytes.Join([][]byte{
 			dpb,
 			[]byte{isc_dpb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)
@@ -808,9 +808,9 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 
 func (p *wireProtocol) opAttach(dbName string, user string, password string, role string) error {
 	p.debugPrint("opAttach")
-	encode := bytes.NewBufferString(p.charset).Bytes()
-	userBytes := bytes.NewBufferString(strings.ToUpper(user)).Bytes()
-	passwordBytes := bytes.NewBufferString(password).Bytes()
+	encode := []byte(p.charset)
+	userBytes := []byte(strings.ToUpper(user))
+	passwordBytes := []byte(password)
 	roleBytes := []byte(role)
 
 	processName, err := osext.Executable()
@@ -821,7 +821,7 @@ func (p *wireProtocol) opAttach(dbName string, user string, password string, rol
 			processName = processName[len(processName)-255:]
 		}
 
-		processNameBytes = bytes.NewBufferString(processName).Bytes()
+		processNameBytes = []byte(processName)
 	}
 	pid := int32(os.Getpid())
 
@@ -838,7 +838,7 @@ func (p *wireProtocol) opAttach(dbName string, user string, password string, rol
 	}, nil)
 
 	if p.authData != nil {
-		specificAuthData := bytes.NewBufferString(hex.EncodeToString(p.authData)).Bytes()
+		specificAuthData := []byte(hex.EncodeToString(p.authData))
 		dpb = bytes.Join([][]byte{
 			dpb,
 			[]byte{isc_dpb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)
@@ -1536,8 +1536,8 @@ func (p *wireProtocol) opServiceAttach() error {
 	p.packInt(0)
 	p.packString("service_mgr")
 
-	userBytes := bytes.NewBufferString(p.user).Bytes()
-	passwordBytes := bytes.NewBufferString(p.password).Bytes()
+	userBytes := []byte(p.user)
+	passwordBytes := []byte(p.password)
 	spb := bytes.Join([][]byte{
 		{isc_spb_version, isc_spb_current_version},
 		{isc_spb_user_name, byte(len(userBytes))}, userBytes,
@@ -1545,7 +1545,7 @@ func (p *wireProtocol) opServiceAttach() error {
 		{isc_spb_utf8_filename, 1, 1},
 	}, nil)
 	if p.authData != nil {
-		specificAuthData := bytes.NewBufferString(hex.EncodeToString(p.authData)).Bytes()
+		specificAuthData := []byte(hex.EncodeToString(p.authData))
 		spb = bytes.Join([][]byte{
 			spb,
 			{isc_dpb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)
