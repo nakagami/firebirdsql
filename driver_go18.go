@@ -135,5 +135,5 @@ func (fc *firebirdConnector) Driver() driver.Driver {
 }
 
 func (fc *firebirdConnector) Connect(ctx context.Context) (driver.Conn, error) {
-	return newFirebirdsqlConn(fc.dsn)
+	return attachFirebirdsqlConn(fc.dsn)
 }

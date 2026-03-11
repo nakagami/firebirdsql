@@ -32,7 +32,7 @@ type Subscription struct {
 }
 
 func newSubscription(dsn *firebirdDsn, events []string, cb EventHandler, chEvent chan Event, chDoneEvent chan *Subscription) (*Subscription, error) {
-	fc, err := newFirebirdsqlConn(dsn)
+	fc, err := attachFirebirdsqlConn(dsn)
 	if err != nil {
 		return nil, err
 	}
