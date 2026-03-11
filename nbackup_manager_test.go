@@ -167,7 +167,7 @@ func TestNBackupOptions(t *testing.T) {
 	assert.Equal(t, int32(-1), opts.Level)
 	assert.Equal(t, "", opts.Guid)
 	assert.Equal(t, int32(0), opts.GetOptionsMask())
-	opts = NewNBackupOptions(WithLevel(1), WithGuid("abc"), WithDBTriggers(), WithPlaceRestore(), WithPreserveSequence())
+	opts = NewNBackupOptions(WithLevel(1), WithGuid("abc"), WithDBTriggers(), WithInPlaceRestore(), WithPreserveSequence())
 	assert.Equal(t, int32(1), opts.Level)
 	assert.Equal(t, "abc", opts.Guid)
 	assert.Equal(t, int32(6), opts.GetOptionsMask())
