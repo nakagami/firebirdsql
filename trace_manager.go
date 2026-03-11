@@ -185,7 +185,7 @@ func (ts *TraceSession) Pause() (err error) {
 }
 
 func (ts *TraceSession) Resume() (err error) {
-	if ts.state == SessionPaused {
+	if ts.state != SessionPaused {
 		return fmt.Errorf("session not paused")
 	}
 
