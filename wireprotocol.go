@@ -34,11 +34,10 @@ import (
 	"net"
 	"os"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
-
-	"slices"
 
 	"github.com/kardianos/osext"
 	"gitlab.com/nyarla/go-crypt"
