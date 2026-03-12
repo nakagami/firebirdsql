@@ -40,7 +40,7 @@ import (
 
 	"github.com/kardianos/osext"
 	"gitlab.com/nyarla/go-crypt"
-	"golang.org/x/exp/slices"
+	"slices"
 	// "unsafe"
 )
 

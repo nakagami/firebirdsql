@@ -31,7 +31,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/nakagami/chacha20"
-	"golang.org/x/exp/slices"
+	"slices"
 	"io"
 	"net"
 	//"unsafe"

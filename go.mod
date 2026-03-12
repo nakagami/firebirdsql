@@ -10,7 +10,6 @@ require (
 	github.com/shopspring/decimal v1.2.0
 	github.com/stretchr/testify v1.8.1
 	gitlab.com/nyarla/go-crypt v0.0.0-20160106005555-d9a5dc2b789b
-	golang.org/x/exp v0.0.0-20250106191152-7588d65b2ba8
 	golang.org/x/text v0.21.0
 	modernc.org/mathutil v1.4.2-0.20220822142738-b13e5b564332
 )
