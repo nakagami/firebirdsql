@@ -569,3 +569,21 @@ func (svc *ServiceManager) GetDbStatsString(database string, options StatisticsO
 	}
 	return svc.WaitString()
 }
+
+func serviceAttach(connBuilder func() (*ServiceManager, error), spb []byte, verbose chan string) error {
+	conn, err := connBuilder()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+	return conn.ServiceAttach(spb, verbose)
+}
+
+func serviceAttachBuffer(connBuilder func() (*ServiceManager, error), spb []byte, verbose chan []byte) error {
+	conn, err := connBuilder()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+	return conn.ServiceAttachBuffer(spb, verbose)
+}
