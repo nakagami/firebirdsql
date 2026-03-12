@@ -24,7 +24,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
-	"container/list"
 	"context"
 	"database/sql/driver"
 	"io"
@@ -35,7 +34,8 @@ import (
 type firebirdsqlRows struct {
 	ctx             context.Context
 	stmt            *firebirdsqlStmt
-	currentChunkRow *list.Element
+	currentChunk    [][]driver.Value // rows fetched in the current chunk
+	currentChunkIdx int              // index of the current row within currentChunk
 	moreData        bool
 	result          []driver.Value
 }
@@ -87,31 +87,28 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 		return
 	}
 
-	if rows.currentChunkRow != nil {
-		rows.currentChunkRow = rows.currentChunkRow.Next()
+	if rows.currentChunk != nil {
+		rows.currentChunkIdx++
 	}
 
-	if rows.currentChunkRow == nil && rows.moreData == true {
+	if rows.currentChunkIdx >= len(rows.currentChunk) && rows.moreData {
 		// Get one chunk
-		var chunk *list.List
 		err = rows.stmt.fc.wp.opFetch(rows.stmt.stmtHandle, rows.stmt.blr)
 		if err != nil {
 			return err
 		}
-		chunk, rows.moreData, err = rows.stmt.fc.wp.opFetchResponse(rows.stmt.stmtHandle, rows.stmt.fc.tx.transHandle, rows.stmt.xsqlda)
-
-		if err == nil {
-			rows.currentChunkRow = chunk.Front()
-		} else {
+		rows.currentChunk, rows.moreData, err = rows.stmt.fc.wp.opFetchResponse(rows.stmt.stmtHandle, rows.stmt.fc.tx.transHandle, rows.stmt.xsqlda)
+		if err != nil {
 			return
 		}
+		rows.currentChunkIdx = 0
 	}
 
-	if rows.currentChunkRow == nil {
+	if rows.currentChunkIdx >= len(rows.currentChunk) {
 		err = io.EOF
 		return
 	}
-	row, _ := rows.currentChunkRow.Value.([]driver.Value)
+	row := rows.currentChunk[rows.currentChunkIdx]
 	for i, v := range row {
 		if rows.stmt.xsqlda[i].sqltype == SQL_TYPE_BLOB && v != nil {
 			blobId := v.([]byte)

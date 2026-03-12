@@ -25,7 +25,6 @@ package firebirdsql
 
 import (
 	"bytes"
-	"container/list"
 	"encoding/binary"
 	"math/big"
 	"strconv"
@@ -135,24 +134,6 @@ func bigIntFromString(s string) *big.Int {
 	return ret
 }
 
-func flattenBytes(l *list.List) []byte {
-	n := 0
-	for e := l.Front(); e != nil; e = e.Next() {
-		n += len((e.Value).([]byte))
-	}
-
-	bs := make([]byte, n)
-
-	n = 0
-	for e := l.Front(); e != nil; e = e.Next() {
-		for i, b := range (e.Value).([]byte) {
-			bs[n+i] = b
-		}
-		n += len((e.Value).([]byte))
-	}
-
-	return bs
-}
 
 func xdrBytes(bs []byte) []byte {
 	// XDR encoding bytes
