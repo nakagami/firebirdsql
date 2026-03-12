@@ -51,13 +51,11 @@ type wireChannel struct {
 }
 
 func newWireChannel(conn net.Conn) (wireChannel, error) {
-	var err error
-	c := new(wireChannel)
-	c.conn = conn
-	c.reader = bufio.NewReader(c.conn)
-	c.writer = bufio.NewWriter(c.conn)
-
-	return *c, err
+	return wireChannel{
+		conn:   conn,
+		reader: bufio.NewReader(conn),
+		writer: bufio.NewWriter(conn),
+	}, nil
 }
 
 func (c *wireChannel) setCryptKey(plugin string, sessionKey []byte, nonce []byte) (err error) {
