@@ -25,7 +25,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
-	"bytes"
 	"crypto/sha1"
 	"crypto/sha256"
 	"hash"
@@ -111,13 +110,13 @@ func getScramble(keyA *big.Int, keyB *big.Int) *big.Int {
 
 func getStringHash(s string) *big.Int {
 	hash := sha1.New()
-	hash.Write(bytes.NewBufferString(s).Bytes())
+	hash.Write([]byte(s))
 	return bytesToBigInt(hash.Sum(nil))
 }
 
 func getUserHash(salt []byte, user string, password string) *big.Int {
 	hash1 := sha1.New()
-	hash1.Write(bytes.NewBufferString(user + ":" + password).Bytes())
+	hash1.Write([]byte(user + ":" + password))
 	hash2 := sha1.New()
 	hash2.Write(salt)
 	hash2.Write(hash1.Sum(nil))
