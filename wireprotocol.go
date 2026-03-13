@@ -34,13 +34,13 @@ import (
 	"net"
 	"os"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/kardianos/osext"
 	"gitlab.com/nyarla/go-crypt"
-	"slices"
 	// "unsafe"
 )
 
@@ -631,8 +631,7 @@ func (p *wireProtocol) _parse_select_items(buf []byte, xsqlda []xSQLVAR) (int, e
 		case isc_info_sql_describe_end:
 			/* NOTHING */
 		default:
-			err = errors.New(fmt.Sprintf("Invalid item [%02x] ! i=%d", buf[i], i))
-			break
+			err = fmt.Errorf("Invalid item [%02x] ! i=%d", buf[i], i)
 		}
 	}
 	return -1, err // no more info

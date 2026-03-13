@@ -28,7 +28,6 @@ import (
 	"compress/zlib"
 	"crypto/rc4"
 	"crypto/sha256"
-	"errors"
 	"fmt"
 	"github.com/nakagami/chacha20"
 	"slices"
@@ -72,7 +71,7 @@ func (c *wireChannel) setCryptKey(plugin string, sessionKey []byte, nonce []byte
 		c.rc4reader, err = rc4.NewCipher(sessionKey)
 		c.rc4writer, err = rc4.NewCipher(sessionKey)
 	} else {
-		err = errors.New(fmt.Sprintf("Unknown wire encrypto plugin name:%s", plugin))
+		err = fmt.Errorf("Unknown wire encrypto plugin name:%s", plugin)
 	}
 
 	return
