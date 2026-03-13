@@ -212,7 +212,7 @@ func (p *wireProtocol) sendPackets() (written int, err error) {
 		written += n
 	}
 	p.conn.Flush()
-	p.buf = make([]byte, 0, BUFFER_LEN)
+	p.buf = p.buf[:0]
 	return
 }
 
