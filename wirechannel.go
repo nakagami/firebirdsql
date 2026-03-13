@@ -30,10 +30,10 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"github.com/nakagami/chacha20"
-	"slices"
 	"io"
 	"net"
+
+	"github.com/nakagami/chacha20"
 	//"unsafe"
 )
 
@@ -50,6 +50,10 @@ type wireChannel struct {
 	decompressor   io.ReadCloser
 }
 
+func isChaCha(pluginName string) bool {
+	return pluginName == "ChaCha64" || pluginName == "ChaCha"
+}
+
 func newWireChannel(conn net.Conn) (wireChannel, error) {
 	var err error
 	c := new(wireChannel)
@@ -62,7 +66,7 @@ func newWireChannel(conn net.Conn) (wireChannel, error) {
 
 func (c *wireChannel) setCryptKey(plugin string, sessionKey []byte, nonce []byte) (err error) {
 	c.plugin = plugin
-	if slices.Contains([]string{"ChaCha64", "ChaCha"}, plugin) {
+	if isChaCha(plugin) {
 		digest := sha256.New()
 		digest.Write(sessionKey)
 		key := digest.Sum(nil)
@@ -101,7 +105,7 @@ func (c *wireChannel) Read(buf []byte) (n int, err error) {
 	if c.plugin != "" {
 		src := make([]byte, len(buf))
 		n, err = c.reader.Read(src)
-		if slices.Contains([]string{"ChaCha64", "ChaCha"}, c.plugin) {
+		if isChaCha(c.plugin) {
 			c.chacha20reader.XORKeyStream(buf, src[0:n])
 		} else if c.plugin == "Arc4" {
 			c.rc4reader.XORKeyStream(buf, src[0:n])
@@ -130,7 +134,7 @@ func (c *wireChannel) Write(buf []byte) (n int, err error) {
 	// Original code without compression
 	if c.plugin != "" {
 		dst := make([]byte, len(buf))
-		if slices.Contains([]string{"ChaCha64", "ChaCha"}, c.plugin) {
+		if isChaCha(c.plugin) {
 			c.chacha20writer.XORKeyStream(dst, buf)
 		} else if c.plugin == "Arc4" {
 			c.rc4writer.XORKeyStream(dst, buf)
