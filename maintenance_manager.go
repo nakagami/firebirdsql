@@ -261,29 +261,9 @@ func (mm *MaintenanceManager) RollbackTransaction(database string, transaction i
 }
 
 func (mm *MaintenanceManager) attach(spb []byte, verbose chan string) error {
-	var (
-		err  error
-		conn *ServiceManager
-	)
-	if conn, err = mm.connBuilder(); err != nil {
-		return err
-	}
-	defer func(conn *ServiceManager) {
-		_ = conn.Close()
-	}(conn)
-	return conn.ServiceAttach(spb, verbose)
+	return serviceAttach(mm.connBuilder, spb, verbose)
 }
 
 func (mm *MaintenanceManager) attachBuffer(spb []byte, verbose chan []byte) error {
-	var (
-		err  error
-		conn *ServiceManager
-	)
-	if conn, err = mm.connBuilder(); err != nil {
-		return err
-	}
-	defer func(conn *ServiceManager) {
-		_ = conn.Close()
-	}(conn)
-	return conn.ServiceAttachBuffer(spb, verbose)
+	return serviceAttachBuffer(mm.connBuilder, spb, verbose)
 }
