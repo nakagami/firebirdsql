@@ -64,9 +64,15 @@ func (c *wireChannel) setCryptKey(plugin string, sessionKey []byte, nonce []byte
 		digest.Write(sessionKey)
 		key := digest.Sum(nil)
 		c.chacha20reader, err = chacha20.NewCipher(key, nonce, 0)
+		if err != nil {
+			return
+		}
 		c.chacha20writer, err = chacha20.NewCipher(key, nonce, 0)
 	} else if plugin == "Arc4" {
 		c.rc4reader, err = rc4.NewCipher(sessionKey)
+		if err != nil {
+			return
+		}
 		c.rc4writer, err = rc4.NewCipher(sessionKey)
 	} else {
 		err = fmt.Errorf("Unknown wire encrypto plugin name:%s", plugin)
