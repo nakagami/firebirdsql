@@ -32,11 +32,11 @@ import (
 )
 
 func flattenNamedValues(named []driver.NamedValue) []driver.Value {
-	args := make([]driver.Value, len(named))
-	for i, nv := range named {
-		args[i] = nv.Value
+	values := make([]driver.Value, len(named))
+	for i, v := range named {
+		values[i] = v.Value
 	}
-	return args
+	return values
 }
 
 func (stmt *firebirdsqlStmt) ExecContext(ctx context.Context, namedargs []driver.NamedValue) (result driver.Result, err error) {
