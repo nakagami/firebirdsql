@@ -31,25 +31,23 @@ import (
 	"sort"
 )
 
+func flattenNamedValues(named []driver.NamedValue) []driver.Value {
+	args := make([]driver.Value, len(named))
+	for i, nv := range named {
+		args[i] = nv.Value
+	}
+	return args
+}
+
 func (stmt *firebirdsqlStmt) ExecContext(ctx context.Context, namedargs []driver.NamedValue) (result driver.Result, err error) {
 	sort.SliceStable(namedargs, func(i, j int) bool {
 		return namedargs[i].Ordinal < namedargs[j].Ordinal
 	})
-	args := make([]driver.Value, len(namedargs))
-	for i, nv := range namedargs {
-		args[i] = nv.Value
-	}
-
-	return stmt.exec(ctx, args)
+	return stmt.exec(ctx, flattenNamedValues(namedargs))
 }
 
 func (stmt *firebirdsqlStmt) QueryContext(ctx context.Context, namedargs []driver.NamedValue) (rows driver.Rows, err error) {
-	args := make([]driver.Value, len(namedargs))
-	for i, nv := range namedargs {
-		args[i] = nv.Value
-	}
-
-	return stmt.query(ctx, args)
+	return stmt.query(ctx, flattenNamedValues(namedargs))
 }
 
 func (fc *firebirdsqlConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
@@ -83,11 +81,7 @@ func (fc *firebirdsqlConn) PrepareContext(ctx context.Context, query string) (dr
 }
 
 func (fc *firebirdsqlConn) ExecContext(ctx context.Context, query string, namedargs []driver.NamedValue) (result driver.Result, err error) {
-	args := make([]driver.Value, len(namedargs))
-	for i, nv := range namedargs {
-		args[i] = nv.Value
-	}
-	return fc.exec(ctx, query, args)
+	return fc.exec(ctx, query, flattenNamedValues(namedargs))
 }
 
 // This file implements the optional pinger interface for the database/sql package
@@ -106,11 +100,7 @@ func (fc *firebirdsqlConn) Ping(ctx context.Context) (err error) {
 }
 
 func (fc *firebirdsqlConn) QueryContext(ctx context.Context, query string, namedargs []driver.NamedValue) (rows driver.Rows, err error) {
-	args := make([]driver.Value, len(namedargs))
-	for i, nv := range namedargs {
-		args[i] = nv.Value
-	}
-	return fc.query(ctx, query, args)
+	return fc.query(ctx, query, flattenNamedValues(namedargs))
 }
 
 // ================== Implementation of the Connector interface ====================
