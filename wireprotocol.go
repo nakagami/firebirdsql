@@ -25,7 +25,6 @@ package firebirdsql
 
 import (
 	"bytes"
-	"container/list"
 	"database/sql/driver"
 	"encoding/hex"
 	"errors"
@@ -34,13 +33,13 @@ import (
 	"net"
 	"os"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/kardianos/osext"
 	"gitlab.com/nyarla/go-crypt"
-	"slices"
 	// "unsafe"
 )
 
@@ -213,7 +212,7 @@ func (p *wireProtocol) sendPackets() (written int, err error) {
 		written += n
 	}
 	p.conn.Flush()
-	p.buf = make([]byte, 0, BUFFER_LEN)
+	p.buf = p.buf[:0]
 	return
 }
 
@@ -631,8 +630,7 @@ func (p *wireProtocol) _parse_select_items(buf []byte, xsqlda []xSQLVAR) (int, e
 		case isc_info_sql_describe_end:
 			/* NOTHING */
 		default:
-			err = errors.New(fmt.Sprintf("Invalid item [%02x] ! i=%d", buf[i], i))
-			break
+			err = fmt.Errorf("Invalid item [%02x] ! i=%d", buf[i], i)
 		}
 	}
 	return -1, err // no more info
@@ -1069,7 +1067,8 @@ func (p *wireProtocol) opFetch(stmtHandle int32, blr []byte) error {
 	return err
 }
 
-func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsqlda []xSQLVAR) (*list.List, bool, error) {
+// opFetchResponse reads rows from a fetch response, returning them as a slice.
+func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsqlda []xSQLVAR) ([][]driver.Value, bool, error) {
 	p.debugPrint("opFetchResponse")
 	b, err := p.recvPackets(4)
 	for bytes_to_bint32(b) == op_dummy {
@@ -1093,7 +1092,7 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsql
 	b, err = p.recvPackets(8)
 	status := bytes_to_bint32(b[:4])
 	count := int(bytes_to_bint32(b[4:8]))
-	rows := list.New()
+	rows := make([][]driver.Value, 0, count) // pre-allocate to known chunk size
 
 	for count > 0 {
 		r := make([]driver.Value, len(xsqlda))
@@ -1142,7 +1141,7 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsql
 			}
 		}
 
-		rows.PushBack(r)
+		rows = append(rows, r)
 
 		b, err = p.recvPackets(12)
 		// op := int(bytes_to_bint32(b[:4]))
@@ -1376,15 +1375,17 @@ func (p *wireProtocol) createBlob(value []byte, transHandle int32) ([]byte, erro
 	return blobId, err
 }
 
+// paramsToBlr converts parameters to BLR type descriptors and serialized values for the wire protocol.
 func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, protocolVersion int32) ([]byte, []byte) {
-	// Convert parameter array to BLR and values format.
 	var v, blr []byte
 	bi256 := big.NewInt(256)
 
 	ln := len(params) * 2
-	blrList := list.New()
-	valuesList := list.New()
-	blrList.PushBack([]byte{5, 2, 4, 0, byte(ln & 255), byte(ln >> 8)})
+	// Each param contributes a type descriptor + null indicator pair, plus a header and terminator entry.
+	blrList := make([][]byte, 0, len(params)*2+2)
+	// Each param contributes a value entry; pre-v13 also adds a null flag per param.
+	valuesList := make([][]byte, 0, len(params)*2)
+	blrList = append(blrList, []byte{5, 2, 4, 0, byte(ln & 255), byte(ln >> 8)})
 
 	if protocolVersion >= PROTOCOL_VERSION13 {
 		nullIndicator := new(big.Int)
@@ -1402,7 +1403,7 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 		}
 		for i := 0; i < n; i++ {
 			var modres *big.Int = new(big.Int)
-			valuesList.PushBack([]byte{byte(modres.Mod(nullIndicator, bi256).Int64())})
+			valuesList = append(valuesList, []byte{byte(modres.Mod(nullIndicator, bi256).Int64())})
 			nullIndicator = nullIndicator.Div(nullIndicator, bi256)
 		}
 	}
@@ -1461,21 +1462,21 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 				blr = []byte{9, 0}
 			}
 		}
-		valuesList.PushBack(v)
+		valuesList = append(valuesList, v)
 		if protocolVersion < PROTOCOL_VERSION13 {
 			if param == nil {
-				valuesList.PushBack([]byte{0xff, 0xff, 0xff, 0xff})
+				valuesList = append(valuesList, []byte{0xff, 0xff, 0xff, 0xff})
 			} else {
-				valuesList.PushBack([]byte{0, 0, 0, 0})
+				valuesList = append(valuesList, []byte{0, 0, 0, 0})
 			}
 		}
-		blrList.PushBack(blr)
-		blrList.PushBack([]byte{7, 0})
+		blrList = append(blrList, blr)
+		blrList = append(blrList, []byte{7, 0})
 	}
-	blrList.PushBack([]byte{255, 76}) // [blr_end, blr_eoc]
+	blrList = append(blrList, []byte{255, 76}) // [blr_end, blr_eoc]
 
-	blr = flattenBytes(blrList)
-	v = flattenBytes(valuesList)
+	blr = bytes.Join(blrList, nil)
+	v = bytes.Join(valuesList, nil)
 
 	return blr, v
 }

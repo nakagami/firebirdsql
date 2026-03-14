@@ -28,7 +28,6 @@ import (
 	"compress/zlib"
 	"crypto/rc4"
 	"crypto/sha256"
-	"errors"
 	"fmt"
 	"github.com/nakagami/chacha20"
 	"slices"
@@ -51,13 +50,11 @@ type wireChannel struct {
 }
 
 func newWireChannel(conn net.Conn) (wireChannel, error) {
-	var err error
-	c := new(wireChannel)
-	c.conn = conn
-	c.reader = bufio.NewReader(c.conn)
-	c.writer = bufio.NewWriter(c.conn)
-
-	return *c, err
+	return wireChannel{
+		conn:   conn,
+		reader: bufio.NewReader(conn),
+		writer: bufio.NewWriter(conn),
+	}, nil
 }
 
 func (c *wireChannel) setCryptKey(plugin string, sessionKey []byte, nonce []byte) (err error) {
@@ -67,12 +64,18 @@ func (c *wireChannel) setCryptKey(plugin string, sessionKey []byte, nonce []byte
 		digest.Write(sessionKey)
 		key := digest.Sum(nil)
 		c.chacha20reader, err = chacha20.NewCipher(key, nonce, 0)
+		if err != nil {
+			return
+		}
 		c.chacha20writer, err = chacha20.NewCipher(key, nonce, 0)
 	} else if plugin == "Arc4" {
 		c.rc4reader, err = rc4.NewCipher(sessionKey)
+		if err != nil {
+			return
+		}
 		c.rc4writer, err = rc4.NewCipher(sessionKey)
 	} else {
-		err = errors.New(fmt.Sprintf("Unknown wire encrypto plugin name:%s", plugin))
+		err = fmt.Errorf("Unknown wire encrypto plugin name:%s", plugin)
 	}
 
 	return
