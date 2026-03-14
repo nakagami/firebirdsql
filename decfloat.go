@@ -129,8 +129,7 @@ func decimal128ToSignDigitsExponent(b []byte) (v *decimal.Decimal, sign int, dig
 	if (cf & 0x1F000) == 0x1F000 {
 		var d decimal.Decimal
 		if sign == 1 {
-			// Is there -NaN ?
-			d = decimal.NewFromFloat(math.NaN())
+			d = decimal.NewFromFloat(math.Float64frombits(0xFFF8000000000001))
 		} else {
 			d = decimal.NewFromFloat(math.NaN())
 		}
@@ -203,8 +202,7 @@ func decimal64ToDecimal(b []byte) decimal.Decimal {
 
 	if cf == 0x1f {
 		if sign == 1 {
-			// Is there -NaN ?
-			return decimal.NewFromFloat(math.NaN())
+			return decimal.NewFromFloat(math.Float64frombits(0xFFF8000000000001))
 		}
 		return decimal.NewFromFloat(math.NaN())
 	} else if cf == 0x1e {
