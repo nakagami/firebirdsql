@@ -884,13 +884,6 @@ func (p *wireProtocol) opCryptCallback() error {
 	return err
 }
 
-func (p *wireProtocol) opDropDatabase() error {
-	p.debugPrint("opDropDatabase")
-	p.packInt(op_drop_database)
-	p.packInt(p.dbHandle)
-	_, err := p.sendPackets()
-	return err
-}
 
 func (p *wireProtocol) opTransaction(tpb []byte) error {
 	p.debugPrint("opTransaction")
@@ -925,13 +918,6 @@ func (p *wireProtocol) opRollback(transHandle int32) error {
 	return err
 }
 
-func (p *wireProtocol) opRollbackRetaining(transHandle int32) error {
-	p.debugPrint("opRollbackRetaining():%d", transHandle)
-	p.packInt(op_rollback_retaining)
-	p.packInt(transHandle)
-	_, err := p.sendPackets()
-	return err
-}
 
 func (p *wireProtocol) opAllocateStatement() error {
 	p.debugPrint("opAllocateStatement")
@@ -941,27 +927,7 @@ func (p *wireProtocol) opAllocateStatement() error {
 	return err
 }
 
-func (p *wireProtocol) opInfoTransaction(transHandle int32, b []byte) error {
-	p.debugPrint("opInfoTransaction")
-	p.packInt(op_info_transaction)
-	p.packInt(transHandle)
-	p.packInt(0)
-	p.packBytes(b)
-	p.packInt(int32(BUFFER_LEN))
-	_, err := p.sendPackets()
-	return err
-}
 
-func (p *wireProtocol) opInfoDatabase(bs []byte) error {
-	p.debugPrint("opInfoDatabase")
-	p.packInt(op_info_database)
-	p.packInt(p.dbHandle)
-	p.packInt(0)
-	p.packBytes(bs)
-	p.packInt(int32(BUFFER_LEN))
-	_, err := p.sendPackets()
-	return err
-}
 
 func (p *wireProtocol) opFreeStatement(stmtHandle int32, mode int32) error {
 	p.debugPrint("opFreeStatement:<%v>", stmtHandle)
@@ -1160,14 +1126,6 @@ func (p *wireProtocol) opDetach() error {
 	return err
 }
 
-func (p *wireProtocol) opOpenBlob(blobId []byte, transHandle int32) error {
-	p.debugPrint("opOpenBlob")
-	p.packInt(op_open_blob)
-	p.packInt(transHandle)
-	p.appendBytes(blobId)
-	_, err := p.sendPackets()
-	return err
-}
 
 func (p *wireProtocol) opOpenBlob2(blobId []byte, transHandle int32) error {
 	p.debugPrint("opOpenBlob2")
@@ -1214,21 +1172,6 @@ func (p *wireProtocol) opPutSegment(blobHandle int32, seg_data []byte) error {
 	return err
 }
 
-func (p *wireProtocol) opBatchSegments(blobHandle int32, seg_data []byte) error {
-	p.debugPrint("opBatchSegments")
-	ln := len(seg_data)
-	p.packInt(op_batch_segments)
-	p.packInt(blobHandle)
-	p.packInt(int32(ln + 2))
-	p.packInt(int32(ln + 2))
-	pad_length := ((4 - (ln + 2)) & 3)
-	padding := make([]byte, pad_length)
-	p.packBytes([]byte{byte(ln & 255), byte(ln >> 8)}) // little endian int16
-	p.packBytes(seg_data)
-	p.packBytes(padding)
-	_, err := p.sendPackets()
-	return err
-}
 
 func (p *wireProtocol) opCloseBlob(blobHandle int32) error {
 	p.debugPrint("opCloseBlob")

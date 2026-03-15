@@ -153,11 +153,6 @@ func xdrBytes(bs []byte) []byte {
 	return buf
 }
 
-func xdrString(s string) []byte {
-	// XDR encoding string
-	bs := []byte(s)
-	return xdrBytes(bs)
-}
 
 func _int64ToBlr(i64 int64) ([]byte, []byte) {
 	v := bint64_to_bytes(i64)
