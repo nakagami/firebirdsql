@@ -1488,16 +1488,17 @@ func (p *wireProtocol) debugPrint(s string, a ...interface{}) {
 	//fmt.Printf("[%x] %s\n", uintptr(unsafe.Pointer(p)), s)
 }
 
-func (p *wireProtocol) opConnectRequest() {
+func (p *wireProtocol) opConnectRequest() error {
 	p.debugPrint("opConnectRequest()")
 	p.packInt(op_connect_request)
 	p.packInt(p_req_async)
 	p.packInt(p.dbHandle)
 	p.packInt(partner_identification)
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opQueEvents(auxHandle int32, epb []byte, eventId int32) {
+func (p *wireProtocol) opQueEvents(auxHandle int32, epb []byte, eventId int32) error {
 	p.debugPrint("opQueEvents():%d %d", auxHandle, eventId)
 	p.packInt(op_que_events)
 	p.packInt(auxHandle)
@@ -1505,15 +1506,17 @@ func (p *wireProtocol) opQueEvents(auxHandle int32, epb []byte, eventId int32) {
 	p.packInt(address_of_ast_routine)
 	p.packInt(argument_to_ast_routine)
 	p.packInt(eventId)
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opCancelEvents(eventID int32) {
+func (p *wireProtocol) opCancelEvents(eventID int32) error {
 	p.debugPrint("opCancelEvents():%d", eventID)
 	p.packInt(op_cancel_events)
 	p.packInt(p.dbHandle)
 	p.packInt(eventID)
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
 func (p *wireProtocol) opCancel(kind int) error {
