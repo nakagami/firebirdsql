@@ -140,7 +140,10 @@ func openFirebirdsqlConn(dsn *firebirdDsn, dbOp func(*wireProtocol) error) (*fir
 		return nil, err
 	}
 	columnNameToLower := convertToBool(dsn.options["column_name_to_lower"], false)
-	clientPublic, clientSecret := getClientSeed()
+	clientPublic, clientSecret, err := getClientSeed()
+	if err != nil {
+		return nil, err
+	}
 
 	if err = wp.opConnect(dsn.dbName, dsn.user, dsn.passwd, dsn.options, clientPublic); err != nil {
 		return nil, err
