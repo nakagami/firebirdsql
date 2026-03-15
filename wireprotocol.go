@@ -766,13 +766,13 @@ func (p *wireProtocol) appendAuthAndTimezone(dpb []byte) []byte {
 		specificAuthData := []byte(hex.EncodeToString(p.authData))
 		dpb = bytes.Join([][]byte{
 			dpb,
-			[]byte{isc_dpb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)
+			{isc_dpb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)
 	}
 	if p.timezone != "" {
 		tznameBytes := []byte(p.timezone)
 		dpb = bytes.Join([][]byte{
 			dpb,
-			[]byte{isc_dpb_session_time_zone, byte(len(tznameBytes))}, tznameBytes}, nil)
+			{isc_dpb_session_time_zone, byte(len(tznameBytes))}, tznameBytes}, nil)
 	}
 	return dpb
 }
