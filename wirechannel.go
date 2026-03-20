@@ -30,7 +30,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"github.com/nakagami/chacha20"
-	"slices"
 	"io"
 	"net"
 	//"unsafe"
@@ -59,7 +58,8 @@ func newWireChannel(conn net.Conn) (wireChannel, error) {
 
 func (c *wireChannel) setCryptKey(plugin string, sessionKey []byte, nonce []byte) (err error) {
 	c.plugin = plugin
-	if slices.Contains([]string{"ChaCha64", "ChaCha"}, plugin) {
+	switch plugin {
+	case "ChaCha64", "ChaCha":
 		digest := sha256.New()
 		digest.Write(sessionKey)
 		key := digest.Sum(nil)
@@ -68,13 +68,13 @@ func (c *wireChannel) setCryptKey(plugin string, sessionKey []byte, nonce []byte
 			return
 		}
 		c.chacha20writer, err = chacha20.NewCipher(key, nonce, 0)
-	} else if plugin == "Arc4" {
+	case "Arc4":
 		c.rc4reader, err = rc4.NewCipher(sessionKey)
 		if err != nil {
 			return
 		}
 		c.rc4writer, err = rc4.NewCipher(sessionKey)
-	} else {
+	default:
 		err = fmt.Errorf("Unknown wire encrypto plugin name:%s", plugin)
 	}
 
@@ -104,9 +104,10 @@ func (c *wireChannel) Read(buf []byte) (n int, err error) {
 	if c.plugin != "" {
 		src := make([]byte, len(buf))
 		n, err = c.reader.Read(src)
-		if slices.Contains([]string{"ChaCha64", "ChaCha"}, c.plugin) {
+		switch c.plugin {
+		case "ChaCha64", "ChaCha":
 			c.chacha20reader.XORKeyStream(buf, src[0:n])
-		} else if c.plugin == "Arc4" {
+		case "Arc4":
 			c.rc4reader.XORKeyStream(buf, src[0:n])
 		}
 		return
@@ -133,9 +134,10 @@ func (c *wireChannel) Write(buf []byte) (n int, err error) {
 	// Original code without compression
 	if c.plugin != "" {
 		dst := make([]byte, len(buf))
-		if slices.Contains([]string{"ChaCha64", "ChaCha"}, c.plugin) {
+		switch c.plugin {
+		case "ChaCha64", "ChaCha":
 			c.chacha20writer.XORKeyStream(dst, buf)
-		} else if c.plugin == "Arc4" {
+		case "Arc4":
 			c.rc4writer.XORKeyStream(dst, buf)
 		}
 		written := 0
