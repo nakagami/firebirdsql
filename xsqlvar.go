@@ -450,11 +450,11 @@ func (x *xSQLVAR) value(raw_value []byte, timezone string, charset string) (v in
 			v = raw_value
 		}
 	case SQL_TYPE_DEC_FIXED:
-		v = decimalFixedToDecimal(raw_value, int32(x.sqlscale))
+		v, err = decimalFixedToDecimal(raw_value, int32(x.sqlscale))
 	case SQL_TYPE_DEC64:
-		v = decimal64ToDecimal(raw_value)
+		v, err = decimal64ToDecimal(raw_value)
 	case SQL_TYPE_DEC128:
-		v = decimal128ToDecimal(raw_value)
+		v, err = decimal128ToDecimal(raw_value)
 	}
 	return
 }
