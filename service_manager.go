@@ -216,7 +216,10 @@ func NewServiceManager(addr string, user string, password string, options Servic
 		"wire_crypt":       wireCryptStr,
 	}
 
-	clientPublic, clientSecret := getClientSeed()
+	clientPublic, clientSecret, err := getClientSeed()
+	if err != nil {
+		return nil, err
+	}
 	if err = wp.opConnect("", user, password, connOptions, clientPublic); err != nil {
 		return nil, err
 	}
