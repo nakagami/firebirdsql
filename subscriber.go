@@ -63,7 +63,7 @@ func newSubscription(dsn *firebirdDsn, events []string, cb EventHandler, chEvent
 	return newSubscription, nil
 }
 func (s *Subscription) cancelEvents() error {
-	if atomic.LoadInt32(&s.closed) == 0 {
+	if atomic.LoadInt32(&s.closed) == 1 {
 		return nil
 	}
 	id := atomic.LoadInt32(&s.revent.id)
