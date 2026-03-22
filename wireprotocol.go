@@ -1431,9 +1431,9 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 			blr, v = _float64ToBlr(float64(f))
 		case time.Time:
 			if f.Year() == 0 {
-				blr, v = _timeToBlr(f, protocolVersion)
+				blr, v = _timeToBlr(f, protocolVersion, p.timezone)
 			} else {
-				blr, v = _timestampToBlr(f, protocolVersion)
+				blr, v = _timestampToBlr(f, protocolVersion, p.timezone)
 			}
 		case bool:
 			if f {
