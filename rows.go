@@ -32,12 +32,13 @@ import (
 )
 
 type firebirdsqlRows struct {
-	ctx             context.Context
-	stmt            *firebirdsqlStmt
-	currentChunk    [][]driver.Value // rows fetched in the current chunk
-	currentChunkIdx int              // index of the current row within currentChunk
-	moreData        bool
-	result          []driver.Value
+	ctx              context.Context
+	stmt             *firebirdsqlStmt
+	currentChunk     [][]driver.Value // rows fetched in the current chunk
+	currentChunkIdx  int              // index of the current row within currentChunk
+	moreData         bool
+	result           []driver.Value
+	closeStmtOnClose bool // true for internal stmts that should be dropped on rows.Close()
 }
 
 func newFirebirdsqlRows(ctx context.Context, stmt *firebirdsqlStmt, result []driver.Value) *firebirdsqlRows {
@@ -62,10 +63,11 @@ func (rows *firebirdsqlRows) Columns() []string {
 	return columns
 }
 
-func (rows *firebirdsqlRows) Close() (er error) {
-	rows.stmt.Close()
-
-	return
+func (rows *firebirdsqlRows) Close() error {
+	if rows.closeStmtOnClose {
+		return rows.stmt.Close()
+	}
+	return rows.stmt.closeCursor()
 }
 
 func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {

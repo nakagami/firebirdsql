@@ -127,6 +127,9 @@ func (fc *firebirdsqlConn) query(ctx context.Context, query string, args []drive
 		return
 	}
 	rows, err = stmt.(*firebirdsqlStmt).query(ctx, args)
+	if err == nil {
+		rows.(*firebirdsqlRows).closeStmtOnClose = true
+	}
 	return
 }
 
