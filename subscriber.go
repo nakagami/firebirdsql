@@ -68,9 +68,11 @@ func (s *Subscription) cancelEvents() error {
 	}
 	id := atomic.LoadInt32(&s.revent.id)
 	s.mu.Lock()
-	s.fc.wp.opCancelEvents(id)
+	defer s.mu.Unlock()
+	if err := s.fc.wp.opCancelEvents(id); err != nil {
+		return err
+	}
 	_, _, _, err := s.fc.wp.opResponse()
-	s.mu.Unlock()
 	if err != nil {
 		return err
 	}
@@ -84,7 +86,9 @@ func (s *Subscription) queueEvents(eventID int32) error {
 	id := eventID + 1
 	epbData := s.revent.buildEpb()
 
-	s.fc.wp.opQueEvents(s.auxHandle, epbData, id)
+	if err := s.fc.wp.opQueEvents(s.auxHandle, epbData, id); err != nil {
+		return err
+	}
 	rid, _, _, err := s.fc.wp.opResponse()
 	if err != nil {
 		return err
@@ -154,7 +158,9 @@ func (s *Subscription) unsubscribeNoNotify() error {
 func (s *Subscription) connAuxRequest() (int32, *netip.AddrPort, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.fc.wp.opConnectRequest()
+	if err := s.fc.wp.opConnectRequest(); err != nil {
+		return -1, nil, err
+	}
 	auxHandle, _, buf, err := s.fc.wp.opResponse()
 	if err != nil {
 		return -1, nil, err
