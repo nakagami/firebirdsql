@@ -1481,6 +1481,35 @@ func TestReuseConnectionAfterTimeout(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestBlobCharsetDecoding(t *testing.T) {
+	testDsn := GetTestDSN("test_blob_charset_") + "?charset=WIN1251"
+	conn, err := sql.Open("firebirdsql_createdb", testDsn)
+	require.NoError(t, err)
+
+	_, err = conn.Exec("CREATE TABLE test_blob_charset (f1 BLOB SUB_TYPE 1, f2 BLOB SUB_TYPE 0)")
+	require.NoError(t, err)
+	conn.Close()
+
+	time.Sleep(1 * time.Second)
+
+	conn, err = sql.Open("firebirdsql", testDsn)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	cyrillicText := "Проверка"
+	binaryData := []byte{0, 1, 2, 3, 4, 13, 10, 5, 6, 7}
+
+	_, err = conn.Exec("INSERT INTO test_blob_charset (f1, f2) VALUES (?, ?)", cyrillicText, binaryData)
+	require.NoError(t, err)
+
+	var s string
+	var b []byte
+	err = conn.QueryRow("SELECT f1, f2 FROM test_blob_charset").Scan(&s, &b)
+	require.NoError(t, err)
+	assert.Equal(t, cyrillicText, s)
+	assert.Equal(t, binaryData, b)
+}
+
 func TestAuth(t *testing.T) {
 	conn, err := sql.Open("firebirdsql", GetTestUser()+":wrongpassword@localhost/employee")
 	err = conn.Ping()
