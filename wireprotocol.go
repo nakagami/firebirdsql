@@ -760,6 +760,23 @@ func (p *wireProtocol) opConnect(dbName string, user string, password string, op
 	return err
 }
 
+// appendAuthAndTimezone appends auth data and session timezone to a DPB byte slice.
+func (p *wireProtocol) appendAuthAndTimezone(dpb []byte) []byte {
+	if p.authData != nil {
+		specificAuthData := []byte(hex.EncodeToString(p.authData))
+		dpb = bytes.Join([][]byte{
+			dpb,
+			{isc_dpb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)
+	}
+	if p.timezone != "" {
+		tznameBytes := []byte(p.timezone)
+		dpb = bytes.Join([][]byte{
+			dpb,
+			{isc_dpb_session_time_zone, byte(len(tznameBytes))}, tznameBytes}, nil)
+	}
+	return dpb
+}
+
 func (p *wireProtocol) opCreate(dbName string, user string, password string, role string) error {
 	p.debugPrint("opCreate")
 	var page_size int32
@@ -783,18 +800,7 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 		[]byte{isc_dpb_utf8_filename, 1, 1},
 	}, nil)
 
-	if p.authData != nil {
-		specificAuthData := []byte(hex.EncodeToString(p.authData))
-		dpb = bytes.Join([][]byte{
-			dpb,
-			[]byte{isc_dpb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)
-	}
-	if p.timezone != "" {
-		tznameBytes := []byte(p.timezone)
-		dpb = bytes.Join([][]byte{
-			dpb,
-			[]byte{isc_dpb_session_time_zone, byte(len(tznameBytes))}, tznameBytes}, nil)
-	}
+	dpb = p.appendAuthAndTimezone(dpb)
 
 	p.packInt(op_create)
 	p.packInt(0) // Database Object ID
@@ -835,18 +841,7 @@ func (p *wireProtocol) opAttach(dbName string, user string, password string, rol
 		[]byte{isc_dpb_utf8_filename, 1, 1},
 	}, nil)
 
-	if p.authData != nil {
-		specificAuthData := []byte(hex.EncodeToString(p.authData))
-		dpb = bytes.Join([][]byte{
-			dpb,
-			[]byte{isc_dpb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)
-	}
-	if p.timezone != "" {
-		tznameBytes := []byte(p.timezone)
-		dpb = bytes.Join([][]byte{
-			dpb,
-			[]byte{isc_dpb_session_time_zone, byte(len(tznameBytes))}, tznameBytes}, nil)
-	}
+	dpb = p.appendAuthAndTimezone(dpb)
 
 	p.packInt(op_attach)
 	p.packInt(0) // Database Object ID
