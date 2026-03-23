@@ -576,6 +576,13 @@ const (
 	fb_cancel_abort   = 4
 )
 
+// op_free_statement modes (p_sqlfree_option).
+// Names match the Firebird wire protocol specification.
+const (
+	DSQL_close = 1 // close the cursor opened after statement execute
+	DSQL_drop  = 2 // release the statement handle
+)
+
 type ShutdownMode byte
 
 const (
