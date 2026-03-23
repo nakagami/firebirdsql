@@ -26,7 +26,29 @@ package firebirdsql
 import "testing"
 
 func TestTimezoneRoundTrip(t *testing.T) {
-	names := []string{"GMT", "UTC", "America/New_York", "Asia/Seoul", "Europe/London"}
+	names := []string{
+		"GMT",
+		"UTC",
+		"Africa/Johannesburg",
+		"America/Argentina/Buenos_Aires",
+		"America/Mexico_City",
+		"America/New_York",
+		"America/Sao_Paulo",
+		"America/Toronto",
+		"Asia/Jakarta",
+		"Asia/Kolkata",
+		"Asia/Riyadh",
+		"Asia/Seoul",
+		"Asia/Shanghai",
+		"Asia/Tokyo",
+		"Australia/Sydney",
+		"Europe/Berlin",
+		"Europe/Istanbul",
+		"Europe/London",
+		"Europe/Moscow",
+		"Europe/Paris",
+		"Europe/Rome",
+	}
 	for _, name := range names {
 		id := getTimezoneIDByName(name)
 		if id == 0 {
