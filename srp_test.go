@@ -31,10 +31,19 @@ func TestSrp(t *testing.T) {
 	user := "SYSDBA"
 	password := "masterkey"
 
-	keyA, keya := getClientSeed()
-	salt := getSalt()
+	keyA, keya, err := getClientSeed()
+	if err != nil {
+		t.Fatal(err)
+	}
+	salt, err := getSalt()
+	if err != nil {
+		t.Fatal(err)
+	}
 	v := getVerifier(user, password, salt)
-	keyB, keyb := getServerSeed(v)
+	keyB, keyb, err := getServerSeed(v)
+	if err != nil {
+		t.Fatal(err)
+	}
 	serverKey := getServerSession(user, password, salt, keyA, keyB, keyb)
 	_, clientKey := getClientProof(user, password, salt, keyA, keyB, keya, "Srp")
 	for i := range clientKey {

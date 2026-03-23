@@ -127,6 +127,9 @@ func (fc *firebirdsqlConn) query(ctx context.Context, query string, args []drive
 		return
 	}
 	rows, err = stmt.(*firebirdsqlStmt).query(ctx, args)
+	if err == nil {
+		rows.(*firebirdsqlRows).closeStmtOnClose = true
+	}
 	return
 }
 
@@ -134,89 +137,55 @@ func (fc *firebirdsqlConn) Query(query string, args []driver.Value) (rows driver
 	return fc.query(context.Background(), query, args)
 }
 
-func newFirebirdsqlConn(dsn *firebirdDsn) (fc *firebirdsqlConn, err error) {
-
+func openFirebirdsqlConn(dsn *firebirdDsn, dbOp func(*wireProtocol) error) (*firebirdsqlConn, error) {
 	wp, err := newWireProtocol(dsn.addr, dsn.options["timezone"], dsn.options["charset"])
 	if err != nil {
-		return
+		return nil, err
 	}
-
-	column_name_to_lower := convertToBool(dsn.options["column_name_to_lower"], false)
-
-	clientPublic, clientSecret := getClientSeed()
-
-	err = wp.opConnect(dsn.dbName, dsn.user, dsn.passwd, dsn.options, clientPublic)
+	columnNameToLower := convertToBool(dsn.options["column_name_to_lower"], false)
+	clientPublic, clientSecret, err := getClientSeed()
 	if err != nil {
-		return
+		return nil, err
 	}
 
-	err = wp._parse_connect_response(dsn.user, dsn.passwd, dsn.options, clientPublic, clientSecret)
-	if err != nil {
-		return
+	if err = wp.opConnect(dsn.dbName, dsn.user, dsn.passwd, dsn.options, clientPublic); err != nil {
+		return nil, err
 	}
-
-	err = wp.opAttach(dsn.dbName, dsn.user, dsn.passwd, dsn.options["role"])
-	if err != nil {
-		return
+	if err = wp._parse_connect_response(dsn.user, dsn.passwd, dsn.options, clientPublic, clientSecret); err != nil {
+		return nil, err
 	}
-
+	if err = dbOp(wp); err != nil {
+		return nil, err
+	}
 	wp.dbHandle, _, _, err = wp.opResponse()
 	if err != nil {
-		return
+		return nil, err
 	}
 
-	fc = new(firebirdsqlConn)
-	fc.transactionSet = make(map[*firebirdsqlTx]struct{})
-	fc.wp = wp
-	fc.dsn = dsn
-	fc.columnNameToLower = column_name_to_lower
-	fc.isAutocommit = true
+	fc := &firebirdsqlConn{
+		transactionSet:    make(map[*firebirdsqlTx]struct{}),
+		wp:                wp,
+		dsn:               dsn,
+		columnNameToLower: columnNameToLower,
+		isAutocommit:      true,
+		clientPublic:      clientPublic,
+		clientSecret:      clientSecret,
+	}
 	fc.tx, err = newFirebirdsqlTx(fc, ISOLATION_LEVEL_READ_COMMITED, fc.isAutocommit, false)
-	fc.clientPublic = clientPublic
-	fc.clientSecret = clientSecret
-
-	return fc, err
+	if err != nil {
+		return nil, err
+	}
+	return fc, nil
 }
 
-func createFirebirdsqlConn(dsn *firebirdDsn) (fc *firebirdsqlConn, err error) {
+func attachFirebirdsqlConn(dsn *firebirdDsn) (*firebirdsqlConn, error) {
+	return openFirebirdsqlConn(dsn, func(wp *wireProtocol) error {
+		return wp.opAttach(dsn.dbName, dsn.user, dsn.passwd, dsn.options["role"])
+	})
+}
 
-	wp, err := newWireProtocol(dsn.addr, dsn.options["timezone"], dsn.options["charset"])
-	if err != nil {
-		return
-	}
-	column_name_to_lower := convertToBool(dsn.options["column_name_to_lower"], false)
-
-	clientPublic, clientSecret := getClientSeed()
-
-	err = wp.opConnect(dsn.dbName, dsn.user, dsn.passwd, dsn.options, clientPublic)
-	if err != nil {
-		return
-	}
-
-	err = wp._parse_connect_response(dsn.user, dsn.passwd, dsn.options, clientPublic, clientSecret)
-	if err != nil {
-		return
-	}
-
-	err = wp.opCreate(dsn.dbName, dsn.user, dsn.passwd, dsn.options["role"])
-	if err != nil {
-		return
-	}
-
-	wp.dbHandle, _, _, err = wp.opResponse()
-	if err != nil {
-		return
-	}
-
-	fc = new(firebirdsqlConn)
-	fc.transactionSet = make(map[*firebirdsqlTx]struct{})
-	fc.wp = wp
-	fc.dsn = dsn
-	fc.columnNameToLower = column_name_to_lower
-	fc.isAutocommit = true
-	fc.tx, err = newFirebirdsqlTx(fc, ISOLATION_LEVEL_READ_COMMITED, fc.isAutocommit, false)
-	fc.clientPublic = clientPublic
-	fc.clientSecret = clientSecret
-
-	return fc, err
+func createFirebirdsqlConn(dsn *firebirdDsn) (*firebirdsqlConn, error) {
+	return openFirebirdsqlConn(dsn, func(wp *wireProtocol) error {
+		return wp.opCreate(dsn.dbName, dsn.user, dsn.passwd, dsn.options["role"])
+	})
 }

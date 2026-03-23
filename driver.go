@@ -36,7 +36,7 @@ func (d *firebirdsqlDriver) Open(dsns string) (driver.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newFirebirdsqlConn(dsn)
+	return attachFirebirdsqlConn(dsn)
 }
 
 type firebirdsqlCreateDbDriver struct{}

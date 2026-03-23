@@ -25,13 +25,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
-	"bytes"
+	"crypto/rand"
 	"crypto/sha1"
 	"crypto/sha256"
 	"hash"
 	"math/big"
-	"math/rand"
-	"time"
 
 	"modernc.org/mathutil"
 )
@@ -111,40 +109,43 @@ func getScramble(keyA *big.Int, keyB *big.Int) *big.Int {
 
 func getStringHash(s string) *big.Int {
 	hash := sha1.New()
-	hash.Write(bytes.NewBufferString(s).Bytes())
+	hash.Write([]byte(s))
 	return bytesToBigInt(hash.Sum(nil))
 }
 
 func getUserHash(salt []byte, user string, password string) *big.Int {
 	hash1 := sha1.New()
-	hash1.Write(bytes.NewBufferString(user + ":" + password).Bytes())
+	hash1.Write([]byte(user + ":" + password))
 	hash2 := sha1.New()
 	hash2.Write(salt)
 	hash2.Write(hash1.Sum(nil))
 	return bytesToBigInt(hash2.Sum(nil))
 }
 
-func getClientSeed() (keyA *big.Int, keya *big.Int) {
+func getClientSeed() (keyA *big.Int, keya *big.Int, err error) {
 	prime, g, _ := getPrime()
 	if DEBUG_SRP {
 		keya = bigIntFromString(DEBUG_PRIVATE_KEY)
 	} else {
-		keya = new(big.Int).Rand(rand.New(rand.NewSource(time.Now().UnixNano())),
-			bigIntFromString("340282366920938463463374607431768211456")) // 1 << 128
+		b := make([]byte, 16) // 128 bits
+		if _, err = rand.Read(b); err != nil {
+			return
+		}
+		keya = new(big.Int).SetBytes(b)
 	}
 
 	keyA = mathutil.ModPowBigInt(g, keya, prime)
 	return
 }
 
-func getSalt() []byte {
+func getSalt() ([]byte, error) {
 	buf := make([]byte, SRP_SALT_SIZE)
-	if DEBUG_SRP == false {
-		for i := range buf {
-			buf[i] = byte(rand.Intn(256))
+	if !DEBUG_SRP {
+		if _, err := rand.Read(buf); err != nil {
+			return nil, err
 		}
 	}
-	return buf
+	return buf, nil
 }
 
 func getVerifier(user string, password string, salt []byte) *big.Int {
@@ -153,10 +154,13 @@ func getVerifier(user string, password string, salt []byte) *big.Int {
 	return mathutil.ModPowBigInt(g, x, prime)
 }
 
-func getServerSeed(v *big.Int) (keyB *big.Int, keyb *big.Int) {
+func getServerSeed(v *big.Int) (keyB *big.Int, keyb *big.Int, err error) {
 	prime, g, k := getPrime()
-	keyb = new(big.Int).Rand(rand.New(rand.NewSource(time.Now().UnixNano())),
-		bigIntFromString("340282366920938463463374607431768211456")) // 1 << 128
+	b := make([]byte, 16) // 128 bits
+	if _, err = rand.Read(b); err != nil {
+		return
+	}
+	keyb = new(big.Int).SetBytes(b)
 	gb := mathutil.ModPowBigInt(g, keyb, prime)              // gb = pow(g, b, N)
 	kv := new(big.Int).Mod(new(big.Int).Mul(k, v), prime)    // kv = (k * v) % N
 	keyB = new(big.Int).Mod(new(big.Int).Add(kv, gb), prime) // B = (kv + gb) % N

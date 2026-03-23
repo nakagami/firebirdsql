@@ -25,7 +25,6 @@ package firebirdsql
 
 import (
 	"bytes"
-	"container/list"
 	"database/sql/driver"
 	"encoding/hex"
 	"errors"
@@ -34,13 +33,13 @@ import (
 	"net"
 	"os"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/kardianos/osext"
 	"gitlab.com/nyarla/go-crypt"
-	"golang.org/x/exp/slices"
 	// "unsafe"
 )
 
@@ -143,7 +142,7 @@ func (p *wireProtocol) appendBytes(bs []byte) {
 }
 
 func getSrpClientPublicBytes(clientPublic *big.Int) (bs []byte) {
-	b := bytes.NewBufferString(hex.EncodeToString(bigIntToBytes(clientPublic))).Bytes()
+	b := []byte(hex.EncodeToString(bigIntToBytes(clientPublic)))
 	if len(b) > 254 {
 		bs = bytes.Join([][]byte{
 			[]byte{CNCT_specific_data, byte(255), 0}, b[:254],
@@ -164,11 +163,11 @@ func (p *wireProtocol) uid(user string, password string, authPluginName string, 
 	}
 	hostname, _ := os.Hostname()
 
-	sysUserBytes := bytes.NewBufferString(sysUser).Bytes()
-	hostnameBytes := bytes.NewBufferString(hostname).Bytes()
-	pluginListNameBytes := bytes.NewBufferString(PLUGIN_LIST).Bytes()
-	pluginNameBytes := bytes.NewBufferString(authPluginName).Bytes()
-	userBytes := bytes.NewBufferString(strings.ToUpper(user)).Bytes()
+	sysUserBytes := []byte(sysUser)
+	hostnameBytes := []byte(hostname)
+	pluginListNameBytes := []byte(PLUGIN_LIST)
+	pluginNameBytes := []byte(authPluginName)
+	userBytes := []byte(strings.ToUpper(user))
 	var wireCryptByte byte
 	if wireCrypt {
 		wireCryptByte = 1
@@ -180,7 +179,7 @@ func (p *wireProtocol) uid(user string, password string, authPluginName string, 
 	if authPluginName == "Srp" || authPluginName == "Srp256" {
 		specific_data = getSrpClientPublicBytes(clientPublic)
 	} else if authPluginName == "Legacy_Auth" {
-		b := bytes.NewBufferString(crypt.Crypt(password, "9z")[2:]).Bytes()
+		b := []byte(crypt.Crypt(password, "9z")[2:])
 		specific_data = bytes.Join([][]byte{
 			[]byte{CNCT_specific_data, byte(len(b)) + 1, 0}, b,
 		}, nil)
@@ -213,7 +212,7 @@ func (p *wireProtocol) sendPackets() (written int, err error) {
 		written += n
 	}
 	p.conn.Flush()
-	p.buf = make([]byte, 0, BUFFER_LEN)
+	p.buf = p.buf[:0]
 	return
 }
 
@@ -520,7 +519,7 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 						p.pluginName, serverSalt, data[4+ln:], serverPublic, authData, sessionKey)
 				}
 			} else if p.pluginName == "Legacy_Auth" {
-				authData = bytes.NewBufferString(crypt.Crypt(password, "9z")[2:]).Bytes()
+				authData = []byte(crypt.Crypt(password, "9z")[2:])
 			} else {
 				err = errors.New("Your user name and password are not defined. Ask your database administrator to set up a Firebird login.\n")
 				return
@@ -631,8 +630,7 @@ func (p *wireProtocol) _parse_select_items(buf []byte, xsqlda []xSQLVAR) (int, e
 		case isc_info_sql_describe_end:
 			/* NOTHING */
 		default:
-			err = errors.New(fmt.Sprintf("Invalid item [%02x] ! i=%d", buf[i], i))
-			break
+			err = fmt.Errorf("Invalid item [%02x] ! i=%d", buf[i], i)
 		}
 	}
 	return -1, err // no more info
@@ -762,14 +760,31 @@ func (p *wireProtocol) opConnect(dbName string, user string, password string, op
 	return err
 }
 
+// appendAuthAndTimezone appends auth data and session timezone to a DPB byte slice.
+func (p *wireProtocol) appendAuthAndTimezone(dpb []byte) []byte {
+	if p.authData != nil {
+		specificAuthData := []byte(hex.EncodeToString(p.authData))
+		dpb = bytes.Join([][]byte{
+			dpb,
+			{isc_dpb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)
+	}
+	if p.timezone != "" {
+		tznameBytes := []byte(p.timezone)
+		dpb = bytes.Join([][]byte{
+			dpb,
+			{isc_dpb_session_time_zone, byte(len(tznameBytes))}, tznameBytes}, nil)
+	}
+	return dpb
+}
+
 func (p *wireProtocol) opCreate(dbName string, user string, password string, role string) error {
 	p.debugPrint("opCreate")
 	var page_size int32
 	page_size = 4096
 
-	encode := bytes.NewBufferString(p.charset).Bytes()
-	userBytes := bytes.NewBufferString(strings.ToUpper(user)).Bytes()
-	passwordBytes := bytes.NewBufferString(password).Bytes()
+	encode := []byte(p.charset)
+	userBytes := []byte(strings.ToUpper(user))
+	passwordBytes := []byte(password)
 	roleBytes := []byte(role)
 	dpb := bytes.Join([][]byte{
 		[]byte{isc_dpb_version1},
@@ -785,18 +800,7 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 		[]byte{isc_dpb_utf8_filename, 1, 1},
 	}, nil)
 
-	if p.authData != nil {
-		specificAuthData := bytes.NewBufferString(hex.EncodeToString(p.authData)).Bytes()
-		dpb = bytes.Join([][]byte{
-			dpb,
-			[]byte{isc_dpb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)
-	}
-	if p.timezone != "" {
-		tznameBytes := []byte(p.timezone)
-		dpb = bytes.Join([][]byte{
-			dpb,
-			[]byte{isc_dpb_session_time_zone, byte(len(tznameBytes))}, tznameBytes}, nil)
-	}
+	dpb = p.appendAuthAndTimezone(dpb)
 
 	p.packInt(op_create)
 	p.packInt(0) // Database Object ID
@@ -808,9 +812,9 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 
 func (p *wireProtocol) opAttach(dbName string, user string, password string, role string) error {
 	p.debugPrint("opAttach")
-	encode := bytes.NewBufferString(p.charset).Bytes()
-	userBytes := bytes.NewBufferString(strings.ToUpper(user)).Bytes()
-	passwordBytes := bytes.NewBufferString(password).Bytes()
+	encode := []byte(p.charset)
+	userBytes := []byte(strings.ToUpper(user))
+	passwordBytes := []byte(password)
 	roleBytes := []byte(role)
 
 	processName, err := osext.Executable()
@@ -821,7 +825,7 @@ func (p *wireProtocol) opAttach(dbName string, user string, password string, rol
 			processName = processName[len(processName)-255:]
 		}
 
-		processNameBytes = bytes.NewBufferString(processName).Bytes()
+		processNameBytes = []byte(processName)
 	}
 	pid := int32(os.Getpid())
 
@@ -837,18 +841,7 @@ func (p *wireProtocol) opAttach(dbName string, user string, password string, rol
 		[]byte{isc_dpb_utf8_filename, 1, 1},
 	}, nil)
 
-	if p.authData != nil {
-		specificAuthData := bytes.NewBufferString(hex.EncodeToString(p.authData)).Bytes()
-		dpb = bytes.Join([][]byte{
-			dpb,
-			[]byte{isc_dpb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)
-	}
-	if p.timezone != "" {
-		tznameBytes := []byte(p.timezone)
-		dpb = bytes.Join([][]byte{
-			dpb,
-			[]byte{isc_dpb_session_time_zone, byte(len(tznameBytes))}, tznameBytes}, nil)
-	}
+	dpb = p.appendAuthAndTimezone(dpb)
 
 	p.packInt(op_attach)
 	p.packInt(0) // Database Object ID
@@ -1069,7 +1062,8 @@ func (p *wireProtocol) opFetch(stmtHandle int32, blr []byte) error {
 	return err
 }
 
-func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsqlda []xSQLVAR) (*list.List, bool, error) {
+// opFetchResponse reads rows from a fetch response, returning them as a slice.
+func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsqlda []xSQLVAR) ([][]driver.Value, bool, error) {
 	p.debugPrint("opFetchResponse")
 	b, err := p.recvPackets(4)
 	for bytes_to_bint32(b) == op_dummy {
@@ -1093,7 +1087,7 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsql
 	b, err = p.recvPackets(8)
 	status := bytes_to_bint32(b[:4])
 	count := int(bytes_to_bint32(b[4:8]))
-	rows := list.New()
+	rows := make([][]driver.Value, 0, count) // pre-allocate to known chunk size
 
 	for count > 0 {
 		r := make([]driver.Value, len(xsqlda))
@@ -1142,7 +1136,7 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsql
 			}
 		}
 
-		rows.PushBack(r)
+		rows = append(rows, r)
 
 		b, err = p.recvPackets(12)
 		// op := int(bytes_to_bint32(b[:4]))
@@ -1376,15 +1370,17 @@ func (p *wireProtocol) createBlob(value []byte, transHandle int32) ([]byte, erro
 	return blobId, err
 }
 
+// paramsToBlr converts parameters to BLR type descriptors and serialized values for the wire protocol.
 func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, protocolVersion int32) ([]byte, []byte) {
-	// Convert parameter array to BLR and values format.
 	var v, blr []byte
 	bi256 := big.NewInt(256)
 
 	ln := len(params) * 2
-	blrList := list.New()
-	valuesList := list.New()
-	blrList.PushBack([]byte{5, 2, 4, 0, byte(ln & 255), byte(ln >> 8)})
+	// Each param contributes a type descriptor + null indicator pair, plus a header and terminator entry.
+	blrList := make([][]byte, 0, len(params)*2+2)
+	// Each param contributes a value entry; pre-v13 also adds a null flag per param.
+	valuesList := make([][]byte, 0, len(params)*2)
+	blrList = append(blrList, []byte{5, 2, 4, 0, byte(ln & 255), byte(ln >> 8)})
 
 	if protocolVersion >= PROTOCOL_VERSION13 {
 		nullIndicator := new(big.Int)
@@ -1402,7 +1398,7 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 		}
 		for i := 0; i < n; i++ {
 			var modres *big.Int = new(big.Int)
-			valuesList.PushBack([]byte{byte(modres.Mod(nullIndicator, bi256).Int64())})
+			valuesList = append(valuesList, []byte{byte(modres.Mod(nullIndicator, bi256).Int64())})
 			nullIndicator = nullIndicator.Div(nullIndicator, bi256)
 		}
 	}
@@ -1430,9 +1426,9 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 			blr, v = _float64ToBlr(float64(f))
 		case time.Time:
 			if f.Year() == 0 {
-				blr, v = _timeToBlr(f, protocolVersion)
+				blr, v = _timeToBlr(f, protocolVersion, p.timezone)
 			} else {
-				blr, v = _timestampToBlr(f, protocolVersion)
+				blr, v = _timestampToBlr(f, protocolVersion, p.timezone)
 			}
 		case bool:
 			if f {
@@ -1461,21 +1457,21 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 				blr = []byte{9, 0}
 			}
 		}
-		valuesList.PushBack(v)
+		valuesList = append(valuesList, v)
 		if protocolVersion < PROTOCOL_VERSION13 {
 			if param == nil {
-				valuesList.PushBack([]byte{0xff, 0xff, 0xff, 0xff})
+				valuesList = append(valuesList, []byte{0xff, 0xff, 0xff, 0xff})
 			} else {
-				valuesList.PushBack([]byte{0, 0, 0, 0})
+				valuesList = append(valuesList, []byte{0, 0, 0, 0})
 			}
 		}
-		blrList.PushBack(blr)
-		blrList.PushBack([]byte{7, 0})
+		blrList = append(blrList, blr)
+		blrList = append(blrList, []byte{7, 0})
 	}
-	blrList.PushBack([]byte{255, 76}) // [blr_end, blr_eoc]
+	blrList = append(blrList, []byte{255, 76}) // [blr_end, blr_eoc]
 
-	blr = flattenBytes(blrList)
-	v = flattenBytes(valuesList)
+	blr = bytes.Join(blrList, nil)
+	v = bytes.Join(valuesList, nil)
 
 	return blr, v
 }
@@ -1487,16 +1483,17 @@ func (p *wireProtocol) debugPrint(s string, a ...interface{}) {
 	//fmt.Printf("[%x] %s\n", uintptr(unsafe.Pointer(p)), s)
 }
 
-func (p *wireProtocol) opConnectRequest() {
+func (p *wireProtocol) opConnectRequest() error {
 	p.debugPrint("opConnectRequest()")
 	p.packInt(op_connect_request)
 	p.packInt(p_req_async)
 	p.packInt(p.dbHandle)
 	p.packInt(partner_identification)
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opQueEvents(auxHandle int32, epb []byte, eventId int32) {
+func (p *wireProtocol) opQueEvents(auxHandle int32, epb []byte, eventId int32) error {
 	p.debugPrint("opQueEvents():%d %d", auxHandle, eventId)
 	p.packInt(op_que_events)
 	p.packInt(auxHandle)
@@ -1504,15 +1501,17 @@ func (p *wireProtocol) opQueEvents(auxHandle int32, epb []byte, eventId int32) {
 	p.packInt(address_of_ast_routine)
 	p.packInt(argument_to_ast_routine)
 	p.packInt(eventId)
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
-func (p *wireProtocol) opCancelEvents(eventID int32) {
+func (p *wireProtocol) opCancelEvents(eventID int32) error {
 	p.debugPrint("opCancelEvents():%d", eventID)
 	p.packInt(op_cancel_events)
 	p.packInt(p.dbHandle)
 	p.packInt(eventID)
-	p.sendPackets()
+	_, err := p.sendPackets()
+	return err
 }
 
 func (p *wireProtocol) opCancel(kind int) error {
@@ -1536,8 +1535,8 @@ func (p *wireProtocol) opServiceAttach() error {
 	p.packInt(0)
 	p.packString("service_mgr")
 
-	userBytes := bytes.NewBufferString(p.user).Bytes()
-	passwordBytes := bytes.NewBufferString(p.password).Bytes()
+	userBytes := []byte(p.user)
+	passwordBytes := []byte(p.password)
 	spb := bytes.Join([][]byte{
 		{isc_spb_version, isc_spb_current_version},
 		{isc_spb_user_name, byte(len(userBytes))}, userBytes,
@@ -1545,7 +1544,7 @@ func (p *wireProtocol) opServiceAttach() error {
 		{isc_spb_utf8_filename, 1, 1},
 	}, nil)
 	if p.authData != nil {
-		specificAuthData := bytes.NewBufferString(hex.EncodeToString(p.authData)).Bytes()
+		specificAuthData := []byte(hex.EncodeToString(p.authData))
 		spb = bytes.Join([][]byte{
 			spb,
 			{isc_dpb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)

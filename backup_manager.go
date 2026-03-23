@@ -388,14 +388,5 @@ func (bm *BackupManager) Restore(backup string, database string, options Restore
 }
 
 func (bm *BackupManager) attach(spb []byte, verbose chan string) error {
-	var err error
-	var conn *ServiceManager
-	if conn, err = bm.connBuilder(); err != nil {
-		return err
-	}
-	defer func(conn *ServiceManager) {
-		_ = conn.Close()
-	}(conn)
-
-	return conn.ServiceAttach(spb, verbose)
+	return serviceAttach(bm.connBuilder, spb, verbose)
 }

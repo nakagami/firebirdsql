@@ -643,49 +643,66 @@ func TestTimeZone(t *testing.T) {
 }
 
 func TestTimeZoneInsert(t *testing.T) {
-	conn, err := sql.Open("firebirdsql_createdb", GetTestDSN("test_timezone_insert_"))
-	if err != nil {
-		t.Fatalf("Error connecting: %v", err)
-	}
-	defer conn.Close()
-
-	firebird_major_version := get_firebird_major_version(t)
-	if firebird_major_version < 4 {
+	if get_firebird_major_version(t) < 4 {
 		return
 	}
 
-	_, err = conn.Exec(`
-               CREATE TABLE test_timezone_insert (
-                       id INTEGER NOT NULL,
-                       ts TIMESTAMP WITH TIME ZONE,
-                       PRIMARY KEY (id)
-               )
-       `)
-	if err != nil {
-		t.Fatalf("Error creating table: %v", err)
+	cases := []struct {
+		name     string
+		makeTime func(t *testing.T) time.Time
+	}{
+		{
+			name: "known IANA timezone (Asia/Seoul)",
+			makeTime: func(t *testing.T) time.Time {
+				loc, err := time.LoadLocation("Asia/Seoul")
+				if err != nil {
+					t.Fatal(err)
+				}
+				return time.Date(1967, 8, 11, 23, 45, 1, 0, loc)
+			},
+		},
+		{
+			name:     "Local timezone (time.Now)",
+			makeTime: func(t *testing.T) time.Time { return time.Now().Truncate(100 * time.Millisecond) },
+		},
+		{
+			name:     "fixed-offset timezone (UTC-5)",
+			makeTime: func(t *testing.T) time.Time {
+				return time.Date(2024, 1, 15, 10, 30, 0, 0, time.FixedZone("UTC-5", -5*3600))
+			},
+		},
 	}
 
-	loc, err := time.LoadLocation("Asia/Seoul")
-	if err != nil {
-		t.Fatalf("Error loading location: %v", err)
-	}
-	insertTime := time.Date(1967, 8, 11, 23, 45, 1, 0, loc)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			conn, err := sql.Open("firebirdsql_createdb", GetTestDSN("test_tz_insert_"))
+			if err != nil {
+				t.Fatalf("Error connecting: %v", err)
+			}
+			defer conn.Close()
 
-	_, err = conn.Exec("INSERT INTO test_timezone_insert (id, ts) VALUES (1, ?)", insertTime)
-	if err != nil {
-		t.Fatalf("Error inserting: %v", err)
-	}
+			_, err = conn.Exec(`CREATE TABLE test_tz_insert (id INTEGER NOT NULL, ts TIMESTAMP WITH TIME ZONE, PRIMARY KEY (id))`)
+			if err != nil {
+				t.Fatalf("Error creating table: %v", err)
+			}
 
-	var id int
-	var ts time.Time
-	err = conn.QueryRow("SELECT id, ts FROM test_timezone_insert WHERE id = 1").Scan(&id, &ts)
-	if err != nil {
-		t.Fatalf("Error selecting: %v", err)
-	}
+			insertTime := tc.makeTime(t)
+			_, err = conn.Exec("INSERT INTO test_tz_insert (id, ts) VALUES (1, ?)", insertTime)
+			if err != nil {
+				t.Fatalf("Error inserting: %v", err)
+			}
 
-	// The inserted time and retrieved time should represent the same instant
-	if !insertTime.Equal(ts) {
-		t.Fatalf("Expected %v, got %v", insertTime, ts)
+			var id int
+			var ts time.Time
+			err = conn.QueryRow("SELECT id, ts FROM test_tz_insert WHERE id = 1").Scan(&id, &ts)
+			if err != nil {
+				t.Fatalf("Error selecting: %v", err)
+			}
+
+			if !insertTime.Equal(ts) {
+				t.Fatalf("Expected %v, got %v", insertTime, ts)
+			}
+		})
 	}
 }
 
@@ -1479,6 +1496,35 @@ func TestReuseConnectionAfterTimeout(t *testing.T) {
 
 	_, err = conn.QueryContext(ctx, "select * from rdb$database")
 	require.NoError(t, err)
+}
+
+func TestBlobCharsetDecoding(t *testing.T) {
+	testDsn := GetTestDSN("test_blob_charset_") + "?charset=WIN1251"
+	conn, err := sql.Open("firebirdsql_createdb", testDsn)
+	require.NoError(t, err)
+
+	_, err = conn.Exec("CREATE TABLE test_blob_charset (f1 BLOB SUB_TYPE 1, f2 BLOB SUB_TYPE 0)")
+	require.NoError(t, err)
+	conn.Close()
+
+	time.Sleep(1 * time.Second)
+
+	conn, err = sql.Open("firebirdsql", testDsn)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	cyrillicText := "Проверка"
+	binaryData := []byte{0, 1, 2, 3, 4, 13, 10, 5, 6, 7}
+
+	_, err = conn.Exec("INSERT INTO test_blob_charset (f1, f2) VALUES (?, ?)", cyrillicText, binaryData)
+	require.NoError(t, err)
+
+	var s string
+	var b []byte
+	err = conn.QueryRow("SELECT f1, f2 FROM test_blob_charset").Scan(&s, &b)
+	require.NoError(t, err)
+	assert.Equal(t, cyrillicText, s)
+	assert.Equal(t, binaryData, b)
 }
 
 func TestAuth(t *testing.T) {

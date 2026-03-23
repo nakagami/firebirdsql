@@ -1,5 +1,4 @@
 //go:build !plan9
-// +build !plan9
 
 /*******************************************************************************
 The MIT License (MIT)
@@ -179,19 +178,22 @@ func (e *FbEvent) closeWithError(err error) error {
 func (e *FbEvent) doClose(err error) (errResult error) {
 	atomic.StoreInt32(&e.closed, 1)
 	e.closer.Do(func() {
-		e.conn.Close()
+		connErr := e.conn.Close()
 		e.mu.Lock()
+		errs := make([]error, len(e.subscribers)+1)
+		errs[0] = connErr
 		wg := &sync.WaitGroup{}
 		wg.Add(len(e.subscribers))
 		for i := range e.subscribers {
-			go func(subscriber *Subscription) {
+			go func(idx int, subscriber *Subscription) {
 				defer wg.Done()
-				subscriber.unsubscribeNoNotify()
-			}(e.subscribers[i])
+				errs[idx+1] = subscriber.unsubscribeNoNotify()
+			}(i, e.subscribers[i])
 		}
-		e.subscribers = make([]*Subscription, 0)
+		e.subscribers = nil
 		e.mu.Unlock()
 		wg.Wait()
+		errResult = errors.Join(errs...)
 		close(e.done)
 	})
 	return

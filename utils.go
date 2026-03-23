@@ -25,7 +25,6 @@ package firebirdsql
 
 import (
 	"bytes"
-	"container/list"
 	"encoding/binary"
 	"math/big"
 	"strconv"
@@ -135,24 +134,6 @@ func bigIntFromString(s string) *big.Int {
 	return ret
 }
 
-func flattenBytes(l *list.List) []byte {
-	n := 0
-	for e := l.Front(); e != nil; e = e.Next() {
-		n += len((e.Value).([]byte))
-	}
-
-	bs := make([]byte, n)
-
-	n = 0
-	for e := l.Front(); e != nil; e = e.Next() {
-		for i, b := range (e.Value).([]byte) {
-			bs[n+i] = b
-		}
-		n += len((e.Value).([]byte))
-	}
-
-	return bs
-}
 
 func xdrBytes(bs []byte) []byte {
 	// XDR encoding bytes
@@ -174,7 +155,7 @@ func xdrBytes(bs []byte) []byte {
 
 func xdrString(s string) []byte {
 	// XDR encoding string
-	bs := bytes.NewBufferString(s).Bytes()
+	bs := []byte(s)
 	return xdrBytes(bs)
 }
 
@@ -233,23 +214,17 @@ func _convert_timestamp(t time.Time) []byte {
 	}, nil)
 }
 
-func _convert_time_tz(t time.Time) []byte {
-	tz_name := t.Location().String()
-	u := t.UTC()
-	v := (u.Hour()*3600+u.Minute()*60+u.Second())*10000 + u.Nanosecond()/100000
+func _convert_time_tz(t time.Time, tzID int32) []byte {
 	return bytes.Join([][]byte{
-		bint32_to_bytes(int32(v)),
-		bint32_to_bytes(getTimezoneIDByName(tz_name)),
+		_convert_time(t.UTC()),
+		bint32_to_bytes(tzID),
 	}, nil)
 }
 
-func _convert_timestamp_tz(t time.Time) []byte {
-	tz_name := t.Location().String()
-	u := t.UTC()
+func _convert_timestamp_tz(t time.Time, tzID int32) []byte {
 	return bytes.Join([][]byte{
-		_convert_date(u),
-		_convert_time(u),
-		bint32_to_bytes(getTimezoneIDByName(tz_name)),
+		_convert_timestamp(t.UTC()),
+		bint32_to_bytes(tzID),
 	}, nil)
 }
 
@@ -259,30 +234,20 @@ func _dateToBlr(t time.Time) ([]byte, []byte) {
 	return blr, v
 }
 
-func _timeToBlr(t time.Time, protocolVersion int32) ([]byte, []byte) {
-	var v, blr []byte
-	tz_name := t.Location().String()
-	if protocolVersion >= PROTOCOL_VERSION16 && tz_name != "Local" {
-		v = _convert_time_tz(t)
-		blr = []byte{28}
-	} else {
-		v = _convert_time(t)
-		blr = []byte{13}
+func _timeToBlr(t time.Time, protocolVersion int32, sessionTimezone string) ([]byte, []byte) {
+	if protocolVersion >= PROTOCOL_VERSION16 {
+		tzID := resolveTimezone(t.Location().String(), sessionTimezone)
+		return []byte{28}, _convert_time_tz(t, tzID)
 	}
-	return blr, v
+	return []byte{13}, _convert_time(t)
 }
 
-func _timestampToBlr(t time.Time, protocolVersion int32) ([]byte, []byte) {
-	var v, blr []byte
-	tz_name := t.Location().String()
-	if protocolVersion >= PROTOCOL_VERSION16 && tz_name != "Local" {
-		v = _convert_timestamp_tz(t)
-		blr = []byte{29}
-	} else {
-		v = _convert_timestamp(t)
-		blr = []byte{35}
+func _timestampToBlr(t time.Time, protocolVersion int32, sessionTimezone string) ([]byte, []byte) {
+	if protocolVersion >= PROTOCOL_VERSION16 {
+		tzID := resolveTimezone(t.Location().String(), sessionTimezone)
+		return []byte{29}, _convert_timestamp_tz(t, tzID)
 	}
-	return blr, v
+	return []byte{35}, _convert_timestamp(t)
 }
 
 func convertToBool(s string, defaultValue bool) bool {

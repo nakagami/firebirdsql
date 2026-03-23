@@ -90,3 +90,66 @@ func TestDSNParse(t *testing.T) {
 	}
 
 }
+
+func TestResolveTimezoneForFirebird(t *testing.T) {
+	cases := []struct {
+		name      string
+		locName   string
+		sessionTZ string
+		wantName  string
+	}{
+		{
+			name:     "known IANA name returns itself",
+			locName:  "Asia/Seoul",
+			wantName: "Asia/Seoul",
+		},
+		{
+			name:     "UTC returns itself",
+			locName:  "UTC",
+			wantName: "UTC",
+		},
+		{
+			name:      "Local with session timezone uses session timezone",
+			locName:   "Local",
+			sessionTZ: "America/New_York",
+			wantName:  "America/New_York",
+		},
+		{
+			name:     "Local without session timezone falls back to UTC",
+			locName:  "Local",
+			wantName: "UTC",
+		},
+		{
+			name:     "fixed-offset zone not in map falls back to UTC",
+			locName:  "UTC-5",
+			wantName: "UTC",
+		},
+		{
+			name:      "fixed-offset zone with session timezone uses session timezone",
+			locName:   "+05:30",
+			sessionTZ: "Asia/Kolkata",
+			wantName:  "Asia/Kolkata",
+		},
+		{
+			name:      "known IANA name wins over session timezone",
+			locName:   "Europe/London",
+			sessionTZ: "Asia/Tokyo",
+			wantName:  "Europe/London",
+		},
+		{
+			name:      "non-empty invalid session timezone falls back to UTC",
+			locName:   "Local",
+			sessionTZ: "Not/ATimezone",
+			wantName:  "UTC",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := resolveTimezone(tc.locName, tc.sessionTZ)
+			if want := getTimezoneIDByName(tc.wantName); got != want {
+				t.Errorf("resolveTimezone(%q, %q) = %d, want %d (%s)", tc.locName, tc.sessionTZ, got, want, tc.wantName)
+			}
+		})
+	}
+}

@@ -37,26 +37,35 @@ type firebirdsqlStmt struct {
 	stmtType    int32
 }
 
-func (stmt *firebirdsqlStmt) Close() (err error) {
-	if stmt.stmtHandle == -1 { // alredy closed
-		return
-	}
-	err = stmt.fc.wp.opFreeStatement(stmt.stmtHandle, 2) // DSQL_drop
-	stmt.stmtHandle = -1
+func (stmt *firebirdsqlStmt) freeStatement(mode int32) error {
+	err := stmt.fc.wp.opFreeStatement(stmt.stmtHandle, mode)
 	if err != nil {
 		return err
 	}
-
 	if (stmt.fc.wp.acceptType & ptype_MASK) == ptype_lazy_send {
 		stmt.fc.wp.lazyResponseCount++
 	} else {
 		_, _, _, err = stmt.fc.wp.opResponse()
 	}
-
 	if stmt.fc.tx.isAutocommit {
 		stmt.fc.tx.commitRetainging()
 	}
-	return
+	return err
+}
+
+func (stmt *firebirdsqlStmt) Close() error {
+	if stmt.stmtHandle == -1 {
+		return nil
+	}
+	defer func() { stmt.stmtHandle = -1 }()
+	return stmt.freeStatement(DSQL_drop)
+}
+
+func (stmt *firebirdsqlStmt) closeCursor() error {
+	if stmt.stmtHandle == -1 || stmt.stmtType != isc_info_sql_stmt_select {
+		return nil
+	}
+	return stmt.freeStatement(DSQL_close)
 }
 
 func (stmt *firebirdsqlStmt) NumInput() int {

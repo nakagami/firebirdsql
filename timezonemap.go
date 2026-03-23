@@ -2588,3 +2588,20 @@ func getTimezoneNameByID(id int) string {
 		return ""
 	}
 }
+
+// resolveTimezone returns the Firebird timezone ID for locName.
+// Resolution order:
+//  1. locName is directly in the map — return its ID
+//  2. sessionTimezone is non-empty and in the map — return its ID (covers "Local" when DSN ?timezone= is set)
+//  3. Fall back to UTC (the instant is always preserved since values are encoded in UTC)
+func resolveTimezone(locName, sessionTimezone string) int32 {
+	if id := getTimezoneIDByName(locName); id != 0 {
+		return id
+	}
+	if sessionTimezone != "" {
+		if id := getTimezoneIDByName(sessionTimezone); id != 0 {
+			return id
+		}
+	}
+	return getTimezoneIDByName("UTC")
+}

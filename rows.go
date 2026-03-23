@@ -24,8 +24,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
-	"bytes"
-	"container/list"
 	"context"
 	"database/sql/driver"
 	"io"
@@ -34,11 +32,13 @@ import (
 )
 
 type firebirdsqlRows struct {
-	ctx             context.Context
-	stmt            *firebirdsqlStmt
-	currentChunkRow *list.Element
-	moreData        bool
-	result          []driver.Value
+	ctx              context.Context
+	stmt             *firebirdsqlStmt
+	currentChunk     [][]driver.Value // rows fetched in the current chunk
+	currentChunkIdx  int              // index of the current row within currentChunk
+	moreData         bool
+	result           []driver.Value
+	closeStmtOnClose bool // true for internal stmts that should be dropped on rows.Close()
 }
 
 func newFirebirdsqlRows(ctx context.Context, stmt *firebirdsqlStmt, result []driver.Value) *firebirdsqlRows {
@@ -63,10 +63,11 @@ func (rows *firebirdsqlRows) Columns() []string {
 	return columns
 }
 
-func (rows *firebirdsqlRows) Close() (er error) {
-	rows.stmt.Close()
-
-	return
+func (rows *firebirdsqlRows) Close() error {
+	if rows.closeStmtOnClose {
+		return rows.stmt.Close()
+	}
+	return rows.stmt.closeCursor()
 }
 
 func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
@@ -88,38 +89,40 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 		return
 	}
 
-	if rows.currentChunkRow != nil {
-		rows.currentChunkRow = rows.currentChunkRow.Next()
+	if rows.currentChunk != nil {
+		rows.currentChunkIdx++
 	}
 
-	if rows.currentChunkRow == nil && rows.moreData == true {
+	if rows.currentChunkIdx >= len(rows.currentChunk) && rows.moreData {
 		// Get one chunk
-		var chunk *list.List
 		err = rows.stmt.fc.wp.opFetch(rows.stmt.stmtHandle, rows.stmt.blr)
 		if err != nil {
 			return err
 		}
-		chunk, rows.moreData, err = rows.stmt.fc.wp.opFetchResponse(rows.stmt.stmtHandle, rows.stmt.fc.tx.transHandle, rows.stmt.xsqlda)
-
-		if err == nil {
-			rows.currentChunkRow = chunk.Front()
-		} else {
+		rows.currentChunk, rows.moreData, err = rows.stmt.fc.wp.opFetchResponse(rows.stmt.stmtHandle, rows.stmt.fc.tx.transHandle, rows.stmt.xsqlda)
+		if err != nil {
 			return
 		}
+		rows.currentChunkIdx = 0
 	}
 
-	if rows.currentChunkRow == nil {
+	if rows.currentChunkIdx >= len(rows.currentChunk) {
 		err = io.EOF
 		return
 	}
-	row, _ := rows.currentChunkRow.Value.([]driver.Value)
+	row := rows.currentChunk[rows.currentChunkIdx]
 	for i, v := range row {
 		if rows.stmt.xsqlda[i].sqltype == SQL_TYPE_BLOB && v != nil {
 			blobId := v.([]byte)
 			var blob []byte
 			blob, err = rows.stmt.fc.wp.getBlobSegments(blobId, rows.stmt.fc.tx.transHandle)
 			if rows.stmt.xsqlda[i].sqlsubtype == 1 {
-				dest[i] = bytes.NewBuffer(blob).String()
+				charset := rows.stmt.fc.wp.charset
+				if s, ok := decodeCharset(blob, charset); ok {
+					dest[i] = s
+				} else {
+					dest[i] = string(blob)
+				}
 			} else {
 				dest[i] = blob
 			}

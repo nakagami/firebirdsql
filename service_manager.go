@@ -216,7 +216,10 @@ func NewServiceManager(addr string, user string, password string, options Servic
 		"wire_crypt":       wireCryptStr,
 	}
 
-	clientPublic, clientSecret := getClientSeed()
+	clientPublic, clientSecret, err := getClientSeed()
+	if err != nil {
+		return nil, err
+	}
 	if err = wp.opConnect("", user, password, connOptions, clientPublic); err != nil {
 		return nil, err
 	}
@@ -568,4 +571,22 @@ func (svc *ServiceManager) GetDbStatsString(database string, options StatisticsO
 		return "", err
 	}
 	return svc.WaitString()
+}
+
+func serviceAttach(connBuilder func() (*ServiceManager, error), spb []byte, verbose chan string) error {
+	conn, err := connBuilder()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+	return conn.ServiceAttach(spb, verbose)
+}
+
+func serviceAttachBuffer(connBuilder func() (*ServiceManager, error), spb []byte, verbose chan []byte) error {
+	conn, err := connBuilder()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+	return conn.ServiceAttachBuffer(spb, verbose)
 }
