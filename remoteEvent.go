@@ -94,7 +94,7 @@ func (e *remoteEvent) queueEvents(events ...string) error {
 func (e *remoteEvent) cancelEvents() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.events = make([]string, 0)
+	e.events = nil
 	e.counts = nil
 	e.prevCounts = nil
 	atomic.StoreInt32(&e.running, 0)
