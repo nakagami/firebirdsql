@@ -12,6 +12,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -133,12 +134,12 @@ func parse(r io.Reader) (version string, names []string, err error) {
 	return version, names, nil
 }
 
-func generate(outPath, version string, names []string) error {
+func generate(outPath, version string, names []string) (err error) {
 	f, err := os.Create(outPath)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { err = errors.Join(err, f.Close()) }()
 
 	w := bufio.NewWriter(f)
 
