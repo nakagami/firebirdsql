@@ -1274,6 +1274,11 @@ func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) ([]driver.Value, error) {
 	for bytes_to_bint32(b) == op_dummy {
 		b, err = p.recvPackets(4)
 	}
+	for bytes_to_bint32(b) == op_response && p.lazyResponseCount > 0 {
+		p.lazyResponseCount--
+		_, _, _, _ = p._parse_op_response()
+		b, _ = p.recvPackets(4)
+	}
 
 	if bytes_to_bint32(b) != op_sql_response {
 		return nil, errors.New("Error op_sql_response")

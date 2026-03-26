@@ -1527,6 +1527,56 @@ func TestBlobCharsetDecoding(t *testing.T) {
 	assert.Equal(t, binaryData, b)
 }
 
+// TestExecProcedureAfterCloseCursor is a regression test for issue #193.
+// Closing rows from a SELECT (which sends DSQL_close via lazy send) must not
+// desynchronize the wire protocol for a subsequent INSERT...RETURNING query.
+func TestExecProcedureAfterCloseCursor(t *testing.T) {
+	dsn := GetTestDSN("test_issue193_")
+	conn, err := sql.Open("firebirdsql_createdb", dsn)
+	require.NoError(t, err)
+	_, err = conn.Exec(`CREATE TABLE test_issue193 (id INTEGER NOT NULL)`)
+	require.NoError(t, err)
+	_, err = conn.Exec(`INSERT INTO test_issue193 (id) VALUES (1)`)
+	require.NoError(t, err)
+	conn.Close()
+
+	time.Sleep(1 * time.Second)
+
+	conn, err = sql.Open("firebirdsql", dsn)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	tx, err := conn.Begin()
+	require.NoError(t, err)
+
+	// INSERT...RETURNING makes stmtType = isc_info_sql_stmt_exec_procedure (type 8).
+	stmtInsert, err := tx.Prepare(`INSERT INTO test_issue193 (id) VALUES (?) RETURNING id`)
+	require.NoError(t, err)
+	defer stmtInsert.Close()
+
+	// SELECT opens a cursor; rows.Close() sends DSQL_close via lazy send.
+	stmtSelect, err := tx.Prepare(`SELECT id FROM test_issue193 WHERE id = 1`)
+	require.NoError(t, err)
+	defer stmtSelect.Close()
+
+	for i := 0; i < 2; i++ {
+		rows, err := stmtInsert.Query(i + 10)
+		require.NoErrorf(t, err, "INSERT...RETURNING failed on iteration %d", i)
+		var id int
+		rows.Next()
+		require.NoError(t, rows.Scan(&id))
+		rows.Close()
+
+		rows2, err := stmtSelect.Query()
+		require.NoErrorf(t, err, "SELECT failed on iteration %d", i)
+		rows2.Next()
+		require.NoError(t, rows2.Scan(&id))
+		rows2.Close()
+	}
+
+	require.NoError(t, tx.Commit())
+}
+
 func TestAuth(t *testing.T) {
 	conn, err := sql.Open("firebirdsql", GetTestUser()+":wrongpassword@localhost/employee")
 	err = conn.Ping()
