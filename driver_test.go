@@ -1531,7 +1531,8 @@ func TestBlobCharsetDecoding(t *testing.T) {
 // Closing rows from a SELECT (which sends DSQL_close via lazy send) must not
 // desynchronize the wire protocol for a subsequent INSERT...RETURNING query.
 func TestExecProcedureAfterCloseCursor(t *testing.T) {
-	conn, err := sql.Open("firebirdsql_createdb", GetTestDSN("test_issue193_"))
+	dsn := GetTestDSN("test_issue193_")
+	conn, err := sql.Open("firebirdsql_createdb", dsn)
 	require.NoError(t, err)
 	_, err = conn.Exec(`CREATE TABLE test_issue193 (id INTEGER NOT NULL)`)
 	require.NoError(t, err)
@@ -1541,7 +1542,7 @@ func TestExecProcedureAfterCloseCursor(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	conn, err = sql.Open("firebirdsql", GetTestDSN("test_issue193_"))
+	conn, err = sql.Open("firebirdsql", dsn)
 	require.NoError(t, err)
 	defer conn.Close()
 
