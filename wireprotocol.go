@@ -1062,6 +1062,8 @@ func (p *wireProtocol) opFetch(stmtHandle int32, blr []byte) error {
 	return err
 }
 
+// readRow decodes a single row from the wire. Pre-V13 protocols interleave
+// per-column null flags; V13+ uses a leading null bitmap.
 func (p *wireProtocol) readRow(xsqlda []xSQLVAR) ([]driver.Value, error) {
 	r := make([]driver.Value, len(xsqlda))
 	if p.protocolVersion < PROTOCOL_VERSION13 {
@@ -1091,7 +1093,7 @@ func (p *wireProtocol) readRow(xsqlda []xSQLVAR) ([]driver.Value, error) {
 				}
 			}
 		}
-	} else { // PROTOCOL_VERSION13
+	} else { // V13+ sends a null bitmap upfront instead of per-column null flags
 		n := (len(xsqlda) + 7) / 8
 		nullBytes, err := p.recvPacketsAlignment(n)
 		if err != nil {
