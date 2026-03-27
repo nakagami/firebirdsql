@@ -1092,16 +1092,13 @@ func (p *wireProtocol) readRow(xsqlda []xSQLVAR) ([]driver.Value, error) {
 			}
 		}
 	} else { // PROTOCOL_VERSION13
-		n := len(xsqlda) / 8
-		if len(xsqlda)%8 != 0 {
-			n++
-		}
+		n := (len(xsqlda) + 7) / 8
 		nullBytes, err := p.recvPacketsAlignment(n)
 		if err != nil {
 			return nil, err
 		}
 		for i, x := range xsqlda {
-			if nullBytes[i/8]&(1<<uint(i%8)) != 0 {
+			if nullBytes[i/8]&(1<<(i%8)) != 0 {
 				continue
 			}
 			var ln int
@@ -1298,7 +1295,10 @@ func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) ([]driver.Value, error) {
 		return nil, err
 	}
 	for bytes_to_bint32(b) == op_dummy {
-		b, _ = p.recvPackets(4)
+		b, err = p.recvPackets(4)
+		if err != nil {
+			return nil, err
+		}
 	}
 	for bytes_to_bint32(b) == op_response && p.lazyResponseCount > 0 {
 		p.lazyResponseCount--
@@ -1370,17 +1370,14 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 	blrList = append(blrList, []byte{5, 2, 4, 0, byte(ln & 255), byte(ln >> 8)})
 
 	if protocolVersion >= PROTOCOL_VERSION13 {
-		n := len(params) / 8
-		if len(params)%8 != 0 {
-			n++
-		}
+		n := (len(params) + 7) / 8
 		if n%4 != 0 { // padding
 			n += 4 - n%4
 		}
 		nullBytes := make([]byte, n)
 		for i, param := range params {
 			if param == nil {
-				nullBytes[i/8] |= 1 << uint(i%8)
+				nullBytes[i/8] |= 1 << (i % 8)
 			}
 		}
 		valuesList = append(valuesList, nullBytes)
