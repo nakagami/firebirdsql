@@ -1063,22 +1063,32 @@ func (p *wireProtocol) opFetch(stmtHandle int32, blr []byte) error {
 }
 
 func (p *wireProtocol) readRow(xsqlda []xSQLVAR) ([]driver.Value, error) {
-	var b []byte
-	var err error
 	r := make([]driver.Value, len(xsqlda))
 	if p.protocolVersion < PROTOCOL_VERSION13 {
 		for i, x := range xsqlda {
 			var ln int
 			if x.ioLength() < 0 {
-				b, err = p.recvPackets(4)
+				b, err := p.recvPackets(4)
+				if err != nil {
+					return nil, err
+				}
 				ln = int(bytes_to_bint32(b))
 			} else {
 				ln = x.ioLength()
 			}
-			raw_value, _ := p.recvPacketsAlignment(ln)
-			b, err = p.recvPackets(4)
-			if bytes_to_bint32(b) == 0 { // Not NULL
-				r[i], err = x.value(raw_value, p.timezone, p.charset)
+			rawValue, err := p.recvPacketsAlignment(ln)
+			if err != nil {
+				return nil, err
+			}
+			nullFlag, err := p.recvPackets(4)
+			if err != nil {
+				return nil, err
+			}
+			if bytes_to_bint32(nullFlag) == 0 { // Not NULL
+				r[i], err = x.value(rawValue, p.timezone, p.charset)
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 	} else { // PROTOCOL_VERSION13
@@ -1086,23 +1096,35 @@ func (p *wireProtocol) readRow(xsqlda []xSQLVAR) ([]driver.Value, error) {
 		if len(xsqlda)%8 != 0 {
 			n++
 		}
-		nullBytes, _ := p.recvPacketsAlignment(n)
+		nullBytes, err := p.recvPacketsAlignment(n)
+		if err != nil {
+			return nil, err
+		}
 		for i, x := range xsqlda {
 			if nullBytes[i/8]&(1<<uint(i%8)) != 0 {
 				continue
 			}
 			var ln int
 			if x.ioLength() < 0 {
-				b, err = p.recvPackets(4)
+				b, err := p.recvPackets(4)
+				if err != nil {
+					return nil, err
+				}
 				ln = int(bytes_to_bint32(b))
 			} else {
 				ln = x.ioLength()
 			}
-			raw_value, _ := p.recvPacketsAlignment(ln)
-			r[i], err = x.value(raw_value, p.timezone, p.charset)
+			rawValue, err := p.recvPacketsAlignment(ln)
+			if err != nil {
+				return nil, err
+			}
+			r[i], err = x.value(rawValue, p.timezone, p.charset)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
-	return r, err
+	return r, nil
 }
 
 // opFetchResponse reads rows from a fetch response, returning them as a slice.
