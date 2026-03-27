@@ -29,12 +29,13 @@ import (
 )
 
 type firebirdsqlStmt struct {
-	fc          *firebirdsqlConn
-	queryString string
-	stmtHandle  int32
-	xsqlda      []xSQLVAR
-	blr         []byte
-	stmtType    int32
+	fc           *firebirdsqlConn
+	queryString  string
+	stmtHandle   int32
+	xsqlda       []xSQLVAR
+	inputXsqlda  []xSQLVAR
+	blr          []byte
+	stmtType     int32
 }
 
 func (stmt *firebirdsqlStmt) freeStatement(mode int32) error {
@@ -85,7 +86,7 @@ func (stmt *firebirdsqlStmt) sendOpCancel(ctx context.Context, done chan struct{
 }
 
 func (stmt *firebirdsqlStmt) exec(ctx context.Context, args []driver.Value) (result driver.Result, err error) {
-	err = stmt.fc.wp.opExecute(stmt.stmtHandle, stmt.fc.tx.transHandle, args)
+	err = stmt.fc.wp.opExecute(stmt.stmtHandle, stmt.fc.tx.transHandle, args, stmt.inputXsqlda)
 	if err != nil {
 		return
 	}
@@ -148,7 +149,7 @@ func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (dr
 	}
 
 	if stmt.stmtType == isc_info_sql_stmt_exec_procedure {
-		err = stmt.fc.wp.opExecute2(stmt.stmtHandle, stmt.fc.tx.transHandle, args, stmt.blr)
+		err = stmt.fc.wp.opExecute2(stmt.stmtHandle, stmt.fc.tx.transHandle, args, stmt.blr, stmt.inputXsqlda)
 		if err != nil {
 			return nil, err
 		}
@@ -167,7 +168,7 @@ func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (dr
 			return nil, err
 		}
 	} else {
-		err := stmt.fc.wp.opExecute(stmt.stmtHandle, stmt.fc.tx.transHandle, args)
+		err := stmt.fc.wp.opExecute(stmt.stmtHandle, stmt.fc.tx.transHandle, args, stmt.inputXsqlda)
 		if err != nil {
 			return nil, err
 		}
@@ -224,7 +225,7 @@ func newFirebirdsqlStmt(fc *firebirdsqlConn, query string) (stmt *firebirdsqlStm
 		return
 	}
 
-	stmt.stmtType, stmt.xsqlda, err = stmt.fc.wp.parse_xsqlda(buf, stmt.stmtHandle)
+	stmt.stmtType, stmt.xsqlda, stmt.inputXsqlda, err = stmt.fc.wp.parse_xsqlda(buf, stmt.stmtHandle)
 	if err != nil {
 		return nil, err
 	}
