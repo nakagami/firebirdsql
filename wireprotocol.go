@@ -1432,7 +1432,8 @@ func (p *wireProtocol) createBlob(value []byte, transHandle int32) ([]byte, erro
 
 // paramsToBlr converts parameters to BLR type descriptors and serialized values for the wire protocol.
 // inputXsqlda contains the server-reported types for bind parameters (from isc_info_sql_bind).
-// It is reserved for future use to optimize encoding based on target column types.
+// It is used to select the correct encoding for time.Time values: TIMESTAMP/TIME (without TZ)
+// columns are encoded as local wall clock time to preserve round-trip correctness when time.Local != UTC.
 func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, protocolVersion int32, inputXsqlda []xSQLVAR) ([]byte, []byte) {
 	var v, blr []byte
 	bi256 := big.NewInt(256)
@@ -1465,7 +1466,7 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 		}
 	}
 
-	for _, param := range params {
+	for i, param := range params {
 		switch f := param.(type) {
 		case string:
 			f = p.encodeString(f)
@@ -1488,9 +1489,19 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 			blr, v = _float64ToBlr(float64(f))
 		case time.Time:
 			if f.Year() == 0 {
-				blr, v = _timeToBlr(f, protocolVersion, p.timezone)
+				if i < len(inputXsqlda) && inputXsqlda[i].sqltype == SQL_TYPE_TIME {
+					// TIME (without TZ) column: encode local wall clock to preserve round-trip.
+					blr, v = []byte{13}, _convert_time(f)
+				} else {
+					blr, v = _timeToBlr(f, protocolVersion, p.timezone)
+				}
 			} else {
-				blr, v = _timestampToBlr(f, protocolVersion, p.timezone)
+				if i < len(inputXsqlda) && inputXsqlda[i].sqltype == SQL_TYPE_TIMESTAMP {
+					// TIMESTAMP (without TZ) column: encode local wall clock to preserve round-trip.
+					blr, v = []byte{35}, _convert_timestamp(f)
+				} else {
+					blr, v = _timestampToBlr(f, protocolVersion, p.timezone)
+				}
 			}
 		case bool:
 			if f {
