@@ -68,6 +68,24 @@ func _INFO_SQL_SELECT_DESCRIBE_VARS() []byte {
 	}
 }
 
+func _INFO_SQL_BIND_DESCRIBE_VARS() []byte {
+	return []byte{
+		isc_info_sql_bind,
+		isc_info_sql_describe_vars,
+		isc_info_sql_sqlda_seq,
+		isc_info_sql_type,
+		isc_info_sql_sub_type,
+		isc_info_sql_scale,
+		isc_info_sql_length,
+		isc_info_sql_null_ind,
+		isc_info_sql_field,
+		isc_info_sql_relation,
+		isc_info_sql_owner,
+		isc_info_sql_alias,
+		isc_info_sql_describe_end,
+	}
+}
+
 type wireProtocol struct {
 	buf []byte
 
@@ -636,7 +654,7 @@ func (p *wireProtocol) _parse_select_items(buf []byte, xsqlda []xSQLVAR) (int, e
 	return -1, err // no more info
 }
 
-func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQLVAR, error) {
+func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQLVAR, []xSQLVAR, error) {
 	var ln, col_len, next_index int
 	var err error
 	var stmt_type int32
@@ -676,7 +694,44 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
 		}
 	}
 
-	return stmt_type, xsqlda, err
+	// Fetch input (bind) parameter metadata via a separate opInfoSql call.
+	var inputXsqlda []xSQLVAR
+	if err == nil {
+		inputXsqlda, err = p._fetchBindXsqlda(stmtHandle)
+	}
+
+	return stmt_type, xsqlda, inputXsqlda, err
+}
+
+// _fetchBindXsqlda retrieves input (bind) parameter metadata for a prepared statement.
+func (p *wireProtocol) _fetchBindXsqlda(stmtHandle int32) ([]xSQLVAR, error) {
+	err := p.opInfoSql(stmtHandle, _INFO_SQL_BIND_DESCRIBE_VARS())
+	if err != nil {
+		return nil, err
+	}
+	_, _, buf, err := p.opResponse()
+	if err != nil {
+		return nil, err
+	}
+	if len(buf) < 6 || buf[0] != byte(isc_info_sql_bind) || buf[1] != byte(isc_info_sql_describe_vars) {
+		return nil, nil
+	}
+	ln := int(bytes_to_int16(buf[2:4]))
+	col_len := int(bytes_to_int32(buf[4 : 4+ln]))
+	inputXsqlda := make([]xSQLVAR, col_len)
+	next_index, err := p._parse_select_items(buf[4+ln:], inputXsqlda)
+	for next_index > 0 {
+		p.opInfoSql(stmtHandle,
+			bytes.Join([][]byte{
+				[]byte{isc_info_sql_sqlda_start, 2},
+				int16_to_bytes(int16(next_index)),
+				_INFO_SQL_BIND_DESCRIBE_VARS(),
+			}, nil))
+		_, _, buf, err = p.opResponse()
+		ln = int(bytes_to_int16(buf[2:4]))
+		next_index, err = p._parse_select_items(buf[4+ln:], inputXsqlda)
+	}
+	return inputXsqlda, err
 }
 
 func (p *wireProtocol) getBlobSegments(blobId []byte, transHandle int32) ([]byte, error) {
@@ -996,7 +1051,7 @@ func (p *wireProtocol) opInfoSql(stmtHandle int32, vars []byte) error {
 	return err
 }
 
-func (p *wireProtocol) opExecute(stmtHandle int32, transHandle int32, params []driver.Value) error {
+func (p *wireProtocol) opExecute(stmtHandle int32, transHandle int32, params []driver.Value, inputXsqlda []xSQLVAR) error {
 	p.debugPrint("opExecute():%d,%d,%v", transHandle, stmtHandle, params)
 	p.packInt(op_execute)
 	p.packInt(stmtHandle)
@@ -1007,7 +1062,7 @@ func (p *wireProtocol) opExecute(stmtHandle int32, transHandle int32, params []d
 		p.packInt(0)
 		p.packInt(0)
 	} else {
-		blr, values := p.paramsToBlr(transHandle, params, p.protocolVersion)
+		blr, values := p.paramsToBlr(transHandle, params, p.protocolVersion, inputXsqlda)
 		p.packBytes(blr)
 		p.packInt(0)
 		p.packInt(1)
@@ -1021,7 +1076,7 @@ func (p *wireProtocol) opExecute(stmtHandle int32, transHandle int32, params []d
 	return err
 }
 
-func (p *wireProtocol) opExecute2(stmtHandle int32, transHandle int32, params []driver.Value, outputBlr []byte) error {
+func (p *wireProtocol) opExecute2(stmtHandle int32, transHandle int32, params []driver.Value, outputBlr []byte, inputXsqlda []xSQLVAR) error {
 	p.debugPrint("opExecute2")
 	p.packInt(op_execute2)
 	p.packInt(stmtHandle)
@@ -1032,7 +1087,7 @@ func (p *wireProtocol) opExecute2(stmtHandle int32, transHandle int32, params []
 		p.packInt(0)
 		p.packInt(0)
 	} else {
-		blr, values := p.paramsToBlr(transHandle, params, p.protocolVersion)
+		blr, values := p.paramsToBlr(transHandle, params, p.protocolVersion, inputXsqlda)
 		p.packBytes(blr)
 		p.packInt(0)
 		p.packInt(1)
@@ -1376,7 +1431,10 @@ func (p *wireProtocol) createBlob(value []byte, transHandle int32) ([]byte, erro
 }
 
 // paramsToBlr converts parameters to BLR type descriptors and serialized values for the wire protocol.
-func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, protocolVersion int32) ([]byte, []byte) {
+// inputXsqlda contains the server-reported types for bind parameters (from isc_info_sql_bind).
+// It is used to select the correct encoding for time.Time values: TIMESTAMP/TIME (without TZ)
+// columns are encoded as local wall clock time to preserve round-trip correctness when time.Local != UTC.
+func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, protocolVersion int32, inputXsqlda []xSQLVAR) ([]byte, []byte) {
 	var v, blr []byte
 	bi256 := big.NewInt(256)
 
@@ -1408,7 +1466,7 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 		}
 	}
 
-	for _, param := range params {
+	for i, param := range params {
 		switch f := param.(type) {
 		case string:
 			f = p.encodeString(f)
@@ -1431,9 +1489,27 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 			blr, v = _float64ToBlr(float64(f))
 		case time.Time:
 			if f.Year() == 0 {
-				blr, v = _timeToBlr(f, protocolVersion, p.timezone)
+				if i < len(inputXsqlda) && inputXsqlda[i].sqltype == SQL_TYPE_TIME {
+					// TIME (without TZ) column: encode local wall clock to preserve round-trip.
+					blr, v = []byte{13}, _convert_time(f)
+				} else {
+					blr, v = _timeToBlr(f, protocolVersion, p.timezone)
+				}
 			} else {
-				blr, v = _timestampToBlr(f, protocolVersion, p.timezone)
+				if i < len(inputXsqlda) {
+					switch inputXsqlda[i].sqltype {
+					case SQL_TYPE_DATE:
+						// DATE column: encode local wall clock date to preserve round-trip.
+						blr, v = _dateToBlr(f)
+					case SQL_TYPE_TIMESTAMP:
+						// TIMESTAMP (without TZ) column: encode local wall clock to preserve round-trip.
+						blr, v = []byte{35}, _convert_timestamp(f)
+					default:
+						blr, v = _timestampToBlr(f, protocolVersion, p.timezone)
+					}
+				} else {
+					blr, v = _timestampToBlr(f, protocolVersion, p.timezone)
+				}
 			}
 		case bool:
 			if f {
