@@ -1496,9 +1496,17 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 					blr, v = _timeToBlr(f, protocolVersion, p.timezone)
 				}
 			} else {
-				if i < len(inputXsqlda) && inputXsqlda[i].sqltype == SQL_TYPE_TIMESTAMP {
-					// TIMESTAMP (without TZ) column: encode local wall clock to preserve round-trip.
-					blr, v = []byte{35}, _convert_timestamp(f)
+				if i < len(inputXsqlda) {
+					switch inputXsqlda[i].sqltype {
+					case SQL_TYPE_DATE:
+						// DATE column: encode local wall clock date to preserve round-trip.
+						blr, v = _dateToBlr(f)
+					case SQL_TYPE_TIMESTAMP:
+						// TIMESTAMP (without TZ) column: encode local wall clock to preserve round-trip.
+						blr, v = []byte{35}, _convert_timestamp(f)
+					default:
+						blr, v = _timestampToBlr(f, protocolVersion, p.timezone)
+					}
 				} else {
 					blr, v = _timestampToBlr(f, protocolVersion, p.timezone)
 				}
