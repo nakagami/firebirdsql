@@ -32,7 +32,7 @@ type firebirdsqlStmt struct {
 	fc           *firebirdsqlConn
 	queryString  string
 	stmtHandle   int32
-	xsqlda       []xSQLVAR
+	resultXsqlda []xSQLVAR
 	inputXsqlda  []xSQLVAR
 	blr          []byte
 	stmtType     int32
@@ -155,7 +155,7 @@ func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (dr
 		}
 
 		go stmt.sendOpCancel(ctx, done)
-		result, err = stmt.fc.wp.opSqlResponse(stmt.xsqlda)
+		result, err = stmt.fc.wp.opSqlResponse(stmt.resultXsqlda)
 		done <- struct{}{}
 		if err != nil {
 			return nil, err
@@ -225,12 +225,12 @@ func newFirebirdsqlStmt(fc *firebirdsqlConn, query string) (stmt *firebirdsqlStm
 		return
 	}
 
-	stmt.stmtType, stmt.xsqlda, stmt.inputXsqlda, err = stmt.fc.wp.parse_xsqlda(buf, stmt.stmtHandle)
+	stmt.stmtType, stmt.resultXsqlda, stmt.inputXsqlda, err = stmt.fc.wp.parse_xsqlda(buf, stmt.stmtHandle)
 	if err != nil {
 		return nil, err
 	}
 
-	stmt.blr = calcBlr(stmt.xsqlda)
+	stmt.blr = calcBlr(stmt.resultXsqlda)
 
 	return
 }

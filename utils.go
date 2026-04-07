@@ -134,7 +134,6 @@ func bigIntFromString(s string) *big.Int {
 	return ret
 }
 
-
 func xdrBytes(bs []byte) []byte {
 	// XDR encoding bytes
 	n := len(bs)

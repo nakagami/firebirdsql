@@ -666,7 +666,7 @@ func TestTimeZoneInsert(t *testing.T) {
 			makeTime: func(t *testing.T) time.Time { return time.Now().Truncate(100 * time.Millisecond) },
 		},
 		{
-			name:     "fixed-offset timezone (UTC-5)",
+			name: "fixed-offset timezone (UTC-5)",
 			makeTime: func(t *testing.T) time.Time {
 				return time.Date(2024, 1, 15, 10, 30, 0, 0, time.FixedZone("UTC-5", -5*3600))
 			},

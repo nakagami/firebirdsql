@@ -53,8 +53,8 @@ func newFirebirdsqlRows(ctx context.Context, stmt *firebirdsqlStmt, result []dri
 }
 
 func (rows *firebirdsqlRows) Columns() []string {
-	columns := make([]string, len(rows.stmt.xsqlda))
-	for i, x := range rows.stmt.xsqlda {
+	columns := make([]string, len(rows.stmt.resultXsqlda))
+	for i, x := range rows.stmt.resultXsqlda {
 		columns[i] = x.aliasname
 		if rows.stmt.fc.columnNameToLower {
 			columns[i] = strings.ToLower(columns[i])
@@ -99,7 +99,7 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 		if err != nil {
 			return err
 		}
-		rows.currentChunk, rows.moreData, err = rows.stmt.fc.wp.opFetchResponse(rows.stmt.stmtHandle, rows.stmt.fc.tx.transHandle, rows.stmt.xsqlda)
+		rows.currentChunk, rows.moreData, err = rows.stmt.fc.wp.opFetchResponse(rows.stmt.stmtHandle, rows.stmt.fc.tx.transHandle, rows.stmt.resultXsqlda)
 		if err != nil {
 			return
 		}
@@ -112,11 +112,11 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 	}
 	row := rows.currentChunk[rows.currentChunkIdx]
 	for i, v := range row {
-		if rows.stmt.xsqlda[i].sqltype == SQL_TYPE_BLOB && v != nil {
+		if rows.stmt.resultXsqlda[i].sqltype == SQL_TYPE_BLOB && v != nil {
 			blobId := v.([]byte)
 			var blob []byte
 			blob, err = rows.stmt.fc.wp.getBlobSegments(blobId, rows.stmt.fc.tx.transHandle)
-			if rows.stmt.xsqlda[i].sqlsubtype == 1 {
+			if rows.stmt.resultXsqlda[i].sqlsubtype == 1 {
 				charset := rows.stmt.fc.wp.charset
 				if s, ok := decodeCharset(blob, charset); ok {
 					dest[i] = s
@@ -136,21 +136,21 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 }
 
 func (rows *firebirdsqlRows) ColumnTypeDatabaseTypeName(index int) string {
-	return rows.stmt.xsqlda[index].typename()
+	return rows.stmt.resultXsqlda[index].typename()
 }
 
 func (rows *firebirdsqlRows) ColumnTypeLength(index int) (length int64, ok bool) {
-	return int64(rows.stmt.xsqlda[index].displayLength()), true
+	return int64(rows.stmt.resultXsqlda[index].displayLength()), true
 }
 
 func (rows *firebirdsqlRows) ColumnTypeNullable(index int) (nullable bool, ok bool) {
-	return rows.stmt.xsqlda[index].null_ok, true
+	return rows.stmt.resultXsqlda[index].null_ok, true
 }
 
 func (rows *firebirdsqlRows) ColumnTypePrecisionScale(index int) (precision, scale int64, ok bool) {
-	return int64(rows.stmt.xsqlda[index].displayLength()), int64(rows.stmt.xsqlda[index].sqlscale), rows.stmt.xsqlda[index].hasPrecisionScale()
+	return int64(rows.stmt.resultXsqlda[index].displayLength()), int64(rows.stmt.resultXsqlda[index].sqlscale), rows.stmt.resultXsqlda[index].hasPrecisionScale()
 }
 
 func (rows *firebirdsqlRows) ColumnTypeScanType(index int) reflect.Type {
-	return rows.stmt.xsqlda[index].scantype()
+	return rows.stmt.resultXsqlda[index].scantype()
 }
