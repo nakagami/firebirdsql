@@ -1051,7 +1051,9 @@ func (p *wireProtocol) opInfoSql(stmtHandle int32, vars []byte) error {
 	return err
 }
 
-func (p *wireProtocol) opExecute(stmtHandle int32, transHandle int32, params []driver.Value, inputXsqlda []xSQLVAR) error {
+func (p *wireProtocol) opExecute(stmt *firebirdsqlStmt, params []driver.Value, inputXsqlda []xSQLVAR) error {
+	stmtHandle := stmt.stmtHandle
+	transHandle := stmt.fc.tx.transHandle
 	p.debugPrint("opExecute():%d,%d,%v", transHandle, stmtHandle, params)
 	p.packInt(op_execute)
 	p.packInt(stmtHandle)
@@ -1076,7 +1078,9 @@ func (p *wireProtocol) opExecute(stmtHandle int32, transHandle int32, params []d
 	return err
 }
 
-func (p *wireProtocol) opExecute2(stmtHandle int32, transHandle int32, params []driver.Value, outputBlr []byte, inputXsqlda []xSQLVAR) error {
+func (p *wireProtocol) opExecute2(stmt *firebirdsqlStmt, params []driver.Value, outputBlr []byte, inputXsqlda []xSQLVAR) error {
+	stmtHandle := stmt.stmtHandle
+	transHandle := stmt.fc.tx.transHandle
 	p.debugPrint("opExecute2")
 	p.packInt(op_execute2)
 	p.packInt(stmtHandle)

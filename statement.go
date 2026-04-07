@@ -86,7 +86,7 @@ func (stmt *firebirdsqlStmt) sendOpCancel(ctx context.Context, done chan struct{
 }
 
 func (stmt *firebirdsqlStmt) exec(ctx context.Context, args []driver.Value) (result driver.Result, err error) {
-	err = stmt.fc.wp.opExecute(stmt.stmtHandle, stmt.fc.tx.transHandle, args, stmt.inputXsqlda)
+	err = stmt.fc.wp.opExecute(stmt, args, stmt.inputXsqlda)
 	if err != nil {
 		return
 	}
@@ -149,7 +149,7 @@ func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (dr
 	}
 
 	if stmt.stmtType == isc_info_sql_stmt_exec_procedure {
-		err = stmt.fc.wp.opExecute2(stmt.stmtHandle, stmt.fc.tx.transHandle, args, stmt.blr, stmt.inputXsqlda)
+		err = stmt.fc.wp.opExecute2(stmt, args, stmt.blr, stmt.inputXsqlda)
 		if err != nil {
 			return nil, err
 		}
@@ -168,7 +168,7 @@ func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (dr
 			return nil, err
 		}
 	} else {
-		err := stmt.fc.wp.opExecute(stmt.stmtHandle, stmt.fc.tx.transHandle, args, stmt.inputXsqlda)
+		err := stmt.fc.wp.opExecute(stmt, args, stmt.inputXsqlda)
 		if err != nil {
 			return nil, err
 		}
