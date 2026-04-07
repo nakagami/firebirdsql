@@ -1117,6 +1117,70 @@ func (p *wireProtocol) opFetch(stmtHandle int32, blr []byte) error {
 	return err
 }
 
+// readRow decodes a single row from the wire. Pre-V13 protocols interleave
+// per-column null flags; V13+ uses a leading null bitmap.
+func (p *wireProtocol) readRow(xsqlda []xSQLVAR) ([]driver.Value, error) {
+	r := make([]driver.Value, len(xsqlda))
+	if p.protocolVersion < PROTOCOL_VERSION13 {
+		for i, x := range xsqlda {
+			var ln int
+			if x.ioLength() < 0 {
+				b, err := p.recvPackets(4)
+				if err != nil {
+					return nil, err
+				}
+				ln = int(bytes_to_bint32(b))
+			} else {
+				ln = x.ioLength()
+			}
+			rawValue, err := p.recvPacketsAlignment(ln)
+			if err != nil {
+				return nil, err
+			}
+			nullFlag, err := p.recvPackets(4)
+			if err != nil {
+				return nil, err
+			}
+			if bytes_to_bint32(nullFlag) == 0 { // Not NULL
+				r[i], err = x.value(rawValue, p.timezone, p.charset)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+	} else { // V13+ sends a null bitmap upfront instead of per-column null flags
+		n := (len(xsqlda) + 7) / 8
+		nullBytes, err := p.recvPacketsAlignment(n)
+		if err != nil {
+			return nil, err
+		}
+		for i, x := range xsqlda {
+			if nullBytes[i/8]&(1<<(i%8)) != 0 {
+				continue
+			}
+			var ln int
+			if x.ioLength() < 0 {
+				b, err := p.recvPackets(4)
+				if err != nil {
+					return nil, err
+				}
+				ln = int(bytes_to_bint32(b))
+			} else {
+				ln = x.ioLength()
+			}
+			rawValue, err := p.recvPacketsAlignment(ln)
+			if err != nil {
+				return nil, err
+			}
+			r[i], err = x.value(rawValue, p.timezone, p.charset)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	return r, nil
+}
+
 // opFetchResponse reads rows from a fetch response, returning them as a slice.
 func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsqlda []xSQLVAR) ([][]driver.Value, bool, error) {
 	p.debugPrint("opFetchResponse")
@@ -1145,52 +1209,10 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsql
 	rows := make([][]driver.Value, 0, count) // pre-allocate to known chunk size
 
 	for count > 0 {
-		r := make([]driver.Value, len(xsqlda))
-		if p.protocolVersion < PROTOCOL_VERSION13 {
-			for i, x := range xsqlda {
-				var ln int
-				if x.ioLength() < 0 {
-					b, err = p.recvPackets(4)
-					ln = int(bytes_to_bint32(b))
-				} else {
-					ln = x.ioLength()
-				}
-				raw_value, _ := p.recvPacketsAlignment(ln)
-				b, err = p.recvPackets(4)
-				if bytes_to_bint32(b) == 0 { // Not NULL
-					r[i], err = x.value(raw_value, p.timezone, p.charset)
-				}
-			}
-		} else { // PROTOCOL_VERSION13
-			bi256 := big.NewInt(256)
-			n := len(xsqlda) / 8
-			if len(xsqlda)%8 != 0 {
-				n++
-			}
-			null_indicator := new(big.Int)
-			b, _ := p.recvPacketsAlignment(n)
-			for n = len(b); n > 0; n-- {
-				null_indicator = null_indicator.Mul(null_indicator, bi256)
-				bi := big.NewInt(int64(b[n-1]))
-				null_indicator = null_indicator.Add(null_indicator, bi)
-			}
-
-			for i, x := range xsqlda {
-				if null_indicator.Bit(i) != 0 {
-					continue
-				}
-				var ln int
-				if x.ioLength() < 0 {
-					b, err = p.recvPackets(4)
-					ln = int(bytes_to_bint32(b))
-				} else {
-					ln = x.ioLength()
-				}
-				raw_value, _ := p.recvPacketsAlignment(ln)
-				r[i], err = x.value(raw_value, p.timezone, p.charset)
-			}
+		r, err2 := p.readRow(xsqlda)
+		if err2 != nil {
+			return nil, false, err2
 		}
-
 		rows = append(rows, r)
 
 		b, err = p.recvPackets(12)
@@ -1326,8 +1348,14 @@ func (p *wireProtocol) opResponse() (int32, []byte, []byte, error) {
 func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) ([]driver.Value, error) {
 	p.debugPrint("opSqlResponse")
 	b, err := p.recvPackets(4)
+	if err != nil {
+		return nil, err
+	}
 	for bytes_to_bint32(b) == op_dummy {
 		b, err = p.recvPackets(4)
+		if err != nil {
+			return nil, err
+		}
 	}
 	for bytes_to_bint32(b) == op_response && p.lazyResponseCount > 0 {
 		p.lazyResponseCount--
@@ -1340,58 +1368,15 @@ func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) ([]driver.Value, error) {
 	}
 
 	b, err = p.recvPackets(4)
+	if err != nil {
+		return nil, err
+	}
 	count := int(bytes_to_bint32(b))
 	if count == 0 {
 		return nil, nil
 	}
 
-	r := make([]driver.Value, len(xsqlda))
-	var ln int
-
-	if p.protocolVersion < PROTOCOL_VERSION13 {
-		for i, x := range xsqlda {
-			if x.ioLength() < 0 {
-				b, err = p.recvPackets(4)
-				ln = int(bytes_to_bint32(b))
-			} else {
-				ln = x.ioLength()
-			}
-			raw_value, _ := p.recvPacketsAlignment(ln)
-			b, err = p.recvPackets(4)
-			if bytes_to_bint32(b) == 0 { // Not NULL
-				r[i], err = x.value(raw_value, p.timezone, p.charset)
-			}
-		}
-	} else { // PROTOCOL_VERSION13
-		bi256 := big.NewInt(256)
-		n := len(xsqlda) / 8
-		if len(xsqlda)%8 != 0 {
-			n++
-		}
-		null_indicator := new(big.Int)
-		b, _ := p.recvPacketsAlignment(n)
-		for n = len(b); n > 0; n-- {
-			null_indicator = null_indicator.Mul(null_indicator, bi256)
-			bi := big.NewInt(int64(b[n-1]))
-			null_indicator = null_indicator.Add(null_indicator, bi)
-		}
-
-		for i, x := range xsqlda {
-			if null_indicator.Bit(i) != 0 {
-				continue
-			}
-			if x.ioLength() < 0 {
-				b, err = p.recvPackets(4)
-				ln = int(bytes_to_bint32(b))
-			} else {
-				ln = x.ioLength()
-			}
-			raw_value, _ := p.recvPacketsAlignment(ln)
-			r[i], err = x.value(raw_value, p.timezone, p.charset)
-		}
-	}
-
-	return r, err
+	return p.readRow(xsqlda)
 }
 
 func (p *wireProtocol) createBlob(value []byte, transHandle int32) ([]byte, error) {
@@ -1436,7 +1421,6 @@ func (p *wireProtocol) createBlob(value []byte, transHandle int32) ([]byte, erro
 // columns are encoded as local wall clock time to preserve round-trip correctness when time.Local != UTC.
 func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, protocolVersion int32, inputXsqlda []xSQLVAR) ([]byte, []byte) {
 	var v, blr []byte
-	bi256 := big.NewInt(256)
 
 	ln := len(params) * 2
 	// Each param contributes a type descriptor + null indicator pair, plus a header and terminator entry.
@@ -1446,24 +1430,17 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 	blrList = append(blrList, []byte{5, 2, 4, 0, byte(ln & 255), byte(ln >> 8)})
 
 	if protocolVersion >= PROTOCOL_VERSION13 {
-		nullIndicator := new(big.Int)
-		for i := len(params) - 1; i >= 0; i-- {
-			if params[i] == nil {
-				nullIndicator.SetBit(nullIndicator, i, 1)
-			}
-		}
-		n := len(params) / 8
-		if len(params)%8 != 0 {
-			n++
-		}
+		n := (len(params) + 7) / 8
 		if n%4 != 0 { // padding
 			n += 4 - n%4
 		}
-		for i := 0; i < n; i++ {
-			var modres *big.Int = new(big.Int)
-			valuesList = append(valuesList, []byte{byte(modres.Mod(nullIndicator, bi256).Int64())})
-			nullIndicator = nullIndicator.Div(nullIndicator, bi256)
+		nullBytes := make([]byte, n)
+		for i, param := range params {
+			if param == nil {
+				nullBytes[i/8] |= 1 << (i % 8)
+			}
 		}
+		valuesList = append(valuesList, nullBytes)
 	}
 
 	for i, param := range params {
