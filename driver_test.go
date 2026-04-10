@@ -1577,6 +1577,68 @@ func TestExecProcedureAfterCloseCursor(t *testing.T) {
 	require.NoError(t, tx.Commit())
 }
 
+// TestGoIssue48 verifies that all column types returned by this driver can be
+// scanned into sql.RawBytes (a generic scan pattern used when columns are
+// unknown at compile time). The driver returns non-standard driver.Value types
+// (int16, int32, float32, decimal.Decimal) that database/sql's convertAssign
+// does not recognise, so they would fail to scan into *sql.RawBytes.
+func TestGoIssue48(t *testing.T) {
+	dsn := GetTestDSN("test_issue48_")
+	conn, err := sql.Open("firebirdsql_createdb", dsn)
+	require.NoError(t, err)
+
+	_, err = conn.Exec(`
+		CREATE TABLE test_issue48 (
+			col_smallint   SMALLINT          DEFAULT 1,
+			col_integer    INTEGER           DEFAULT 2,
+			col_bigint     BIGINT            DEFAULT 3,
+			col_float      FLOAT             DEFAULT 1.5,
+			col_double     DOUBLE PRECISION  DEFAULT 2.5,
+			col_decimal    DECIMAL(16,3)     DEFAULT 1.234,
+			col_varchar    VARCHAR(32)       DEFAULT 'hello',
+			col_date       DATE              DEFAULT '2024-01-15',
+			col_time       TIME              DEFAULT '12:34:56',
+			col_timestamp  TIMESTAMP         DEFAULT '2024-01-15 12:34:56',
+			col_blob       BLOB SUB_TYPE 1
+		)
+	`)
+	require.NoError(t, err)
+
+	_, err = conn.Exec(`
+		INSERT INTO test_issue48 (col_blob)
+		VALUES ('some text')
+	`)
+	require.NoError(t, err)
+	conn.Close()
+
+	time.Sleep(1 * time.Second)
+
+	conn, err = sql.Open("firebirdsql", dsn)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	rows, err := conn.Query(`SELECT * FROM test_issue48`)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	cols, err := rows.Columns()
+	require.NoError(t, err)
+
+	rawResult := make([]sql.RawBytes, len(cols))
+	dest := make([]any, len(cols))
+	for i := range rawResult {
+		dest[i] = &rawResult[i]
+	}
+
+	require.True(t, rows.Next())
+	err = rows.Scan(dest...)
+	require.NoError(t, err, "Scan into sql.RawBytes must succeed for all column types")
+
+	for i, col := range cols {
+		assert.NotEmpty(t, rawResult[i], "column %s should have a non-empty RawBytes value", col)
+	}
+}
+
 func TestAuth(t *testing.T) {
 	conn, err := sql.Open("firebirdsql", GetTestUser()+":wrongpassword@localhost/employee")
 	err = conn.Ping()
