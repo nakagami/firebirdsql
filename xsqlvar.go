@@ -169,17 +169,17 @@ func (x *xSQLVAR) scantype() reflect.Type {
 	case SQL_TYPE_VARYING:
 		return reflect.TypeOf("")
 	case SQL_TYPE_SHORT:
-		if x.sqlscale != 0 {
+		if x.sqlscale < 0 {
 			return reflect.TypeOf("")
 		}
 		return reflect.TypeOf(int64(0))
 	case SQL_TYPE_LONG:
-		if x.sqlscale != 0 {
+		if x.sqlscale < 0 {
 			return reflect.TypeOf("")
 		}
 		return reflect.TypeOf(int64(0))
 	case SQL_TYPE_INT64:
-		if x.sqlscale != 0 {
+		if x.sqlscale < 0 {
 			return reflect.TypeOf("")
 		}
 		return reflect.TypeOf(int64(0))
@@ -448,15 +448,21 @@ func (x *xSQLVAR) value(raw_value []byte, timezone string, charset string) (v in
 	case SQL_TYPE_DEC_FIXED:
 		var d decimal.Decimal
 		d, err = decimalFixedToDecimal(raw_value, int32(x.sqlscale))
-		v = d.String()
+		if err == nil {
+			v = d.String()
+		}
 	case SQL_TYPE_DEC64:
 		var d decimal.Decimal
 		d, err = decimal64ToDecimal(raw_value)
-		v = d.String()
+		if err == nil {
+			v = d.String()
+		}
 	case SQL_TYPE_DEC128:
 		var d decimal.Decimal
 		d, err = decimal128ToDecimal(raw_value)
-		v = d.String()
+		if err == nil {
+			v = d.String()
+		}
 	}
 	return
 }

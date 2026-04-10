@@ -726,10 +726,15 @@ func TestInt128(t *testing.T) {
 	conn.Exec(sql)
 	conn.Exec("insert into test_int128(i) values (170141183460469231731687303715884105727)")
 
-	var i128 *big.Int
-	err = conn.QueryRow("SELECT i FROM test_int128").Scan(&i128)
+	var s string
+	err = conn.QueryRow("SELECT i FROM test_int128").Scan(&s)
 	if err != nil {
 		t.Fatalf("Error SELECT: %v", err)
+	}
+
+	i128, ok := new(big.Int).SetString(s, 10)
+	if !ok {
+		t.Fatalf("Error parsing INT128 string: %v", s)
 	}
 
 	var toCmp = new(big.Int)
@@ -761,10 +766,15 @@ func TestNegativeInt128(t *testing.T) {
 	conn.Exec(sql)
 	conn.Exec("insert into test_negative_int128(i) values (-170141183460469231731687303715884105727)")
 
-	var i128 *big.Int
-	err = conn.QueryRow("SELECT i FROM test_negative_int128").Scan(&i128)
+	var s string
+	err = conn.QueryRow("SELECT i FROM test_negative_int128").Scan(&s)
 	if err != nil {
 		t.Fatalf("Error SELECT: %v", err)
+	}
+
+	i128, ok := new(big.Int).SetString(s, 10)
+	if !ok {
+		t.Fatalf("Error parsing INT128 string: %v", s)
 	}
 
 	var toCmp = new(big.Int)
