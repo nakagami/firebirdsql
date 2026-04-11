@@ -168,23 +168,13 @@ func (x *xSQLVAR) scantype() reflect.Type {
 		return reflect.TypeOf("")
 	case SQL_TYPE_VARYING:
 		return reflect.TypeOf("")
-	case SQL_TYPE_SHORT:
-		if x.sqlscale != 0 {
-			return reflect.TypeOf(decimal.Decimal{})
-		}
-		return reflect.TypeOf(int16(0))
-	case SQL_TYPE_LONG:
-		if x.sqlscale != 0 {
-			return reflect.TypeOf(decimal.Decimal{})
-		}
-		return reflect.TypeOf(int32(0))
-	case SQL_TYPE_INT64:
-		if x.sqlscale != 0 {
-			return reflect.TypeOf(decimal.Decimal{})
+	case SQL_TYPE_SHORT, SQL_TYPE_LONG, SQL_TYPE_INT64:
+		if x.sqlscale < 0 {
+			return reflect.TypeOf("")
 		}
 		return reflect.TypeOf(int64(0))
 	case SQL_TYPE_INT128:
-		return reflect.TypeOf(big.Int{})
+		return reflect.TypeOf("")
 	case SQL_TYPE_DATE:
 		return reflect.TypeOf(time.Time{})
 	case SQL_TYPE_TIME:
@@ -192,7 +182,7 @@ func (x *xSQLVAR) scantype() reflect.Type {
 	case SQL_TYPE_TIMESTAMP:
 		return reflect.TypeOf(time.Time{})
 	case SQL_TYPE_FLOAT:
-		return reflect.TypeOf(float32(0))
+		return reflect.TypeOf(float64(0))
 	case SQL_TYPE_DOUBLE:
 		return reflect.TypeOf(float64(0))
 	case SQL_TYPE_BOOLEAN:
@@ -204,11 +194,11 @@ func (x *xSQLVAR) scantype() reflect.Type {
 	case SQL_TYPE_TIME_TZ:
 		return reflect.TypeOf(time.Time{})
 	case SQL_TYPE_DEC64:
-		return reflect.TypeOf(decimal.Decimal{})
+		return reflect.TypeOf("")
 	case SQL_TYPE_DEC128:
-		return reflect.TypeOf(decimal.Decimal{})
+		return reflect.TypeOf("")
 	case SQL_TYPE_DEC_FIXED:
-		return reflect.TypeOf(decimal.Decimal{})
+		return reflect.TypeOf("")
 	}
 	return reflect.TypeOf(nil)
 }
@@ -326,6 +316,24 @@ func (x *xSQLVAR) parseString(raw_value []byte, charset string) interface{} {
 	return raw_value
 }
 
+func (x *xSQLVAR) scaledIntValue(i int64) interface{} {
+	switch {
+	case x.sqlscale > 0:
+		return i * int64(math.Pow10(x.sqlscale))
+	case x.sqlscale < 0:
+		return decimal.New(i, int32(x.sqlscale)).String()
+	default:
+		return i
+	}
+}
+
+func decimalString(d decimal.Decimal, err error) (interface{}, error) {
+	if err != nil {
+		return nil, err
+	}
+	return d.String(), nil
+}
+
 func (x *xSQLVAR) value(raw_value []byte, timezone string, charset string) (v interface{}, err error) {
 	switch x.sqltype {
 	case SQL_TYPE_TEXT:
@@ -347,32 +355,11 @@ func (x *xSQLVAR) value(raw_value []byte, timezone string, charset string) (v in
 			v = x.parseString(raw_value, charset)
 		}
 	case SQL_TYPE_SHORT:
-		i16 := int16(bytes_to_bint32(raw_value))
-		if x.sqlscale > 0 {
-			v = int64(i16) * int64(math.Pow10(x.sqlscale))
-		} else if x.sqlscale < 0 {
-			v = decimal.New(int64(i16), int32(x.sqlscale))
-		} else {
-			v = i16
-		}
+		v = x.scaledIntValue(int64(int16(bytes_to_bint32(raw_value))))
 	case SQL_TYPE_LONG:
-		i32 := bytes_to_bint32(raw_value)
-		if x.sqlscale > 0 {
-			v = int64(i32) * int64(math.Pow10(x.sqlscale))
-		} else if x.sqlscale < 0 {
-			v = decimal.New(int64(i32), int32(x.sqlscale))
-		} else {
-			v = i32
-		}
+		v = x.scaledIntValue(int64(bytes_to_bint32(raw_value)))
 	case SQL_TYPE_INT64:
-		i64 := bytes_to_bint64(raw_value)
-		if x.sqlscale > 0 {
-			v = i64 * int64(math.Pow10(x.sqlscale))
-		} else if x.sqlscale < 0 {
-			v = decimal.New(int64(i64), int32(x.sqlscale))
-		} else {
-			v = i64
-		}
+		v = x.scaledIntValue(bytes_to_bint64(raw_value))
 	case SQL_TYPE_INT128:
 		var isNegative bool
 
@@ -420,7 +407,7 @@ func (x *xSQLVAR) value(raw_value []byte, timezone string, charset string) (v in
 			x.Add(x, big.NewInt(1))
 			x.Mul(x, big.NewInt(-1))
 		}
-		v = x
+		v = x.String()
 	case SQL_TYPE_DATE:
 		v = x.parseDate(raw_value, timezone)
 	case SQL_TYPE_TIME:
@@ -435,7 +422,7 @@ func (x *xSQLVAR) value(raw_value []byte, timezone string, charset string) (v in
 		var f32 float32
 		b := bytes.NewReader(raw_value)
 		err = binary.Read(b, binary.BigEndian, &f32)
-		v = f32
+		v = float64(f32)
 	case SQL_TYPE_DOUBLE:
 		b := bytes.NewReader(raw_value)
 		var f64 float64
@@ -446,11 +433,11 @@ func (x *xSQLVAR) value(raw_value []byte, timezone string, charset string) (v in
 	case SQL_TYPE_BLOB:
 		v = raw_value
 	case SQL_TYPE_DEC_FIXED:
-		v, err = decimalFixedToDecimal(raw_value, int32(x.sqlscale))
+		v, err = decimalString(decimalFixedToDecimal(raw_value, int32(x.sqlscale)))
 	case SQL_TYPE_DEC64:
-		v, err = decimal64ToDecimal(raw_value)
+		v, err = decimalString(decimal64ToDecimal(raw_value))
 	case SQL_TYPE_DEC128:
-		v, err = decimal128ToDecimal(raw_value)
+		v, err = decimalString(decimal128ToDecimal(raw_value))
 	}
 	return
 }
