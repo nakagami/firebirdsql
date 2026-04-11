@@ -168,17 +168,7 @@ func (x *xSQLVAR) scantype() reflect.Type {
 		return reflect.TypeOf("")
 	case SQL_TYPE_VARYING:
 		return reflect.TypeOf("")
-	case SQL_TYPE_SHORT:
-		if x.sqlscale < 0 {
-			return reflect.TypeOf("")
-		}
-		return reflect.TypeOf(int64(0))
-	case SQL_TYPE_LONG:
-		if x.sqlscale < 0 {
-			return reflect.TypeOf("")
-		}
-		return reflect.TypeOf(int64(0))
-	case SQL_TYPE_INT64:
+	case SQL_TYPE_SHORT, SQL_TYPE_LONG, SQL_TYPE_INT64:
 		if x.sqlscale < 0 {
 			return reflect.TypeOf("")
 		}
@@ -326,6 +316,24 @@ func (x *xSQLVAR) parseString(raw_value []byte, charset string) interface{} {
 	return raw_value
 }
 
+func (x *xSQLVAR) scaledIntValue(i int64) interface{} {
+	switch {
+	case x.sqlscale > 0:
+		return i * int64(math.Pow10(x.sqlscale))
+	case x.sqlscale < 0:
+		return decimal.New(i, int32(x.sqlscale)).String()
+	default:
+		return i
+	}
+}
+
+func decimalString(d decimal.Decimal, err error) (interface{}, error) {
+	if err != nil {
+		return nil, err
+	}
+	return d.String(), nil
+}
+
 func (x *xSQLVAR) value(raw_value []byte, timezone string, charset string) (v interface{}, err error) {
 	switch x.sqltype {
 	case SQL_TYPE_TEXT:
@@ -347,32 +355,11 @@ func (x *xSQLVAR) value(raw_value []byte, timezone string, charset string) (v in
 			v = x.parseString(raw_value, charset)
 		}
 	case SQL_TYPE_SHORT:
-		i16 := int16(bytes_to_bint32(raw_value))
-		if x.sqlscale > 0 {
-			v = int64(i16) * int64(math.Pow10(x.sqlscale))
-		} else if x.sqlscale < 0 {
-			v = decimal.New(int64(i16), int32(x.sqlscale)).String()
-		} else {
-			v = int64(i16)
-		}
+		v = x.scaledIntValue(int64(int16(bytes_to_bint32(raw_value))))
 	case SQL_TYPE_LONG:
-		i32 := bytes_to_bint32(raw_value)
-		if x.sqlscale > 0 {
-			v = int64(i32) * int64(math.Pow10(x.sqlscale))
-		} else if x.sqlscale < 0 {
-			v = decimal.New(int64(i32), int32(x.sqlscale)).String()
-		} else {
-			v = int64(i32)
-		}
+		v = x.scaledIntValue(int64(bytes_to_bint32(raw_value)))
 	case SQL_TYPE_INT64:
-		i64 := bytes_to_bint64(raw_value)
-		if x.sqlscale > 0 {
-			v = i64 * int64(math.Pow10(x.sqlscale))
-		} else if x.sqlscale < 0 {
-			v = decimal.New(int64(i64), int32(x.sqlscale)).String()
-		} else {
-			v = i64
-		}
+		v = x.scaledIntValue(bytes_to_bint64(raw_value))
 	case SQL_TYPE_INT128:
 		var isNegative bool
 
@@ -446,23 +433,11 @@ func (x *xSQLVAR) value(raw_value []byte, timezone string, charset string) (v in
 	case SQL_TYPE_BLOB:
 		v = raw_value
 	case SQL_TYPE_DEC_FIXED:
-		var d decimal.Decimal
-		d, err = decimalFixedToDecimal(raw_value, int32(x.sqlscale))
-		if err == nil {
-			v = d.String()
-		}
+		v, err = decimalString(decimalFixedToDecimal(raw_value, int32(x.sqlscale)))
 	case SQL_TYPE_DEC64:
-		var d decimal.Decimal
-		d, err = decimal64ToDecimal(raw_value)
-		if err == nil {
-			v = d.String()
-		}
+		v, err = decimalString(decimal64ToDecimal(raw_value))
 	case SQL_TYPE_DEC128:
-		var d decimal.Decimal
-		d, err = decimal128ToDecimal(raw_value)
-		if err == nil {
-			v = d.String()
-		}
+		v, err = decimalString(decimal128ToDecimal(raw_value))
 	}
 	return
 }

@@ -1587,11 +1587,13 @@ func TestExecProcedureAfterCloseCursor(t *testing.T) {
 	require.NoError(t, tx.Commit())
 }
 
-// TestGoIssue48 verifies that all column types returned by this driver can be
-// scanned into sql.RawBytes (a generic scan pattern used when columns are
-// unknown at compile time). The driver returns non-standard driver.Value types
-// (int16, int32, float32, decimal.Decimal) that database/sql's convertAssign
-// does not recognise, so they would fail to scan into *sql.RawBytes.
+// TestGoIssue48 verifies that all basic column types returned by this driver
+// can be scanned into sql.RawBytes (a generic scan pattern used when columns
+// are unknown at compile time). The driver previously returned non-standard
+// driver.Value types (int16, int32, float32, decimal.Decimal, *big.Int) that
+// database/sql's convertAssign does not recognize, which made *sql.RawBytes
+// scans fail. See TestGoIssue48Fb4 for FB4-only types (INT128, DECFLOAT,
+// timezone-aware TIME/TIMESTAMP).
 func TestGoIssue48(t *testing.T) {
 	dsn := GetTestDSN("test_issue48_")
 	conn, err := sql.Open("firebirdsql_createdb", dsn)
@@ -1643,6 +1645,59 @@ func TestGoIssue48(t *testing.T) {
 	require.True(t, rows.Next())
 	err = rows.Scan(dest...)
 	require.NoError(t, err, "Scan into sql.RawBytes must succeed for all column types")
+
+	for i, col := range cols {
+		assert.NotEmpty(t, rawResult[i], "column %s should have a non-empty RawBytes value", col)
+	}
+}
+
+func TestGoIssue48Fb4(t *testing.T) {
+	if get_firebird_major_version(t) < 4 {
+		return
+	}
+
+	dsn := GetTestDSN("test_issue48fb4_")
+	conn, err := sql.Open("firebirdsql_createdb", dsn)
+	require.NoError(t, err)
+
+	_, err = conn.Exec(`
+		CREATE TABLE test_issue48fb4 (
+			col_int128        INT128                    DEFAULT 170141183460469231731687303715884105727,
+			col_decfloat16    DECFLOAT(16)              DEFAULT 1.5,
+			col_decfloat34    DECFLOAT(34)              DEFAULT 2.5,
+			col_time_tz       TIME WITH TIME ZONE       DEFAULT '12:34:56',
+			col_timestamp_tz  TIMESTAMP WITH TIME ZONE  DEFAULT '2024-01-15 12:34:56',
+			col_boolean       BOOLEAN                   DEFAULT TRUE
+		)
+	`)
+	require.NoError(t, err)
+
+	_, err = conn.Exec(`INSERT INTO test_issue48fb4 DEFAULT VALUES`)
+	require.NoError(t, err)
+	conn.Close()
+
+	time.Sleep(1 * time.Second)
+
+	conn, err = sql.Open("firebirdsql", dsn)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	rows, err := conn.Query(`SELECT * FROM test_issue48fb4`)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	cols, err := rows.Columns()
+	require.NoError(t, err)
+
+	rawResult := make([]sql.RawBytes, len(cols))
+	dest := make([]any, len(cols))
+	for i := range rawResult {
+		dest[i] = &rawResult[i]
+	}
+
+	require.True(t, rows.Next())
+	err = rows.Scan(dest...)
+	require.NoError(t, err, "Scan into sql.RawBytes must succeed for all FB4 column types")
 
 	for i, col := range cols {
 		assert.NotEmpty(t, rawResult[i], "column %s should have a non-empty RawBytes value", col)
