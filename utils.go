@@ -233,12 +233,20 @@ func _dateToBlr(t time.Time) ([]byte, []byte) {
 	return blr, v
 }
 
+func _timeToBlrNoTZ(t time.Time) ([]byte, []byte) {
+	return []byte{13}, _convert_time(t)
+}
+
+func _timestampToBlrNoTZ(t time.Time) ([]byte, []byte) {
+	return []byte{35}, _convert_timestamp(t)
+}
+
 func _timeToBlr(t time.Time, protocolVersion int32, sessionTimezone string) ([]byte, []byte) {
 	if protocolVersion >= PROTOCOL_VERSION16 {
 		tzID := resolveTimezone(t.Location().String(), sessionTimezone)
 		return []byte{28}, _convert_time_tz(t, tzID)
 	}
-	return []byte{13}, _convert_time(t)
+	return _timeToBlrNoTZ(t)
 }
 
 func _timestampToBlr(t time.Time, protocolVersion int32, sessionTimezone string) ([]byte, []byte) {
@@ -246,7 +254,7 @@ func _timestampToBlr(t time.Time, protocolVersion int32, sessionTimezone string)
 		tzID := resolveTimezone(t.Location().String(), sessionTimezone)
 		return []byte{29}, _convert_timestamp_tz(t, tzID)
 	}
-	return []byte{35}, _convert_timestamp(t)
+	return _timestampToBlrNoTZ(t)
 }
 
 func convertToBool(s string, defaultValue bool) bool {
