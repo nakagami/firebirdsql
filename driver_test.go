@@ -1629,30 +1629,7 @@ func TestGoIssue48(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	conn, err = sql.Open("firebirdsql", dsn)
-	require.NoError(t, err)
-	defer conn.Close()
-
-	rows, err := conn.Query(`SELECT * FROM test_issue48`)
-	require.NoError(t, err)
-	defer rows.Close()
-
-	cols, err := rows.Columns()
-	require.NoError(t, err)
-
-	rawResult := make([]sql.RawBytes, len(cols))
-	dest := make([]any, len(cols))
-	for i := range rawResult {
-		dest[i] = &rawResult[i]
-	}
-
-	require.True(t, rows.Next())
-	err = rows.Scan(dest...)
-	require.NoError(t, err, "Scan into sql.RawBytes must succeed for all column types")
-
-	for i, col := range cols {
-		assert.NotEmpty(t, rawResult[i], "column %s should have a non-empty RawBytes value", col)
-	}
+	assertRawBytesScannable(t, dsn, "test_issue48")
 }
 
 func TestGoIssue48Fb4(t *testing.T) {
@@ -1682,11 +1659,17 @@ func TestGoIssue48Fb4(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	conn, err = sql.Open("firebirdsql", dsn)
+	assertRawBytesScannable(t, dsn, "test_issue48fb4")
+}
+
+func assertRawBytesScannable(t *testing.T, dsn, table string) {
+	t.Helper()
+
+	conn, err := sql.Open("firebirdsql", dsn)
 	require.NoError(t, err)
 	defer conn.Close()
 
-	rows, err := conn.Query(`SELECT * FROM test_issue48fb4`)
+	rows, err := conn.Query("SELECT * FROM " + table)
 	require.NoError(t, err)
 	defer rows.Close()
 
@@ -1701,7 +1684,7 @@ func TestGoIssue48Fb4(t *testing.T) {
 
 	require.True(t, rows.Next())
 	err = rows.Scan(dest...)
-	require.NoError(t, err, "Scan into sql.RawBytes must succeed for all FB4 column types")
+	require.NoError(t, err, "Scan into sql.RawBytes must succeed for %s", table)
 
 	for i, col := range cols {
 		assert.NotEmpty(t, rawResult[i], "column %s should have a non-empty RawBytes value", col)

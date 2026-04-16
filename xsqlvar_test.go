@@ -1,7 +1,6 @@
 package firebirdsql
 
 import (
-	"encoding/binary"
 	"reflect"
 	"testing"
 
@@ -72,19 +71,19 @@ func TestValuePositiveScale(t *testing.T) {
 		{
 			"SHORT scale +2 value 5",
 			SQL_TYPE_SHORT, 2,
-			bigEndianInt32(5),
+			bint32_to_bytes(5),
 			int64(500),
 		},
 		{
 			"LONG scale +2 value 7",
 			SQL_TYPE_LONG, 2,
-			bigEndianInt32(7),
+			bint32_to_bytes(7),
 			int64(700),
 		},
 		{
 			"INT64 scale +1 value 3",
 			SQL_TYPE_INT64, 1,
-			bigEndianInt64(3),
+			bint64_to_bytes(3),
 			int64(30),
 		},
 	}
@@ -97,16 +96,4 @@ func TestValuePositiveScale(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
-}
-
-func bigEndianInt32(v int32) []byte {
-	b := make([]byte, 4)
-	binary.BigEndian.PutUint32(b, uint32(v))
-	return b
-}
-
-func bigEndianInt64(v int64) []byte {
-	b := make([]byte, 8)
-	binary.BigEndian.PutUint64(b, uint64(v))
-	return b
 }

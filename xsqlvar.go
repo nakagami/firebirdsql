@@ -327,13 +327,6 @@ func (x *xSQLVAR) scaledIntValue(i int64) interface{} {
 	}
 }
 
-func decimalString(d decimal.Decimal, err error) (interface{}, error) {
-	if err != nil {
-		return nil, err
-	}
-	return d.String(), nil
-}
-
 func (x *xSQLVAR) value(raw_value []byte, timezone string, charset string) (v interface{}, err error) {
 	switch x.sqltype {
 	case SQL_TYPE_TEXT:
@@ -433,11 +426,20 @@ func (x *xSQLVAR) value(raw_value []byte, timezone string, charset string) (v in
 	case SQL_TYPE_BLOB:
 		v = raw_value
 	case SQL_TYPE_DEC_FIXED:
-		v, err = decimalString(decimalFixedToDecimal(raw_value, int32(x.sqlscale)))
+		var d decimal.Decimal
+		if d, err = decimalFixedToDecimal(raw_value, int32(x.sqlscale)); err == nil {
+			v = d.String()
+		}
 	case SQL_TYPE_DEC64:
-		v, err = decimalString(decimal64ToDecimal(raw_value))
+		var d decimal.Decimal
+		if d, err = decimal64ToDecimal(raw_value); err == nil {
+			v = d.String()
+		}
 	case SQL_TYPE_DEC128:
-		v, err = decimalString(decimal128ToDecimal(raw_value))
+		var d decimal.Decimal
+		if d, err = decimal128ToDecimal(raw_value); err == nil {
+			v = d.String()
+		}
 	}
 	return
 }
