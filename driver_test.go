@@ -737,8 +737,10 @@ func TestInt128(t *testing.T) {
 		t.Fatalf("Error parsing INT128 string: %v", s)
 	}
 
-	var toCmp = new(big.Int)
-	toCmp, _ = toCmp.SetString("170141183460469231731687303715884105727", 10)
+	toCmp, ok := new(big.Int).SetString("170141183460469231731687303715884105727", 10)
+	if !ok {
+		t.Fatal("failed to parse expected INT128 value")
+	}
 
 	if i128.Cmp(toCmp) != 0 {
 		t.Fatalf("INT128 Error: %v", i128)
@@ -777,8 +779,10 @@ func TestNegativeInt128(t *testing.T) {
 		t.Fatalf("Error parsing INT128 string: %v", s)
 	}
 
-	var toCmp = new(big.Int)
-	toCmp, _ = toCmp.SetString("-170141183460469231731687303715884105727", 10)
+	toCmp, ok := new(big.Int).SetString("-170141183460469231731687303715884105727", 10)
+	if !ok {
+		t.Fatal("failed to parse expected INT128 value")
+	}
 
 	if i128.Cmp(toCmp) != 0 {
 		t.Fatalf("Negative INT128 Error: %v", i128)
