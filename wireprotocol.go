@@ -654,7 +654,7 @@ func (p *wireProtocol) _parse_select_items(buf []byte, xsqlda []xSQLVAR) (int, e
 	return -1, err // no more info
 }
 
-func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQLVAR, []xSQLVAR, error) {
+func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQLVAR, error) {
 	var ln, col_len, next_index int
 	var err error
 	var stmt_type int32
@@ -675,32 +675,40 @@ func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQL
 			col_len = int(bytes_to_int32(buf[i : i+ln]))
 			xsqlda = make([]xSQLVAR, col_len)
 			next_index, err = p._parse_select_items(buf[i+ln:], xsqlda)
+			if err != nil {
+				return stmt_type, nil, err
+			}
 			for next_index > 0 { // more describe vars
-				p.opInfoSql(stmtHandle,
+				if err = p.opInfoSql(stmtHandle,
 					bytes.Join([][]byte{
-						[]byte{isc_info_sql_sqlda_start, 2},
+						{isc_info_sql_sqlda_start, 2},
 						int16_to_bytes(int16(next_index)),
 						_INFO_SQL_SELECT_DESCRIBE_VARS(),
-					}, nil))
-
+					}, nil)); err != nil {
+					return stmt_type, nil, err
+				}
 				_, _, buf, err = p.opResponse()
-				// buf[:2] == []byte{0x04,0x07}
+				if err != nil {
+					return stmt_type, nil, err
+				}
+				if len(buf) < 4 {
+					return stmt_type, nil, fmt.Errorf("firebirdsql: short select describe continuation (%d bytes)", len(buf))
+				}
 				ln = int(bytes_to_int16(buf[2:4]))
-				// bytes_to_int(buf[4:4+l]) == col_len
+				if ln < 0 || 4+ln >= len(buf) {
+					return stmt_type, nil, fmt.Errorf("firebirdsql: invalid select describe continuation length")
+				}
 				next_index, err = p._parse_select_items(buf[4+ln:], xsqlda)
+				if err != nil {
+					return stmt_type, nil, err
+				}
 			}
 		} else {
 			break
 		}
 	}
 
-	// Fetch input (bind) parameter metadata via a separate opInfoSql call.
-	var inputXsqlda []xSQLVAR
-	if err == nil {
-		inputXsqlda, err = p._fetchBindXsqlda(stmtHandle)
-	}
-
-	return stmt_type, xsqlda, inputXsqlda, err
+	return stmt_type, xsqlda, err
 }
 
 // _fetchBindXsqlda retrieves input (bind) parameter metadata for a prepared statement.
@@ -713,25 +721,55 @@ func (p *wireProtocol) _fetchBindXsqlda(stmtHandle int32) ([]xSQLVAR, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(buf) < 6 || buf[0] != byte(isc_info_sql_bind) || buf[1] != byte(isc_info_sql_describe_vars) {
+	if len(buf) < 8 {
+		p.debugPrint("_fetchBindXsqlda: short response (%d bytes)", len(buf))
+		return nil, nil
+	}
+	if buf[0] != byte(isc_info_sql_bind) || buf[1] != byte(isc_info_sql_describe_vars) {
+		p.debugPrint("_fetchBindXsqlda: unexpected header %02x %02x", buf[0], buf[1])
 		return nil, nil
 	}
 	ln := int(bytes_to_int16(buf[2:4]))
-	col_len := int(bytes_to_int32(buf[4 : 4+ln]))
+	if ln != 4 || 4+ln > len(buf) {
+		p.debugPrint("_fetchBindXsqlda: unexpected ln=%d", ln)
+		return nil, nil
+	}
+	col_len := int(bytes_to_int32(buf[4:8]))
+	if col_len < 0 || col_len > 65535 {
+		p.debugPrint("_fetchBindXsqlda: invalid col_len=%d", col_len)
+		return nil, nil
+	}
 	inputXsqlda := make([]xSQLVAR, col_len)
 	next_index, err := p._parse_select_items(buf[4+ln:], inputXsqlda)
+	if err != nil {
+		return nil, err
+	}
 	for next_index > 0 {
-		p.opInfoSql(stmtHandle,
+		if err = p.opInfoSql(stmtHandle,
 			bytes.Join([][]byte{
-				[]byte{isc_info_sql_sqlda_start, 2},
+				{isc_info_sql_sqlda_start, 2},
 				int16_to_bytes(int16(next_index)),
 				_INFO_SQL_BIND_DESCRIBE_VARS(),
-			}, nil))
+			}, nil)); err != nil {
+			return nil, err
+		}
 		_, _, buf, err = p.opResponse()
+		if err != nil {
+			return nil, err
+		}
+		if len(buf) < 4 {
+			return nil, fmt.Errorf("firebirdsql: short bind describe continuation (%d bytes)", len(buf))
+		}
 		ln = int(bytes_to_int16(buf[2:4]))
+		if ln < 0 || 4+ln >= len(buf) {
+			return nil, fmt.Errorf("firebirdsql: invalid bind describe continuation length")
+		}
 		next_index, err = p._parse_select_items(buf[4+ln:], inputXsqlda)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return inputXsqlda, err
+	return inputXsqlda, nil
 }
 
 func (p *wireProtocol) getBlobSegments(blobId []byte, transHandle int32) ([]byte, error) {
@@ -1469,25 +1507,25 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 		case float64:
 			blr, v = _float64ToBlr(float64(f))
 		case time.Time:
-			if f.Year() == 0 {
-				if i < len(inputXsqlda) && inputXsqlda[i].sqltype == SQL_TYPE_TIME {
-					// TIME (without TZ) column: encode local wall clock to preserve round-trip.
-					blr, v = []byte{13}, _convert_time(f)
-				} else {
+			var bindType int
+			if i < len(inputXsqlda) {
+				bindType = inputXsqlda[i].sqltype
+			}
+			switch bindType {
+			case SQL_TYPE_TIME:
+				blr, v = _timeToBlrNoTZ(f)
+			case SQL_TYPE_DATE:
+				blr, v = _dateToBlr(f)
+			case SQL_TYPE_TIMESTAMP:
+				blr, v = _timestampToBlrNoTZ(f)
+			case SQL_TYPE_TIME_TZ:
+				blr, v = _timeToBlr(f, protocolVersion, p.timezone)
+			case SQL_TYPE_TIMESTAMP_TZ:
+				blr, v = _timestampToBlr(f, protocolVersion, p.timezone)
+			default:
+				// no bind metadata: fall back to Year()==0 heuristic
+				if f.Year() == 0 {
 					blr, v = _timeToBlr(f, protocolVersion, p.timezone)
-				}
-			} else {
-				if i < len(inputXsqlda) {
-					switch inputXsqlda[i].sqltype {
-					case SQL_TYPE_DATE:
-						// DATE column: encode local wall clock date to preserve round-trip.
-						blr, v = _dateToBlr(f)
-					case SQL_TYPE_TIMESTAMP:
-						// TIMESTAMP (without TZ) column: encode local wall clock to preserve round-trip.
-						blr, v = []byte{35}, _convert_timestamp(f)
-					default:
-						blr, v = _timestampToBlr(f, protocolVersion, p.timezone)
-					}
 				} else {
 					blr, v = _timestampToBlr(f, protocolVersion, p.timezone)
 				}
