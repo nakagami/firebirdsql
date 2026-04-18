@@ -457,3 +457,88 @@ func TestIssue89(t *testing.T) {
 	conn2.Close()
 
 }
+
+// TestIssue136 verifies that INSERT/UPDATE/DELETE issued via a user-prepared
+// sql.Stmt in autocommit mode become visible to other attachments immediately,
+// not only when the sql.Stmt is closed. See github.com/nakagami/firebirdsql#136.
+func TestIssue136(t *testing.T) {
+	test_dsn := GetTestDSN("test_issue136_")
+
+	setupConn, err := sql.Open("firebirdsql_createdb", test_dsn)
+	if err != nil {
+		t.Fatalf("createdb open: %v", err)
+	}
+	if _, err = setupConn.Exec("CREATE TABLE numbers (i INTEGER NOT NULL PRIMARY KEY)"); err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	setupConn.Close()
+
+	writeDB, err := sql.Open("firebirdsql", test_dsn)
+	if err != nil {
+		t.Fatalf("writeDB open: %v", err)
+	}
+	defer writeDB.Close()
+
+	readDB, err := sql.Open("firebirdsql", test_dsn)
+	if err != nil {
+		t.Fatalf("readDB open: %v", err)
+	}
+	defer readDB.Close()
+
+	const (
+		rowCount      = 10
+		writeSpacing  = 300 * time.Millisecond
+		pollInterval  = 100 * time.Millisecond
+		visibilitySLA = 500 * time.Millisecond
+	)
+
+	writeDone := make(chan struct{})
+	writeTimes := make([]time.Time, rowCount)
+
+	go func() {
+		defer close(writeDone)
+		stmt, perr := writeDB.Prepare("INSERT INTO numbers (i) VALUES (?)")
+		if perr != nil {
+			t.Errorf("prepare failed: %v", perr)
+			return
+		}
+		defer stmt.Close()
+		for i := 0; i < rowCount; i++ {
+			if _, eerr := stmt.Exec(i); eerr != nil {
+				t.Errorf("exec %d failed: %v", i, eerr)
+				return
+			}
+			writeTimes[i] = time.Now()
+			time.Sleep(writeSpacing)
+		}
+	}()
+
+	observedAt := make([]time.Time, rowCount)
+	deadline := time.Now().Add(time.Duration(rowCount)*writeSpacing + visibilitySLA)
+	seen := 0
+	for seen < rowCount && time.Now().Before(deadline) {
+		var max int
+		err := readDB.QueryRow("SELECT COALESCE(MAX(i), -1) FROM numbers").Scan(&max)
+		if err != nil {
+			t.Fatalf("poll query failed: %v", err)
+		}
+		now := time.Now()
+		for seen <= max {
+			observedAt[seen] = now
+			seen++
+		}
+		time.Sleep(pollInterval)
+	}
+
+	<-writeDone
+
+	if seen < rowCount {
+		t.Fatalf("reader saw only %d/%d rows before deadline — writer commits not propagating", seen, rowCount)
+	}
+	for i := 0; i < rowCount; i++ {
+		lag := observedAt[i].Sub(writeTimes[i])
+		if lag > visibilitySLA {
+			t.Fatalf("row %d visible after %v (> %v) — writer autocommit broken", i, lag, visibilitySLA)
+		}
+	}
+}
