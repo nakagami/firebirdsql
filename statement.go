@@ -106,6 +106,11 @@ func (stmt *firebirdsqlStmt) ensureInputXsqlda(args []driver.Value) error {
 }
 
 func (stmt *firebirdsqlStmt) exec(ctx context.Context, args []driver.Value) (result driver.Result, err error) {
+	if stmt.fc.tx.needBegin {
+		if err = stmt.fc.tx.begin(); err != nil {
+			return
+		}
+	}
 	if err = stmt.ensureInputXsqlda(args); err != nil {
 		return
 	}
@@ -147,6 +152,11 @@ func (stmt *firebirdsqlStmt) exec(ctx context.Context, args []driver.Value) (res
 
 	result = &firebirdsqlResult{
 		affectedRows: rowcount,
+	}
+	if stmt.fc.tx.isAutocommit {
+		if cerr := stmt.fc.tx.commitRetainging(); cerr != nil {
+			return result, cerr
+		}
 	}
 	return
 }
