@@ -63,7 +63,9 @@ func (stmt *firebirdsqlStmt) Close() error {
 }
 
 func (stmt *firebirdsqlStmt) closeCursor() error {
-	if stmt.stmtHandle == -1 || stmt.stmtType != isc_info_sql_stmt_select {
+	if stmt.stmtHandle == -1 ||
+		(stmt.stmtType != isc_info_sql_stmt_select &&
+			stmt.stmtType != isc_info_sql_stmt_select_for_upd) {
 		return nil
 	}
 	return stmt.freeStatement(DSQL_close)
@@ -133,7 +135,8 @@ func (stmt *firebirdsqlStmt) exec(ctx context.Context, args []driver.Value) (res
 
 	var rowcount int64
 	if len(buf) >= 32 {
-		if stmt.stmtType == isc_info_sql_stmt_select {
+		if stmt.stmtType == isc_info_sql_stmt_select ||
+			stmt.stmtType == isc_info_sql_stmt_select_for_upd {
 			rowcount = int64(bytes_to_int32(buf[20:24]))
 		} else {
 			rowcount = int64(bytes_to_int32(buf[27:31]) + bytes_to_int32(buf[6:10]) + bytes_to_int32(buf[13:17]))
