@@ -486,8 +486,8 @@ func TestIssue136(t *testing.T) {
 	defer readDB.Close()
 
 	const (
-		rowCount      = 10
-		writeSpacing  = 300 * time.Millisecond
+		rowCount      = 15
+		writeSpacing  = 400 * time.Millisecond
 		pollInterval  = 100 * time.Millisecond
 		visibilitySLA = 500 * time.Millisecond
 	)
