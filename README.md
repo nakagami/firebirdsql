@@ -76,6 +76,41 @@ user:password@localhost/path/to/database.fdb?wire_compress=true
 user:password@localhost/path/to/database.fdb?wire_crypt=true&wire_compress=true&role=admin
 ```
 
+### Reserved characters
+
+The DSN is parsed as an RFC 3986 URI (the driver prepends `firebird://` automatically).
+Reserved characters in the **password** or **database path** must be percent-encoded,
+otherwise they are misinterpreted as URI delimiters:
+
+| Character | Encoded | Why it breaks things |
+|-----------|---------|----------------------|
+| `@`       | `%40`   | ends the userinfo section |
+| `:`       | `%3A`   | splits user from password |
+| `#`       | `%23`   | starts the fragment (silently dropped) |
+| `?`       | `%3F`   | starts the query string |
+| `/`       | `%2F`   | path separator |
+| `&`       | `%26`   | separates query parameters |
+| `=`       | `%3D`   | separates a query key from its value |
+| `%`       | `%25`   | the escape character itself |
+| space     | `%20`   | invalid in a URI |
+
+Use [`url.QueryEscape`](https://pkg.go.dev/net/url#QueryEscape) to encode a password:
+
+```go
+import "net/url"
+
+pass := url.QueryEscape("p@ss:w#rd")  // → "p%40ss%3Aw%23rd"
+dsn  := "sysdba:" + pass + "@localhost/var/lib/firebird/mydb.fdb"
+db, err := sql.Open("firebirdsql", dsn)
+```
+
+### Drivers
+
+Two driver names are registered with `database/sql`:
+
+- `"firebirdsql"` — attach to an existing database.
+- `"firebirdsql_createdb"` — create the database if it does not exist, then attach.
+  See `_examples/service_manager.go` for a usage example.
 
 ### General
 
