@@ -47,6 +47,11 @@ func TestDSNParse(t *testing.T) {
 		{"user:password@localhost:3000/c:/fbdata/database.fdb?role=role&wire_crypt=false", "localhost:3000", "c:/fbdata/database.fdb", "user", "password", "role", "Srp256", "false"},
 		{"firebird://user:password@localhost:3000/dbname", "localhost:3000", "dbname", "user", "password", "", "Srp256", "true"},
 		{"firebird://user:%21p%40ssword%3F@localhost:3050/dbname", "localhost:3050", "dbname", "user", "!p@ssword?", "", "Srp256", "true"},
+		{"firebird://user:pass%20word@localhost:3050/dbname", "localhost:3050", "dbname", "user", "pass word", "", "Srp256", "true"},
+		{"firebird://user:pass%23word@localhost:3050/dbname", "localhost:3050", "dbname", "user", "pass#word", "", "Srp256", "true"},
+		{"firebird://user:pass%26word@localhost:3050/dbname", "localhost:3050", "dbname", "user", "pass&word", "", "Srp256", "true"},
+		{"firebird://user:pass%3Dword@localhost:3050/dbname", "localhost:3050", "dbname", "user", "pass=word", "", "Srp256", "true"},
+		{"firebird://user:pass%2Fword@localhost:3050/dbname", "localhost:3050", "dbname", "user", "pass/word", "", "Srp256", "true"},
 	}
 
 	for _, d := range testDSNs {
