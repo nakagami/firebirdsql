@@ -492,6 +492,14 @@ func TestIssue136(t *testing.T) {
 		visibilitySLA = 500 * time.Millisecond
 	)
 
+	// Warm both pools so the first row isn't charged for cold-start handshake latency.
+	if err = writeDB.Ping(); err != nil {
+		t.Fatalf("writeDB ping: %v", err)
+	}
+	if err = readDB.Ping(); err != nil {
+		t.Fatalf("readDB ping: %v", err)
+	}
+
 	writeDone := make(chan struct{})
 	writeTimes := make([]time.Time, rowCount)
 
