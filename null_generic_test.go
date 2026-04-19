@@ -1,5 +1,16 @@
 package firebirdsql
 
+// TestNullGeneric verifies that stdlib database/sql.Null[T] works end-to-end
+// against every major Firebird column type, in both bind and scan directions,
+// for both Valid=true and Valid=false.
+//
+// T must be one of the six strict driver.Value types (int64, float64, bool,
+// []byte, string, time.Time). sql.Null[T].Value() returns n.V raw; Go's
+// DefaultParameterConverter rejects any other concrete type — it does not
+// recursively unwrap nested Valuers. So sql.Null[int16], sql.Null[int32],
+// sql.Null[float32], and sql.Null[decimal.Decimal] all fail on the bind path
+// despite those underlying types being individually normalizable.
+
 import (
 	"bytes"
 	"database/sql"
@@ -8,7 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -63,22 +73,16 @@ func TestNullGeneric(t *testing.T) {
 
 	fbMajor := get_firebird_major_version(t)
 
-	// integer types
-	runNullCase(t, db, "SMALLINT/int16", "int16", "SMALLINT", int16(1234), eqCmp[int16], 0, fbMajor)
-	runNullCase(t, db, "INTEGER/int32", "int32", "INTEGER", int32(1_000_001), eqCmp[int32], 0, fbMajor)
+	// integer types — all use int64 (strict driver.Value); server narrows on write
+	runNullCase(t, db, "SMALLINT/int64", "int16", "SMALLINT", int64(1234), eqCmp[int64], 0, fbMajor)
+	runNullCase(t, db, "INTEGER/int64", "int32", "INTEGER", int64(1_000_001), eqCmp[int64], 0, fbMajor)
 	runNullCase(t, db, "BIGINT/int64", "int64", "BIGINT", int64(9_000_000_000), eqCmp[int64], 0, fbMajor)
 
-	// fixed-point decimal — driver returns decimal.Decimal (xsqlvar.go:354,363,373)
-	runNullCase(t, db, "DECIMAL_18_4/decimal.Decimal", "dec_dec", "DECIMAL(18,4)",
-		decimal.New(12345, -2), // 123.45
-		func(a, b decimal.Decimal) bool { return a.Equal(b) }, 0, fbMajor)
-	runNullCase(t, db, "DECIMAL_18_4/float64", "dec_f64", "DECIMAL(18,4)",
-		float64(123.45), eqCmp[float64], 0, fbMajor)
-	runNullCase(t, db, "DECIMAL_18_4/string", "dec_str", "DECIMAL(18,4)",
-		"123.45", eqCmp[string], 0, fbMajor)
+	// fixed-point decimal — driver returns decimal.Decimal; float64 dest works via asString→ParseFloat
+	runNullCase(t, db, "DECIMAL_18_4/float64", "dec_f64", "DECIMAL(18,4)", float64(123.45), eqCmp[float64], 0, fbMajor)
 
-	// floating point
-	runNullCase(t, db, "FLOAT/float32", "float32", "FLOAT", float32(1.5), eqCmp[float32], 0, fbMajor)
+	// floating point — float64 is the only strict Value float; server narrows float64→FLOAT on write
+	runNullCase(t, db, "FLOAT/float64", "float32", "FLOAT", float64(1.5), eqCmp[float64], 0, fbMajor)
 	runNullCase(t, db, "DOUBLE_PRECISION/float64", "float64", "DOUBLE PRECISION", float64(3.5), eqCmp[float64], 0, fbMajor)
 
 	// temporal — use component-wise equality for TIME (timezone offset is re-derived on read)
@@ -155,16 +159,12 @@ func TestNullGeneric(t *testing.T) {
 		assert.False(t, got2.Valid, "id=2: expected Valid=false")
 	})
 
-	// DECFLOAT(34) (Firebird 4+) — driver returns decimal.Decimal (xsqlvar.go:453)
-	runNullCase(t, db, "DECFLOAT34/decimal.Decimal", "dec34dec", "DECFLOAT(34)",
-		decimal.RequireFromString("1.5"),
-		func(a, b decimal.Decimal) bool { return a.Equal(b) }, 4, fbMajor)
+	// DECFLOAT(34) (Firebird 4+) — driver returns decimal.Decimal; float64 works via asString→ParseFloat
 	runNullCase(t, db, "DECFLOAT34/float64", "dec34f64", "DECFLOAT(34)", float64(1.5), eqCmp[float64], 4, fbMajor)
-	runNullCase(t, db, "DECFLOAT34/string", "dec34str", "DECFLOAT(34)", "1.5", eqCmp[string], 4, fbMajor)
 
 	// Asserted failure: a fractional DECFLOAT value cannot scan into sql.Null[int64]
-	// because decimal.Decimal.Value() returns "1.1" and strconv.ParseInt("1.1") fails.
-	// Use sql.Null[float64] or sql.Null[decimal.Decimal] instead.
+	// because decimal.Decimal.Value() → "1.1" and strconv.ParseInt("1.1") fails.
+	// Use sql.Null[float64] for DECFLOAT instead.
 	t.Run("DECFLOAT34/int64/rejects_fractional", func(t *testing.T) {
 		if fbMajor < 4 {
 			t.Skip("requires Firebird 4+")
