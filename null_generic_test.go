@@ -53,10 +53,8 @@ func runNullCase[T any](
 }
 
 func TestNullGeneric(t *testing.T) {
-	dsn := GetTestDSN("test_null_generic_")
-	createConn, err := sql.Open("firebirdsql_createdb", dsn)
+	_, dsn, err := CreateTestDatabase("test_null_generic_")
 	require.NoError(t, err)
-	createConn.Close()
 	time.Sleep(1 * time.Second)
 
 	db, err := sql.Open("firebirdsql", dsn)
