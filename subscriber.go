@@ -4,10 +4,14 @@ package firebirdsql
 
 import (
 	"encoding/binary"
+	"fmt"
 	"net"
+	"net/netip"
+	"reflect"
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"syscall"
 )
 
 type Subscription struct {
@@ -163,15 +167,35 @@ func (s *Subscription) connAuxRequest() (int32, string, error) {
 	if err != nil {
 		return -1, "", err
 	}
-	// The address Firebird returns here is unreliable: it may be 0.0.0.0
-	// (wildcard bind), the server's private IP (NAT), or garbage on FB3+
-	// where the field is documented as untrustworthy. Reuse the host from
-	// the primary connection — it is reachable by definition. Matches
-	// fbclient (aux_connect in inet.cpp) and jaybird.
+	family := bytes_to_int16(buf[0:2])
 	port := binary.BigEndian.Uint16(buf[2:4])
-	host, _, err := net.SplitHostPort(s.fc.dsn.addr)
-	if err != nil {
-		return -1, "", err
+
+	var addr netip.Addr
+	switch family {
+	case syscall.AF_INET:
+		addr = netip.AddrFrom4([4]byte(buf[4:8]))
+	case syscall.AF_INET6:
+		if reflect.DeepEqual(buf[4:20], []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff}) {
+			addr = netip.AddrFrom4([4]byte(buf[20:24]))
+		} else {
+			addr = netip.AddrFrom16([16]byte(buf[4:20]))
+		}
+	default:
+		return -1, "", fmt.Errorf("unsupported  family protocol: %x", family)
+	}
+
+	var host string
+	if addr.IsUnspecified() {
+		// Server is bound to all interfaces (RemoteBindAddress empty), so it
+		// reports 0.0.0.0 / :: which the client cannot route to. Fall back to
+		// the host the primary connection used — it is reachable by definition.
+		// See: https://github.com/nakagami/firebirdsql/issues/156
+		host, _, err = net.SplitHostPort(s.fc.dsn.addr)
+		if err != nil {
+			return -1, "", err
+		}
+	} else {
+		host = addr.String()
 	}
 	return auxHandle, net.JoinHostPort(host, strconv.Itoa(int(port))), nil
 }
