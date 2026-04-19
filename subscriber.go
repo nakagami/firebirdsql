@@ -4,12 +4,10 @@ package firebirdsql
 
 import (
 	"encoding/binary"
-	"fmt"
-	"net/netip"
-	"reflect"
+	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
-	"syscall"
 )
 
 type Subscription struct {
@@ -100,11 +98,11 @@ func (s *Subscription) queueEvents(eventID int32) error {
 }
 
 func (s *Subscription) getEventManager() (*eventManager, error) {
-	auxHandle, addrPort, err := s.connAuxRequest()
+	auxHandle, address, err := s.connAuxRequest()
 	if err != nil {
 		return nil, err
 	}
-	newManager, err := newEventManager(addrPort.String(), auxHandle)
+	newManager, err := newEventManager(address, auxHandle)
 	if err != nil {
 		return nil, err
 	}
@@ -155,35 +153,27 @@ func (s *Subscription) unsubscribeNoNotify() error {
 	return s.Unsubscribe()
 }
 
-func (s *Subscription) connAuxRequest() (int32, *netip.AddrPort, error) {
+func (s *Subscription) connAuxRequest() (int32, string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.fc.wp.opConnectRequest(); err != nil {
-		return -1, nil, err
+		return -1, "", err
 	}
 	auxHandle, _, buf, err := s.fc.wp.opResponse()
 	if err != nil {
-		return -1, nil, err
+		return -1, "", err
 	}
-	family := bytes_to_int16(buf[0:2])
+	// The address Firebird returns here is unreliable: it may be 0.0.0.0
+	// (wildcard bind), the server's private IP (NAT), or garbage on FB3+
+	// where the field is documented as untrustworthy. Reuse the host from
+	// the primary connection — it is reachable by definition. Matches
+	// fbclient (aux_connect in inet.cpp) and jaybird.
 	port := binary.BigEndian.Uint16(buf[2:4])
-
-	var addr netip.Addr
-	if family == syscall.AF_INET {
-		addr = netip.AddrFrom4([4]byte(buf[4:8]))
-	} else if family == syscall.AF_INET6 {
-		if reflect.DeepEqual(buf[4:20], []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff}) {
-			addr = netip.AddrFrom4([4]byte(buf[20:24]))
-		} else {
-			addr = netip.AddrFrom16([16]byte(buf[4:20]))
-		}
-	} else {
-
-		err = fmt.Errorf("unsupported  family protocol: %x", family)
-		return -1, nil, err
+	host, _, err := net.SplitHostPort(s.fc.dsn.addr)
+	if err != nil {
+		return -1, "", err
 	}
-	addrPort := netip.AddrPortFrom(addr, port)
-	return auxHandle, &addrPort, nil
+	return auxHandle, net.JoinHostPort(host, strconv.Itoa(int(port))), nil
 }
 
 func (s *Subscription) NotifyClose(receiver chan error) {
