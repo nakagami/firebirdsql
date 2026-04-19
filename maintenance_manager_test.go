@@ -49,7 +49,9 @@ func cleanFirebirdLog(t *testing.T) {
 	if os.IsNotExist(err) {
 		return
 	}
-	require.NoError(t, os.Truncate(logFile, 0))
+	if err = os.Truncate(logFile, 0); err != nil {
+		t.Skipf("skipping: cannot truncate firebird log %s: %v", logFile, err)
+	}
 }
 
 func getFirebirdLog(t *testing.T) string {
