@@ -117,6 +117,9 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 			blobId := v.([]byte)
 			var blob []byte
 			blob, err = rows.stmt.fc.wp.getBlobSegments(blobId, rows.stmt.fc.tx.transHandle)
+			if err != nil {
+				return
+			}
 			if rows.stmt.resultXsqlda[i].sqlsubtype == 1 {
 				charset := rows.stmt.fc.wp.charset
 				if s, ok := decodeCharset(blob, charset); ok {
