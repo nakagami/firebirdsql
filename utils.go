@@ -214,8 +214,16 @@ func _convert_timestamp(t time.Time) []byte {
 }
 
 func _convert_time_tz(t time.Time, tzID int32) []byte {
+	// TIME WITH TIME ZONE is a date-less type. Go applies historical LMT
+	// offsets to time.Date with year=0 (e.g., Asia/Seoul = +08:27:52 LMT
+	// instead of +09:00 KST), which would corrupt the UTC conversion.
+	// Re-anchor to today's date so the location's offset reflects current
+	// rules — symmetric with parseTimeTz which uses time.Now() on read.
+	now := time.Now()
+	adjusted := time.Date(now.Year(), now.Month(), now.Day(),
+		t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), t.Location())
 	return bytes.Join([][]byte{
-		_convert_time(t.UTC()),
+		_convert_time(adjusted.UTC()),
 		bint32_to_bytes(tzID),
 	}, nil)
 }
