@@ -180,6 +180,9 @@ func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (dr
 
 	if stmt.stmtHandle == -1 {
 		stmt, err = newFirebirdsqlStmt(stmt.fc, stmt.queryString)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if err = stmt.ensureInputXsqlda(args); err != nil {
