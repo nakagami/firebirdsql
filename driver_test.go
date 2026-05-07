@@ -1632,6 +1632,14 @@ func TestInsertTimeDateLocalWallClock(t *testing.T) {
 	conn.Close()
 }
 
+// TestSelectUntypedNull is a smoke test for the SQL_TYPE_NULL path through calcBlr.
+// It does NOT prove the fix is required at the wire level — it passes against FB 2.5–5.0
+// with or without the calcBlr SQL_TYPE_NULL case, because (a) SQL_TYPE_NULL columns consume
+// zero value bytes on the wire (null bitmap on V13+, per-column null flag pre-V13), and
+// (b) Firebird treats the output BLR sent on op_fetch as advisory and formats rows from the
+// prepared statement's canonical XSQLDA. The byte-level guard for the fix lives in
+// TestCalcBlr (xsqlvar_test.go); the symmetric write-side guard is TestParamsToBlrNil.
+// Do not remove the calcBlr SQL_TYPE_NULL case based on this test passing.
 func TestSelectUntypedNull(t *testing.T) {
 	_, dsn, err := CreateTestDatabase("test_untyped_null_")
 	if err != nil {
