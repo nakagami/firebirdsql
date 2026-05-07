@@ -2,6 +2,7 @@ package firebirdsql
 
 import (
 	"bytes"
+	"database/sql/driver"
 	"testing"
 )
 
@@ -41,5 +42,22 @@ func TestCalcBlr(t *testing.T) {
 				t.Errorf("calcBlr mismatch\n got:  %v\n want: %v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestParamsToBlrNil(t *testing.T) {
+	p := &wireProtocol{}
+	blr, v := p.paramsToBlr(0, []driver.Value{nil}, PROTOCOL_VERSION13, nil)
+
+	// BLR identical to calcBlr output for SQL_TYPE_NULL: both paths emit {blr_text, 0, 0}
+	wantBlr := []byte{5, 2, 4, 0, 2, 0, 14, 0, 0, 7, 0, 255, 76}
+	// V13 value payload: null bitmap only (bit 0 set), padded to 4 bytes
+	wantV := []byte{1, 0, 0, 0}
+
+	if !bytes.Equal(blr, wantBlr) {
+		t.Errorf("BLR mismatch\n got:  %v\n want: %v", blr, wantBlr)
+	}
+	if !bytes.Equal(v, wantV) {
+		t.Errorf("value mismatch\n got:  %v\n want: %v", v, wantV)
 	}
 }
