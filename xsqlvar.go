@@ -536,6 +536,11 @@ func calcBlr(xsqlda []xSQLVAR) []byte {
 		case SQL_TYPE_BOOLEAN:
 			blr[n] = 23
 			n++
+		case SQL_TYPE_NULL:
+			blr[n] = 14 // blr_text
+			blr[n+1] = 0
+			blr[n+2] = 0
+			n += 3
 		case SQL_TYPE_DEC64:
 			blr[n] = 24
 			n++
