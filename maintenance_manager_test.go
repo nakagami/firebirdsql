@@ -330,6 +330,24 @@ func TestServiceManager_SetSweepInterval(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestServiceManager_SetReplicaMode(t *testing.T) {
+	if get_firebird_major_version(t) < 4 {
+		t.Skip("replica mode requires Firebird 4.0 or newer")
+	}
+
+	db, _, err := CreateTestDatabase("test_set_replica_mode_")
+	require.NoError(t, err)
+
+	m, err := NewMaintenanceManager("localhost:3050", GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
+	require.NoError(t, err)
+	require.NotNil(t, m)
+
+	for _, mode := range []ReplicaMode{ReplicaModeReadOnly, ReplicaModeReadWrite, ReplicaModeNone} {
+		err = m.SetReplicaMode(db, mode)
+		assert.NoError(t, err)
+	}
+}
+
 func TestServiceManager_NoLinger(t *testing.T) {
 	if get_firebird_major_version(t) < 3 {
 		t.Skip("firebird 2.5 do not support isc_spb_prp_nolinger")
