@@ -111,6 +111,12 @@ func (stmt *firebirdsqlStmt) exec(ctx context.Context, args []driver.Value) (res
 			return
 		}
 	}
+	if stmt.stmtHandle == -1 {
+		stmt, err = newFirebirdsqlStmt(stmt.fc, stmt.queryString)
+		if err != nil {
+			return
+		}
+	}
 	if err = stmt.ensureInputXsqlda(args); err != nil {
 		return
 	}
@@ -172,8 +178,7 @@ func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (dr
 	var done = make(chan struct{}, 1)
 
 	if stmt.fc.tx.needBegin {
-		err := stmt.fc.tx.begin()
-		if err != nil {
+		if err = stmt.fc.tx.begin(); err != nil {
 			return nil, err
 		}
 	}
