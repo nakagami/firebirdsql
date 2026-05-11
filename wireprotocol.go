@@ -581,77 +581,89 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 }
 
 func (p *wireProtocol) _parse_select_items(buf []byte, xsqlda []xSQLVAR) (int, error) {
-	var err error
-	var ln int
 	index := 0
 	i := 0
-	for item := int(buf[i]); item != isc_info_end; item = int(buf[i]) {
+	for i < len(buf) {
+		item := int(buf[i])
+		if item == isc_info_end {
+			break
+		}
+		if item == isc_info_truncated {
+			return index, nil
+		}
+		if item == isc_info_sql_describe_end {
+			i++
+			continue
+		}
+		itemOffset := i
 		i++
+		if i+2 > len(buf) {
+			return -1, fmt.Errorf("firebirdsql: truncated describe-vars item 0x%02x", item)
+		}
+		ln := int(bytes_to_int16(buf[i : i+2]))
+		i += 2
+		if ln < 0 || i+ln > len(buf) {
+			return -1, fmt.Errorf("firebirdsql: invalid describe-vars length %d for item 0x%02x", ln, item)
+		}
+		payload := buf[i : i+ln]
+		i += ln
+		if item != isc_info_sql_sqlda_seq {
+			if index < 1 || index > len(xsqlda) {
+				return -1, fmt.Errorf("firebirdsql: describe-vars item 0x%02x with invalid index %d", item, index)
+			}
+		}
 		switch item {
 		case isc_info_sql_sqlda_seq:
-			ln = int(bytes_to_int16(buf[i : i+2]))
-			i += 2
-			index = int(bytes_to_int32(buf[i : i+ln]))
-			i += ln
+			if ln < 4 {
+				return -1, fmt.Errorf("firebirdsql: short sqlda_seq payload (%d bytes)", ln)
+			}
+			index = int(bytes_to_int32(payload))
+			if index < 1 || index > len(xsqlda) {
+				return -1, fmt.Errorf("firebirdsql: sqlda_seq %d out of range [1,%d]", index, len(xsqlda))
+			}
 		case isc_info_sql_type:
-			ln = int(bytes_to_int16(buf[i : i+2]))
-			i += 2
-			sqltype := int(bytes_to_int32(buf[i : i+ln]))
+			if ln < 4 {
+				return -1, fmt.Errorf("firebirdsql: short sql_type payload (%d bytes)", ln)
+			}
+			sqltype := int(bytes_to_int32(payload))
 			if sqltype%2 != 0 {
 				sqltype--
 			}
 			xsqlda[index-1].sqltype = sqltype
-			i += ln
 		case isc_info_sql_sub_type:
-			ln = int(bytes_to_int16(buf[i : i+2]))
-			i += 2
-			xsqlda[index-1].sqlsubtype = int(bytes_to_int32(buf[i : i+ln]))
-			i += ln
+			if ln < 4 {
+				return -1, fmt.Errorf("firebirdsql: short sub_type payload (%d bytes)", ln)
+			}
+			xsqlda[index-1].sqlsubtype = int(bytes_to_int32(payload))
 		case isc_info_sql_scale:
-			ln = int(bytes_to_int16(buf[i : i+2]))
-			i += 2
-			xsqlda[index-1].sqlscale = int(bytes_to_int32(buf[i : i+ln]))
-			i += ln
+			if ln < 4 {
+				return -1, fmt.Errorf("firebirdsql: short scale payload (%d bytes)", ln)
+			}
+			xsqlda[index-1].sqlscale = int(bytes_to_int32(payload))
 		case isc_info_sql_length:
-			ln = int(bytes_to_int16(buf[i : i+2]))
-			i += 2
+			if ln < 4 {
+				return -1, fmt.Errorf("firebirdsql: short length payload (%d bytes)", ln)
+			}
 			// the length defined in buffer depends on character length of charset
-			xsqlda[index-1].sqllen = int(bytes_to_int32(buf[i : i+ln]))
-			i += ln
+			xsqlda[index-1].sqllen = int(bytes_to_int32(payload))
 		case isc_info_sql_null_ind:
-			ln = int(bytes_to_int16(buf[i : i+2]))
-			i += 2
-			xsqlda[index-1].null_ok = bytes_to_int32(buf[i:i+ln]) != 0
-			i += ln
+			if ln < 4 {
+				return -1, fmt.Errorf("firebirdsql: short null_ind payload (%d bytes)", ln)
+			}
+			xsqlda[index-1].null_ok = bytes_to_int32(payload) != 0
 		case isc_info_sql_field:
-			ln = int(bytes_to_int16(buf[i : i+2]))
-			i += 2
-			xsqlda[index-1].fieldname = bytes_to_str(buf[i : i+ln])
-			i += ln
+			xsqlda[index-1].fieldname = bytes_to_str(payload)
 		case isc_info_sql_relation:
-			ln = int(bytes_to_int16(buf[i : i+2]))
-			i += 2
-			xsqlda[index-1].relname = bytes_to_str(buf[i : i+ln])
-			i += ln
+			xsqlda[index-1].relname = bytes_to_str(payload)
 		case isc_info_sql_owner:
-			ln = int(bytes_to_int16(buf[i : i+2]))
-			i += 2
-			xsqlda[index-1].ownname = bytes_to_str(buf[i : i+ln])
-			i += ln
+			xsqlda[index-1].ownname = bytes_to_str(payload)
 		case isc_info_sql_alias:
-			ln = int(bytes_to_int16(buf[i : i+2]))
-			i += 2
-			xsqlda[index-1].aliasname = bytes_to_str(buf[i : i+ln])
-			i += ln
-		case isc_info_truncated:
-			return index, err // return next index
-		case isc_info_sql_describe_end:
-			/* NOTHING */
+			xsqlda[index-1].aliasname = bytes_to_str(payload)
 		default:
-			err = fmt.Errorf("Invalid item [%02x] ! i=%d", buf[i], i)
+			return -1, fmt.Errorf("firebirdsql: unknown describe-vars item 0x%02x at offset %d", item, itemOffset)
 		}
 	}
-	return -1, err // no more info
+	return -1, nil
 }
 
 func (p *wireProtocol) parse_xsqlda(buf []byte, stmtHandle int32) (int32, []xSQLVAR, error) {
