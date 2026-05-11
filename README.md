@@ -108,8 +108,8 @@ db, err := sql.Open("firebirdsql", dsn)
 
 Two driver names are registered with `database/sql`:
 
-- `"firebirdsql"` — attach to an existing database.
-- `"firebirdsql_createdb"` — create the database if it does not exist, then attach.
+- `"firebirdsql"` - attach to an existing database.
+- `"firebirdsql_createdb"` - create the database if it does not exist, then attach.
   See `_examples/service_manager.go` for a usage example.
 
 ### General
@@ -125,7 +125,7 @@ Two driver names are registered with `database/sql`:
 param1, param2... are
 
 | Name | Description | Default | Note |
-| --- | --- | --- | --- |
+|й-- | --- | --- | --- |
 | auth_plugin_name | Authentication plugin name. | Srp256 | Srp256/Srp/Legacy_Auth are available. |
 | column_name_to_lower | Force column name to lower | false | For "github.com/jmoiron/sqlx" |
 | role | Role name | | |
@@ -136,7 +136,7 @@ param1, param2... are
 
 ## Time and timestamp handling
 
-Firebird's `DATE`, `TIME`, and `TIMESTAMP` types store wall-clock components without zone information — by design. When the driver decodes such a column into a Go `time.Time`, it must attach some `*time.Location`. Resolution order:
+Firebird's `DATE`, `TIME`, and `TIMESTAMP` types store wall-clock components without zone information - by design. When the driver decodes such a column into a Go `time.Time`, it must attach some `*time.Location`. Resolution order:
 
 1. If `?timezone=<IANA>` is set on the DSN, that location is used.
 2. Otherwise `time.Local` is used (matching Firebird's Java driver Jaybird, which uses the JVM default).
