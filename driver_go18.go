@@ -29,6 +29,7 @@ import (
 	"database/sql/driver"
 	"errors"
 	"sort"
+	"time"
 )
 
 func flattenNamedValues(named []driver.NamedValue) []driver.Value {
@@ -89,14 +90,57 @@ func (fc *firebirdsqlConn) Ping(ctx context.Context) (err error) {
 	if fc == nil {
 		return errors.New("Connection was closed")
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
-	rows, err := fc.query(ctx, "SELECT 1 from rdb$database", nil)
+	stopWatchingContext, err := fc.watchPingContext(ctx)
 	if err != nil {
 		return driver.ErrBadConn
 	}
-	rows.Close()
+	if stopWatchingContext != nil {
+		defer stopWatchingContext()
+	}
+
+	// Use attachment-level database info so Ping does not create a SQL statement or transaction.
+	if err := fc.wp.opInfoDatabase([]byte{isc_info_implementation, isc_info_end}); err != nil {
+		return driver.ErrBadConn
+	}
+	if _, _, _, err := fc.wp.opResponse(); err != nil {
+		return driver.ErrBadConn
+	}
 
 	return nil
+}
+
+func (fc *firebirdsqlConn) watchPingContext(ctx context.Context) (func(), error) {
+	ctxDone := ctx.Done()
+	if ctxDone == nil {
+		return nil, nil
+	}
+
+	if deadline, ok := ctx.Deadline(); ok {
+		if err := fc.wp.conn.conn.SetDeadline(deadline); err != nil {
+			return nil, err
+		}
+	}
+
+	done := make(chan struct{})
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		select {
+		case <-ctxDone:
+			_ = fc.wp.conn.conn.SetDeadline(time.Now())
+		case <-done:
+		}
+	}()
+
+	return func() {
+		close(done)
+		<-finished
+		_ = fc.wp.conn.conn.SetDeadline(time.Time{})
+	}, nil
 }
 
 func (fc *firebirdsqlConn) QueryContext(ctx context.Context, query string, namedargs []driver.NamedValue) (rows driver.Rows, err error) {

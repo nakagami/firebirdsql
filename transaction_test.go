@@ -25,7 +25,9 @@ package firebirdsql
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
+	"errors"
 	"testing"
 	"time"
 )
@@ -320,6 +322,96 @@ func TestIssue67(t *testing.T) {
 		t.Fatalf("Error Close: %v", err)
 	}
 
+}
+
+func TestPingDoesNotOpenTransaction(t *testing.T) {
+	test_dsn := GetTestDSN("test_ping_no_transaction_")
+	conn1, err := sql.Open("firebirdsql_createdb", test_dsn)
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	defer conn1.Close()
+
+	ctx := context.Background()
+	pingConn, err := conn1.Conn(ctx)
+	if err != nil {
+		t.Fatalf("Error getting dedicated ping connection: %v", err)
+	}
+	defer pingConn.Close()
+
+	if err = pingConn.PingContext(ctx); err != nil {
+		t.Fatalf("Error ping: %v", err)
+	}
+
+	conn2, err := sql.Open("firebirdsql", test_dsn)
+	if err != nil {
+		t.Fatalf("Error connecting monitor connection: %v", err)
+	}
+	defer conn2.Close()
+
+	var numberTrans int
+	err = conn2.QueryRowContext(ctx, "select count(*) from mon$transactions where mon$attachment_id <> current_connection").Scan(&numberTrans)
+	if err != nil {
+		t.Fatalf("Error querying monitor transactions: %v", err)
+	}
+	if numberTrans != 0 {
+		t.Fatalf("Ping opened %d transaction(s)", numberTrans)
+	}
+}
+
+func TestPingContextCanceled(t *testing.T) {
+	test_dsn := GetTestDSN("test_ping_context_canceled_")
+	conn, err := sql.Open("firebirdsql_createdb", test_dsn)
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	defer conn.Close()
+
+	pingConn, err := conn.Conn(context.Background())
+	if err != nil {
+		t.Fatalf("Error getting dedicated ping connection: %v", err)
+	}
+	defer pingConn.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err = pingConn.PingContext(ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+}
+
+func TestPingClearsDeadline(t *testing.T) {
+	test_dsn := GetTestDSN("test_ping_clears_deadline_")
+	conn, err := sql.Open("firebirdsql_createdb", test_dsn)
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	defer conn.Close()
+
+	pingConn, err := conn.Conn(context.Background())
+	if err != nil {
+		t.Fatalf("Error getting dedicated ping connection: %v", err)
+	}
+	defer pingConn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	if err = pingConn.PingContext(ctx); err != nil {
+		t.Fatalf("Error ping: %v", err)
+	}
+
+	time.Sleep(600 * time.Millisecond)
+
+	var n int
+	err = pingConn.QueryRowContext(context.Background(), "select 1 from rdb$database").Scan(&n)
+	if err != nil {
+		t.Fatalf("Error querying after ping: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("expected 1, got %d", n)
+	}
 }
 
 func TestIssue89(t *testing.T) {
