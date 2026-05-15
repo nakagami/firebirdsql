@@ -1579,6 +1579,56 @@ func TestExecProcedureAfterCloseCursor(t *testing.T) {
 	require.NoError(t, tx.Commit())
 }
 
+// TestIssue264 verifies that when a server-side error occurs on a subsequent
+// fetch (after at least one row has been returned successfully), the actual
+// Firebird error message is propagated to the caller instead of the opaque
+// "opFetchResponse:Internal Error".
+func TestIssue264(t *testing.T) {
+	test_dsn := GetTestDSN("test_issue264_")
+	conn, err := sql.Open("firebirdsql_createdb", test_dsn)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	_, err = conn.Exec(`CREATE EXCEPTION EX_ISSUE264 'issue264 error message'`)
+	require.NoError(t, err)
+
+	// Selectable procedure: returns one row successfully, then raises an
+	// exception.  When the client sends op_fetch, Firebird runs the procedure:
+	// it hits SUSPEND (row buffered), then immediately hits EXCEPTION — all in
+	// the same op_fetch batch.  It sends op_response (the exception) directly
+	// after the row data without a separate count=0 op_fetch_response trailer.
+	_, err = conn.Exec(`
+		CREATE PROCEDURE PROC_ISSUE264
+		RETURNS (N INTEGER)
+		AS
+		BEGIN
+		  N = 1;
+		  SUSPEND;
+		  EXCEPTION EX_ISSUE264 'issue264 error message';
+		END`)
+	require.NoError(t, err)
+
+	rows, err := conn.Query("SELECT * FROM PROC_ISSUE264")
+	require.NoError(t, err)
+	defer rows.Close()
+
+	// Drain rows; the exception may surface on the first or a later Next call
+	// depending on how the server batches the response.
+	for rows.Next() {
+		var n int
+		require.NoError(t, rows.Scan(&n))
+	}
+
+	err = rows.Err()
+	require.Error(t, err, "expected rows.Err() to be non-nil after server exception")
+
+	// The error must carry the real Firebird message, not the opaque fallback.
+	assert.NotContains(t, err.Error(), "opFetchResponse:Internal Error",
+		"error should not be the generic internal error fallback")
+	assert.Contains(t, err.Error(), "issue264 error message",
+		"error should contain the actual Firebird exception message")
+}
+
 func TestAuth(t *testing.T) {
 	conn, err := sql.Open("firebirdsql", GetTestUser()+":wrongpassword@localhost/employee")
 	err = conn.Ping()
