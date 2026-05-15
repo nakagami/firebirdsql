@@ -1,0 +1,5 @@
+FB_IMPL_MSG_NO_SYMBOL(TEST, 0, "")
+FB_IMPL_MSG_NO_SYMBOL(TEST, 1, "no symbol message @1")
+FB_IMPL_MSG(TEST, 2, test_err_one, -900, "HY", "000", "test error one")
+FB_IMPL_MSG(TEST, 3, test_err_two, -803, "23", "505", "unique key violation \"@1\" on table \"@2\"")
+FB_IMPL_MSG_SYMBOL(TEST, 4, test_sym_only, "symbol only entry")
