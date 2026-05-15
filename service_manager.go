@@ -392,7 +392,7 @@ func (svc *ServiceManager) WaitString() (string, error) {
 func (svc *ServiceManager) GetString() (result string, end bool, err error) {
 	var buf []byte
 	if buf, err = svc.GetServiceInfo(GetServiceInfoSPBPreamble(), []byte{isc_info_svc_line}, -1); err != nil {
-		return "", false, nil
+		return "", false, err
 	}
 	if bytes.Compare(buf[:4], []byte{isc_info_svc_line, 0, 0, isc_info_end}) == 0 {
 		return "", true, nil

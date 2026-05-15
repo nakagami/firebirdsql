@@ -5,8 +5,10 @@ package firebirdsql
 import (
 	"encoding/binary"
 	"fmt"
+	"net"
 	"net/netip"
 	"reflect"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -100,11 +102,11 @@ func (s *Subscription) queueEvents(eventID int32) error {
 }
 
 func (s *Subscription) getEventManager() (*eventManager, error) {
-	auxHandle, addrPort, err := s.connAuxRequest()
+	auxHandle, address, err := s.connAuxRequest()
 	if err != nil {
 		return nil, err
 	}
-	newManager, err := newEventManager(addrPort.String(), auxHandle)
+	newManager, err := newEventManager(address, auxHandle)
 	if err != nil {
 		return nil, err
 	}
@@ -155,35 +157,47 @@ func (s *Subscription) unsubscribeNoNotify() error {
 	return s.Unsubscribe()
 }
 
-func (s *Subscription) connAuxRequest() (int32, *netip.AddrPort, error) {
+func (s *Subscription) connAuxRequest() (int32, string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.fc.wp.opConnectRequest(); err != nil {
-		return -1, nil, err
+		return -1, "", err
 	}
 	auxHandle, _, buf, err := s.fc.wp.opResponse()
 	if err != nil {
-		return -1, nil, err
+		return -1, "", err
 	}
 	family := bytes_to_int16(buf[0:2])
 	port := binary.BigEndian.Uint16(buf[2:4])
 
 	var addr netip.Addr
-	if family == syscall.AF_INET {
+	switch family {
+	case syscall.AF_INET:
 		addr = netip.AddrFrom4([4]byte(buf[4:8]))
-	} else if family == syscall.AF_INET6 {
+	case syscall.AF_INET6:
 		if reflect.DeepEqual(buf[4:20], []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff}) {
 			addr = netip.AddrFrom4([4]byte(buf[20:24]))
 		} else {
 			addr = netip.AddrFrom16([16]byte(buf[4:20]))
 		}
-	} else {
-
-		err = fmt.Errorf("unsupported  family protocol: %x", family)
-		return -1, nil, err
+	default:
+		return -1, "", fmt.Errorf("unsupported  family protocol: %x", family)
 	}
-	addrPort := netip.AddrPortFrom(addr, port)
-	return auxHandle, &addrPort, nil
+
+	var host string
+	if addr.IsUnspecified() {
+		// Server is bound to all interfaces (RemoteBindAddress empty), so it
+		// reports 0.0.0.0 / :: which the client cannot route to. Fall back to
+		// the host the primary connection used — it is reachable by definition.
+		// See: https://github.com/nakagami/firebirdsql/issues/156
+		host, _, err = net.SplitHostPort(s.fc.dsn.addr)
+		if err != nil {
+			return -1, "", err
+		}
+	} else {
+		host = addr.String()
+	}
+	return auxHandle, net.JoinHostPort(host, strconv.Itoa(int(port))), nil
 }
 
 func (s *Subscription) NotifyClose(receiver chan error) {

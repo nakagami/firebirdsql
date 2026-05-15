@@ -46,7 +46,8 @@ func newFirebirdsqlRows(ctx context.Context, stmt *firebirdsqlStmt, result []dri
 	rows.ctx = ctx
 	rows.stmt = stmt
 	rows.result = result
-	if stmt.stmtType == isc_info_sql_stmt_select {
+	if stmt.stmtType == isc_info_sql_stmt_select ||
+		stmt.stmtType == isc_info_sql_stmt_select_for_upd {
 		rows.moreData = true
 	}
 	return rows
@@ -116,6 +117,9 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 			blobId := v.([]byte)
 			var blob []byte
 			blob, err = rows.stmt.fc.wp.getBlobSegments(blobId, rows.stmt.fc.tx.transHandle)
+			if err != nil {
+				return
+			}
 			if rows.stmt.resultXsqlda[i].sqlsubtype == 1 {
 				charset := rows.stmt.fc.wp.charset
 				if s, ok := decodeCharset(blob, charset); ok {

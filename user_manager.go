@@ -194,6 +194,17 @@ func (um *UserManager) userAction(action byte, user *User) error {
 	if um.securityDb != "" {
 		spb.PutString(isc_spb_dbname, um.securityDb)
 	}
+	return um.sm.ServiceAttach(spb.Bytes(), nil)
+}
+
+func (um *UserManager) userActionStart(action byte, user *User) error {
+	spb := NewXPBWriterFromTag(action)
+	if user != nil {
+		spb.PutBytes(user.GetSpb())
+	}
+	if um.securityDb != "" {
+		spb.PutString(isc_spb_dbname, um.securityDb)
+	}
 	return um.sm.ServiceStart(spb.Bytes())
 }
 
@@ -222,7 +233,7 @@ func (um *UserManager) GetUsers() ([]User, error) {
 		cont    = true
 		users   []User
 	)
-	if err = um.userAction(isc_action_svc_display_user_adm, nil); err != nil {
+	if err = um.userActionStart(isc_action_svc_display_user_adm, nil); err != nil {
 		return nil, err
 	}
 
@@ -285,7 +296,7 @@ func (um *UserManager) adminRoleMappingAction(action byte) error {
 	if um.securityDb != "" {
 		spb.PutString(isc_spb_dbname, um.securityDb)
 	}
-	return um.sm.ServiceStart(spb.Bytes())
+	return um.sm.ServiceAttach(spb.Bytes(), nil)
 }
 
 func (um *UserManager) SetAdminRoleMapping() error {

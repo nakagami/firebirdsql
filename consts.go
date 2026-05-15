@@ -319,6 +319,11 @@ const (
 	isc_spb_prp_sm_single = 2
 	isc_spb_prp_sm_full   = 3
 
+	// Parameters for isc_spb_prp_replica_mode
+	isc_spb_prp_rm_none      = 0
+	isc_spb_prp_rm_readonly  = 1
+	isc_spb_prp_rm_readwrite = 2
+
 	// Parameters for isc_action_svc_repair
 	isc_spb_rpr_commit_trans         = 15
 	isc_spb_rpr_rollback_trans       = 34
@@ -612,4 +617,12 @@ const (
 	ShutdownModeExDenyNewAttachments ShutdownModeEx = isc_spb_prp_attachments_shutdown
 	//ShutdownModeExDenyNewTransactions Disable new transactions for N seconds then shutdown
 	ShutdownModeExDenyNewTransactions ShutdownModeEx = isc_spb_prp_transactions_shutdown
+)
+
+type ReplicaMode byte
+
+const (
+	ReplicaModeNone      ReplicaMode = isc_spb_prp_rm_none
+	ReplicaModeReadOnly  ReplicaMode = isc_spb_prp_rm_readonly
+	ReplicaModeReadWrite ReplicaMode = isc_spb_prp_rm_readwrite
 )

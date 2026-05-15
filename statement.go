@@ -63,7 +63,9 @@ func (stmt *firebirdsqlStmt) Close() error {
 }
 
 func (stmt *firebirdsqlStmt) closeCursor() error {
-	if stmt.stmtHandle == -1 || stmt.stmtType != isc_info_sql_stmt_select {
+	if stmt.stmtHandle == -1 ||
+		(stmt.stmtType != isc_info_sql_stmt_select &&
+			stmt.stmtType != isc_info_sql_stmt_select_for_upd) {
 		return nil
 	}
 	return stmt.freeStatement(DSQL_close)
@@ -85,7 +87,39 @@ func (stmt *firebirdsqlStmt) sendOpCancel(ctx context.Context, done chan struct{
 	}
 }
 
+// ensureInputXsqlda fetches bind-parameter metadata on first execute with args.
+// It records the attempt by leaving inputXsqlda as a non-nil empty slice when the
+// server returns no metadata, so we don't re-issue the info request on every call.
+func (stmt *firebirdsqlStmt) ensureInputXsqlda(args []driver.Value) error {
+	if len(args) == 0 || stmt.inputXsqlda != nil {
+		return nil
+	}
+	xs, err := stmt.fc.wp._fetchBindXsqlda(stmt.stmtHandle)
+	if err != nil {
+		return err
+	}
+	if xs == nil {
+		xs = []xSQLVAR{}
+	}
+	stmt.inputXsqlda = xs
+	return nil
+}
+
 func (stmt *firebirdsqlStmt) exec(ctx context.Context, args []driver.Value) (result driver.Result, err error) {
+	if stmt.fc.tx.needBegin {
+		if err = stmt.fc.tx.begin(); err != nil {
+			return
+		}
+	}
+	if stmt.stmtHandle == -1 {
+		stmt, err = newFirebirdsqlStmt(stmt.fc, stmt.queryString)
+		if err != nil {
+			return
+		}
+	}
+	if err = stmt.ensureInputXsqlda(args); err != nil {
+		return
+	}
 	err = stmt.fc.wp.opExecute(stmt, args, stmt.inputXsqlda)
 	if err != nil {
 		return
@@ -112,7 +146,8 @@ func (stmt *firebirdsqlStmt) exec(ctx context.Context, args []driver.Value) (res
 
 	var rowcount int64
 	if len(buf) >= 32 {
-		if stmt.stmtType == isc_info_sql_stmt_select {
+		if stmt.stmtType == isc_info_sql_stmt_select ||
+			stmt.stmtType == isc_info_sql_stmt_select_for_upd {
 			rowcount = int64(bytes_to_int32(buf[20:24]))
 		} else {
 			rowcount = int64(bytes_to_int32(buf[27:31]) + bytes_to_int32(buf[6:10]) + bytes_to_int32(buf[13:17]))
@@ -123,6 +158,11 @@ func (stmt *firebirdsqlStmt) exec(ctx context.Context, args []driver.Value) (res
 
 	result = &firebirdsqlResult{
 		affectedRows: rowcount,
+	}
+	if stmt.fc.tx.isAutocommit {
+		if cerr := stmt.fc.tx.commitRetainging(); cerr != nil {
+			return result, cerr
+		}
 	}
 	return
 }
@@ -138,14 +178,20 @@ func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (dr
 	var done = make(chan struct{}, 1)
 
 	if stmt.fc.tx.needBegin {
-		err := stmt.fc.tx.begin()
-		if err != nil {
+		if err = stmt.fc.tx.begin(); err != nil {
 			return nil, err
 		}
 	}
 
 	if stmt.stmtHandle == -1 {
 		stmt, err = newFirebirdsqlStmt(stmt.fc, stmt.queryString)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if err = stmt.ensureInputXsqlda(args); err != nil {
+		return nil, err
 	}
 
 	if stmt.stmtType == isc_info_sql_stmt_exec_procedure {
@@ -225,7 +271,7 @@ func newFirebirdsqlStmt(fc *firebirdsqlConn, query string) (stmt *firebirdsqlStm
 		return
 	}
 
-	stmt.stmtType, stmt.resultXsqlda, stmt.inputXsqlda, err = stmt.fc.wp.parse_xsqlda(buf, stmt.stmtHandle)
+	stmt.stmtType, stmt.resultXsqlda, err = stmt.fc.wp.parse_xsqlda(buf, stmt.stmtHandle)
 	if err != nil {
 		return nil, err
 	}

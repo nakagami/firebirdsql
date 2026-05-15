@@ -455,7 +455,8 @@ func TestInsertTimestamp(t *testing.T) {
 		t.Fatalf("Error creating table: %v", err)
 	}
 
-	dt1 := time.Date(2015, 2, 9, 19, 25, 50, 740500000, time.Local)
+	loc := time.FixedZone("UTC+9", 9*3600)
+	dt1 := time.Date(2015, 2, 9, 19, 25, 50, 740500000, loc)
 	dt2 := "2015/2/9 19:25:50.7405"
 	dt3 := "2015-2-9 19:25:50.7405"
 
@@ -470,18 +471,19 @@ func TestInsertTimestamp(t *testing.T) {
 		t.Fatalf("Unexpected error in select: %s", err)
 	}
 
-	if rt1 != dt1 {
-		t.Errorf("Expected <%v>, got <%v>", dt1, rt1)
+	// TIMESTAMP stores wall-clock values; compare components, not UTC instants,
+	// so the test is independent of the session timezone and TZ environment variable.
+	checkWallClock := func(label string, got time.Time) {
+		if got.Year() != dt1.Year() || got.Month() != dt1.Month() || got.Day() != dt1.Day() ||
+			got.Hour() != dt1.Hour() || got.Minute() != dt1.Minute() || got.Second() != dt1.Second() ||
+			got.Nanosecond() != dt1.Nanosecond() {
+			t.Errorf("%s: expected wall clock <%v>, got <%v>", label, dt1, got)
+		}
 	}
-	if rt2 != dt1 {
-		t.Errorf("Expected <%v>, got <%v>", dt1, rt2)
-	}
-	if rt3 != dt1 {
-		t.Errorf("Expected <%v>, got <%v>", dt1, rt3)
-	}
-	if rt4 != dt1 {
-		t.Errorf("Expected <%v>, got <%v>", dt1, rt4)
-	}
+	checkWallClock("VAL1", rt1)
+	checkWallClock("VAL2", rt2)
+	checkWallClock("VAL3", rt3)
+	checkWallClock("VAL4", rt4)
 	conn.Close()
 }
 
@@ -1689,6 +1691,55 @@ func assertRawBytesScannable(t *testing.T, dsn, table string) {
 	for i, col := range cols {
 		assert.NotEmpty(t, rawResult[i], "column %s should have a non-empty RawBytes value", col)
 	}
+
+// TestIssue264 verifies that when a server-side error occurs on a subsequent
+// fetch (after at least one row has been returned successfully), the actual
+// Firebird error message is propagated to the caller instead of the opaque
+// "opFetchResponse:Internal Error".
+func TestIssue264(t *testing.T) {
+	test_dsn := GetTestDSN("test_issue264_")
+	conn, err := sql.Open("firebirdsql_createdb", test_dsn)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	_, err = conn.Exec(`CREATE EXCEPTION EX_ISSUE264 'issue264 error message'`)
+	require.NoError(t, err)
+
+	// Selectable procedure: returns one row successfully, then raises an
+	// exception.  When the client sends op_fetch, Firebird runs the procedure:
+	// it hits SUSPEND (row buffered), then immediately hits EXCEPTION — all in
+	// the same op_fetch batch.  It sends op_response (the exception) directly
+	// after the row data without a separate count=0 op_fetch_response trailer.
+	_, err = conn.Exec(`
+		CREATE PROCEDURE PROC_ISSUE264
+		RETURNS (N INTEGER)
+		AS
+		BEGIN
+		  N = 1;
+		  SUSPEND;
+		  EXCEPTION EX_ISSUE264 'issue264 error message';
+		END`)
+	require.NoError(t, err)
+
+	rows, err := conn.Query("SELECT * FROM PROC_ISSUE264")
+	require.NoError(t, err)
+	defer rows.Close()
+
+	// Drain rows; the exception may surface on the first or a later Next call
+	// depending on how the server batches the response.
+	for rows.Next() {
+		var n int
+		require.NoError(t, rows.Scan(&n))
+	}
+
+	err = rows.Err()
+	require.Error(t, err, "expected rows.Err() to be non-nil after server exception")
+
+	// The error must carry the real Firebird message, not the opaque fallback.
+	assert.NotContains(t, err.Error(), "opFetchResponse:Internal Error",
+		"error should not be the generic internal error fallback")
+	assert.Contains(t, err.Error(), "issue264 error message",
+		"error should contain the actual Firebird exception message")
 }
 
 func TestAuth(t *testing.T) {
@@ -1699,4 +1750,47 @@ func TestAuth(t *testing.T) {
 	conn, err = sql.Open("firebirdsql", "notexisting:wrongpassword@localhost/employee")
 	err = conn.Ping()
 	assert.EqualError(t, err, "Your user name and password are not defined. Ask your database administrator to set up a Firebird login.\n")
+}
+
+func TestInsertTimeDateLocalWallClock(t *testing.T) {
+	conn, err := sql.Open("firebirdsql_createdb", GetTestDSN("test_time_date_"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = conn.Exec("CREATE TABLE test_td (d DATE, tm TIME, ts TIMESTAMP)")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	loc := time.FixedZone("UTC+9", 9*3600)
+	dt := time.Date(2024, 6, 15, 14, 30, 45, 0, loc)
+	tm := time.Date(0, 1, 1, 14, 30, 45, 0, loc) // matches the shape the driver returns when reading TIME columns (no date component)
+
+	if _, err = conn.Exec(
+		"INSERT INTO test_td (d, tm, ts) VALUES (?, ?, ?)",
+		dt, tm, dt,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	var rd, rt, rts time.Time
+	if err = conn.QueryRow("SELECT d, tm, ts FROM test_td").Scan(&rd, &rt, &rts); err != nil {
+		t.Fatal(err)
+	}
+
+	// DATE: wall-clock date components must round-trip regardless of session timezone
+	if rd.Year() != 2024 || rd.Month() != time.June || rd.Day() != 15 {
+		t.Errorf("DATE wall clock mismatch: got %v", rd)
+	}
+	// TIME: wall-clock time-of-day must round-trip
+	if rt.Hour() != 14 || rt.Minute() != 30 || rt.Second() != 45 {
+		t.Errorf("TIME wall clock mismatch: got %v", rt)
+	}
+	// TIMESTAMP: both date and time components must round-trip
+	if rts.Year() != 2024 || rts.Month() != time.June || rts.Day() != 15 ||
+		rts.Hour() != 14 || rts.Minute() != 30 || rts.Second() != 45 {
+		t.Errorf("TIMESTAMP wall clock mismatch: got %v", rts)
+	}
+	conn.Close()
 }

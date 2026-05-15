@@ -49,7 +49,9 @@ func cleanFirebirdLog(t *testing.T) {
 	if os.IsNotExist(err) {
 		return
 	}
-	require.NoError(t, os.Truncate(logFile, 0))
+	if err = os.Truncate(logFile, 0); err != nil {
+		t.Skipf("skipping: cannot truncate firebird log %s: %v", logFile, err)
+	}
 }
 
 func getFirebirdLog(t *testing.T) string {
@@ -326,6 +328,24 @@ func TestServiceManager_SetSweepInterval(t *testing.T) {
 
 	err = m.SetSweepInterval(db, 20000)
 	assert.NoError(t, err)
+}
+
+func TestServiceManager_SetReplicaMode(t *testing.T) {
+	if get_firebird_major_version(t) < 4 {
+		t.Skip("replica mode requires Firebird 4.0 or newer")
+	}
+
+	db, _, err := CreateTestDatabase("test_set_replica_mode_")
+	require.NoError(t, err)
+
+	m, err := NewMaintenanceManager("localhost:3050", GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
+	require.NoError(t, err)
+	require.NotNil(t, m)
+
+	for _, mode := range []ReplicaMode{ReplicaModeReadOnly, ReplicaModeReadWrite, ReplicaModeNone} {
+		err = m.SetReplicaMode(db, mode)
+		assert.NoError(t, err)
+	}
 }
 
 func TestServiceManager_NoLinger(t *testing.T) {
