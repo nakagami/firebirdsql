@@ -1691,6 +1691,7 @@ func assertRawBytesScannable(t *testing.T, dsn, table string) {
 	for i, col := range cols {
 		assert.NotEmpty(t, rawResult[i], "column %s should have a non-empty RawBytes value", col)
 	}
+}
 
 // TestIssue264 verifies that when a server-side error occurs on a subsequent
 // fetch (after at least one row has been returned successfully), the actual
