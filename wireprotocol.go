@@ -1238,10 +1238,12 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsql
 	}
 	if bytes_to_bint32(b) != op_fetch_response {
 		if bytes_to_bint32(b) == op_response {
-			_, _, _, err := p._parse_op_response()
-			if err != nil {
-				return nil, false, err
+			_, _, _, parseErr := p._parse_op_response()
+			if parseErr != nil {
+				return nil, false, parseErr
 			}
+			// op_response with an empty status vector is still unexpected here.
+			return nil, false, errors.New("opFetchResponse:Internal Error")
 		}
 		return nil, false, errors.New("opFetchResponse:Internal Error")
 	}
@@ -1257,10 +1259,32 @@ func (p *wireProtocol) opFetchResponse(stmtHandle int32, transHandle int32, xsql
 		}
 		rows = append(rows, r)
 
-		b, err = p.recvPackets(12)
-		// op := int(bytes_to_bint32(b[:4]))
-		status = bytes_to_bint32(b[4:8])
-		count = int(bytes_to_bint32(b[8:]))
+		// Read the next packet opcode before committing to a 12-byte read.
+		// Firebird can send op_response (an error) here instead of another
+		// op_fetch_response continuation header, which would desynchronise
+		// the protocol if we consumed the bytes blindly.
+		b, err = p.recvPackets(4)
+		if err != nil {
+			return nil, false, err
+		}
+		nextOp := bytes_to_bint32(b)
+		if nextOp == op_response {
+			// An error occurred mid-batch; parse it and surface it.
+			_, _, _, parseErr := p._parse_op_response()
+			if parseErr != nil {
+				return nil, false, parseErr
+			}
+			return nil, false, errors.New("opFetchResponse:Internal Error")
+		}
+		if nextOp != op_fetch_response {
+			return nil, false, fmt.Errorf("opFetchResponse: unexpected op %d", nextOp)
+		}
+		b, err = p.recvPackets(8)
+		if err != nil {
+			return nil, false, err
+		}
+		status = bytes_to_bint32(b[:4])
+		count = int(bytes_to_bint32(b[4:8]))
 	}
 
 	return rows, status != 100, err
