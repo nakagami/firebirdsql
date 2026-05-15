@@ -108,8 +108,8 @@ db, err := sql.Open("firebirdsql", dsn)
 
 Two driver names are registered with `database/sql`:
 
-- `"firebirdsql"` — attach to an existing database.
-- `"firebirdsql_createdb"` — create the database if it does not exist, then attach.
+- `"firebirdsql"` - attach to an existing database.
+- `"firebirdsql_createdb"` - create the database if it does not exist, then attach.
   See `_examples/service_manager.go` for a usage example.
 
 ### General
@@ -129,10 +129,29 @@ param1, param2... are
 | auth_plugin_name | Authentication plugin name. | Srp256 | Srp256/Srp/Legacy_Auth are available. |
 | column_name_to_lower | Force column name to lower | false | For "github.com/jmoiron/sqlx" |
 | role | Role name | | |
-| timezone | Time Zone name | | For Firebird 4.0+ |
+| timezone | IANA time zone name (e.g. `UTC`, `Europe/Berlin`) | | Controls client-side decoding of naive DATE/TIME/TIMESTAMP and server session time zone (FB 4+). See "Time and timestamp handling" below. |
 | wire_crypt | Enable wire data encryption or not. | true | For Firebird 3.0+ |
 | wire_compress | Enable wire protocol compression. | false | For Firebird 3.0+ (protocol version 13+) |
 | charset | Firebird Charecter Set | | |
+
+## Time and timestamp handling
+
+Firebird's `DATE`, `TIME`, and `TIMESTAMP` types store wall-clock components without zone information - by design. When the driver decodes such a column into a Go `time.Time`, it must attach some `*time.Location`. Resolution order:
+
+1. If `?timezone=<IANA>` is set on the DSN, that location is used.
+2. Otherwise `time.Local` is used (matching Firebird's Java driver Jaybird, which uses the JVM default).
+
+For cross-host determinism (e.g. app servers in different time zones all reading the same rows), set `?timezone=UTC` on the DSN:
+
+```
+user:password@host/path/to/db?timezone=UTC
+```
+
+The same parameter also tells a Firebird 4+ server to evaluate `CURRENT_TIMESTAMP` and `LOCALTIMESTAMP` in that zone.
+
+For applications that need explicit zone semantics at the schema level, use the Firebird 4+ types `TIME WITH TIME ZONE` and `TIMESTAMP WITH TIME ZONE`. Those columns carry their zone on the wire and are unaffected by the `?timezone=` fallback.
+
+Round-trip of naive `time.Time` values is **wall-clock-preserving**, not absolute-instant-preserving: inserting a value in zone A and reading it back on a host in zone B will return identical wall-clock components (year, month, day, hour, minute, second, nanosecond), but `a.Equal(b)` may be false. This matches Firebird's underlying storage model.
 
 ## Transactions: READ COMMITTED + NOWAIT
 
