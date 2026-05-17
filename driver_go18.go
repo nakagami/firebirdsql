@@ -28,6 +28,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"sort"
 )
 
@@ -87,14 +88,40 @@ func (fc *firebirdsqlConn) ExecContext(ctx context.Context, query string, nameda
 // This file implements the optional pinger interface for the database/sql package
 func (fc *firebirdsqlConn) Ping(ctx context.Context) (err error) {
 	if fc == nil {
-		return errors.New("Connection was closed")
+		return fmt.Errorf("Connection was closed: %w", driver.ErrBadConn)
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	// Keep Ping as a SQL check, but do not leave the connection's autocommit
+	// transaction context open through COMMIT RETAINING.
+	previousTx := fc.tx
+	pingTx, err := newFirebirdsqlTx(fc, ISOLATION_LEVEL_READ_COMMITED_RO, false, true)
+	if err != nil {
+		return fmt.Errorf("ping begin transaction failed: %w: %w", err, driver.ErrBadConn)
+	}
+	fc.tx = pingTx
+	committed := false
+	defer func() {
+		fc.tx = previousTx
+		if !committed {
+			_ = pingTx.Rollback()
+		}
+		delete(fc.transactionSet, pingTx)
+	}()
 
 	rows, err := fc.query(ctx, "SELECT 1 from rdb$database", nil)
 	if err != nil {
-		return driver.ErrBadConn
+		return fmt.Errorf("ping query failed: %w: %w", err, driver.ErrBadConn)
 	}
-	rows.Close()
+	if err = rows.Close(); err != nil {
+		return fmt.Errorf("ping rows close failed: %w: %w", err, driver.ErrBadConn)
+	}
+	if err = pingTx.Commit(); err != nil {
+		return fmt.Errorf("ping commit failed: %w: %w", err, driver.ErrBadConn)
+	}
+	committed = true
 
 	return nil
 }
