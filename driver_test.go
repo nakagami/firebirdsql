@@ -1795,3 +1795,70 @@ func TestInsertTimeDateLocalWallClock(t *testing.T) {
 	}
 	conn.Close()
 }
+
+// TestSelectUntypedNull is a smoke test for the SQL_TYPE_NULL path through calcBlr.
+// It does NOT prove the fix is required at the wire level — it passes against FB 2.5–6
+// with or without the calcBlr SQL_TYPE_NULL case, because (a) SQL_TYPE_NULL columns
+// consume zero value bytes on the wire — see Firebird CORE-2897
+// (FirebirdSQL/firebird#3281), the FB 3.0+ protocol optimization that omits the field
+// length entirely when the value is null — and (b) Firebird treats the output BLR sent
+// on op_fetch as advisory and formats rows from the prepared statement's canonical
+// XSQLDA. The byte-level guard for the fix lives in TestCalcBlr (xsqlvar_test.go); the
+// symmetric write-side guard is TestParamsToBlrNil. Do not remove the calcBlr
+// SQL_TYPE_NULL case based on this test passing.
+func TestSelectUntypedNull(t *testing.T) {
+	_, dsn, err := CreateTestDatabase("test_untyped_null_")
+	if err != nil {
+		t.Fatalf("Error creating test database: %v", err)
+	}
+
+	time.Sleep(1 * time.Second)
+
+	conn, err := sql.Open("firebirdsql", dsn)
+	if err != nil {
+		t.Fatalf("Error opening connection: %v", err)
+	}
+	defer conn.Close()
+
+	// Single untyped NULL — exercises the SQL_TYPE_NULL case in calcBlr
+	rows, err := conn.Query("SELECT NULL FROM RDB$DATABASE")
+	if err != nil {
+		t.Fatalf("Query failed: %v", err)
+	}
+	if !rows.Next() {
+		rows.Close()
+		t.Fatal("Expected one row")
+	}
+	var v interface{}
+	if err = rows.Scan(&v); err != nil {
+		rows.Close()
+		t.Fatalf("Scan failed: %v", err)
+	}
+	rows.Close()
+	if v != nil {
+		t.Fatalf("Expected nil, got %v", v)
+	}
+
+	// NULL + typed column — verifies BLR stream alignment after the NULL descriptor
+	rows2, err := conn.Query("SELECT NULL, 42 FROM RDB$DATABASE")
+	if err != nil {
+		t.Fatalf("Two-column query failed: %v", err)
+	}
+	if !rows2.Next() {
+		rows2.Close()
+		t.Fatal("Expected one row")
+	}
+	var v2 interface{}
+	var n int
+	if err = rows2.Scan(&v2, &n); err != nil {
+		rows2.Close()
+		t.Fatalf("Two-column scan failed: %v", err)
+	}
+	rows2.Close()
+	if v2 != nil {
+		t.Fatalf("Expected nil for first column, got %v", v2)
+	}
+	if n != 42 {
+		t.Fatalf("Expected 42 for second column, got %v", n)
+	}
+}
