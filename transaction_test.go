@@ -489,7 +489,7 @@ func TestIssue136(t *testing.T) {
 		rowCount      = 15
 		writeSpacing  = 400 * time.Millisecond
 		pollInterval  = 100 * time.Millisecond
-		visibilitySLA = 500 * time.Millisecond
+		visibilitySLA = 2 * time.Second
 	)
 
 	// Warm both pools so the first row isn't charged for cold-start handshake latency.

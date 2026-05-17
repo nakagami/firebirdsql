@@ -80,6 +80,13 @@ func (mm *MaintenanceManager) SetWriteModeSync(database string) error {
 	return mm.setWriteMode(database, isc_spb_prp_wm_sync)
 }
 
+func (mm *MaintenanceManager) SetReplicaMode(database string, mode ReplicaMode) error {
+	spb := NewXPBWriterFromTag(isc_action_svc_properties)
+	spb.PutString(isc_spb_dbname, database)
+	spb.PutByte(isc_spb_prp_replica_mode, byte(mode))
+	return mm.attach(spb.Bytes(), nil)
+}
+
 func (mm *MaintenanceManager) setPageFill(database string, mode byte) error {
 	spb := NewXPBWriterFromTag(isc_action_svc_properties)
 	spb.PutString(isc_spb_dbname, database)

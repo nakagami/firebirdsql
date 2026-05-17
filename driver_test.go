@@ -728,14 +728,21 @@ func TestInt128(t *testing.T) {
 	conn.Exec(sql)
 	conn.Exec("insert into test_int128(i) values (170141183460469231731687303715884105727)")
 
-	var i128 *big.Int
-	err = conn.QueryRow("SELECT i FROM test_int128").Scan(&i128)
+	var s string
+	err = conn.QueryRow("SELECT i FROM test_int128").Scan(&s)
 	if err != nil {
 		t.Fatalf("Error SELECT: %v", err)
 	}
 
-	var toCmp = new(big.Int)
-	toCmp, _ = toCmp.SetString("170141183460469231731687303715884105727", 10)
+	i128, ok := new(big.Int).SetString(s, 10)
+	if !ok {
+		t.Fatalf("Error parsing INT128 string: %v", s)
+	}
+
+	toCmp, ok := new(big.Int).SetString("170141183460469231731687303715884105727", 10)
+	if !ok {
+		t.Fatal("failed to parse expected INT128 value")
+	}
 
 	if i128.Cmp(toCmp) != 0 {
 		t.Fatalf("INT128 Error: %v", i128)
@@ -763,14 +770,21 @@ func TestNegativeInt128(t *testing.T) {
 	conn.Exec(sql)
 	conn.Exec("insert into test_negative_int128(i) values (-170141183460469231731687303715884105727)")
 
-	var i128 *big.Int
-	err = conn.QueryRow("SELECT i FROM test_negative_int128").Scan(&i128)
+	var s string
+	err = conn.QueryRow("SELECT i FROM test_negative_int128").Scan(&s)
 	if err != nil {
 		t.Fatalf("Error SELECT: %v", err)
 	}
 
-	var toCmp = new(big.Int)
-	toCmp, _ = toCmp.SetString("-170141183460469231731687303715884105727", 10)
+	i128, ok := new(big.Int).SetString(s, 10)
+	if !ok {
+		t.Fatalf("Error parsing INT128 string: %v", s)
+	}
+
+	toCmp, ok := new(big.Int).SetString("-170141183460469231731687303715884105727", 10)
+	if !ok {
+		t.Fatal("failed to parse expected INT128 value")
+	}
 
 	if i128.Cmp(toCmp) != 0 {
 		t.Fatalf("Negative INT128 Error: %v", i128)
@@ -1577,6 +1591,156 @@ func TestExecProcedureAfterCloseCursor(t *testing.T) {
 	}
 
 	require.NoError(t, tx.Commit())
+}
+
+// TestGoIssue48 verifies that all basic column types returned by this driver
+// can be scanned into sql.RawBytes (a generic scan pattern used when columns
+// are unknown at compile time). The driver previously returned non-standard
+// driver.Value types (int16, int32, float32, decimal.Decimal, *big.Int) that
+// database/sql's convertAssign does not recognize, which made *sql.RawBytes
+// scans fail. See TestGoIssue48Fb4 for FB4-only types (INT128, DECFLOAT,
+// timezone-aware TIME/TIMESTAMP).
+func TestGoIssue48(t *testing.T) {
+	dsn := GetTestDSN("test_issue48_")
+	conn, err := sql.Open("firebirdsql_createdb", dsn)
+	require.NoError(t, err)
+
+	_, err = conn.Exec(`
+		CREATE TABLE test_issue48 (
+			col_smallint   SMALLINT          DEFAULT 1,
+			col_integer    INTEGER           DEFAULT 2,
+			col_bigint     BIGINT            DEFAULT 3,
+			col_float      FLOAT             DEFAULT 1.5,
+			col_double     DOUBLE PRECISION  DEFAULT 2.5,
+			col_decimal    DECIMAL(16,3)     DEFAULT 1.234,
+			col_varchar    VARCHAR(32)       DEFAULT 'hello',
+			col_date       DATE              DEFAULT '2024-01-15',
+			col_time       TIME              DEFAULT '12:34:56',
+			col_timestamp  TIMESTAMP         DEFAULT '2024-01-15 12:34:56',
+			col_blob       BLOB SUB_TYPE 1
+		)
+	`)
+	require.NoError(t, err)
+
+	_, err = conn.Exec(`
+		INSERT INTO test_issue48 (col_blob)
+		VALUES ('some text')
+	`)
+	require.NoError(t, err)
+	conn.Close()
+
+	time.Sleep(1 * time.Second)
+
+	assertRawBytesScannable(t, dsn, "test_issue48")
+}
+
+func TestGoIssue48Fb4(t *testing.T) {
+	if get_firebird_major_version(t) < 4 {
+		return
+	}
+
+	dsn := GetTestDSN("test_issue48fb4_")
+	conn, err := sql.Open("firebirdsql_createdb", dsn)
+	require.NoError(t, err)
+
+	_, err = conn.Exec(`
+		CREATE TABLE test_issue48fb4 (
+			col_int128        INT128                    DEFAULT 170141183460469231731687303715884105727,
+			col_decfloat16    DECFLOAT(16)              DEFAULT 1.5,
+			col_decfloat34    DECFLOAT(34)              DEFAULT 2.5,
+			col_time_tz       TIME WITH TIME ZONE       DEFAULT '12:34:56',
+			col_timestamp_tz  TIMESTAMP WITH TIME ZONE  DEFAULT '2024-01-15 12:34:56',
+			col_boolean       BOOLEAN                   DEFAULT TRUE
+		)
+	`)
+	require.NoError(t, err)
+
+	_, err = conn.Exec(`INSERT INTO test_issue48fb4 DEFAULT VALUES`)
+	require.NoError(t, err)
+	conn.Close()
+
+	time.Sleep(1 * time.Second)
+
+	assertRawBytesScannable(t, dsn, "test_issue48fb4")
+}
+
+func assertRawBytesScannable(t *testing.T, dsn, table string) {
+	t.Helper()
+
+	conn, err := sql.Open("firebirdsql", dsn)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	rows, err := conn.Query("SELECT * FROM " + table)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	cols, err := rows.Columns()
+	require.NoError(t, err)
+
+	rawResult := make([]sql.RawBytes, len(cols))
+	dest := make([]any, len(cols))
+	for i := range rawResult {
+		dest[i] = &rawResult[i]
+	}
+
+	require.True(t, rows.Next())
+	err = rows.Scan(dest...)
+	require.NoError(t, err, "Scan into sql.RawBytes must succeed for %s", table)
+
+	for i, col := range cols {
+		assert.NotEmpty(t, rawResult[i], "column %s should have a non-empty RawBytes value", col)
+	}
+}
+
+// TestIssue264 verifies that when a server-side error occurs on a subsequent
+// fetch (after at least one row has been returned successfully), the actual
+// Firebird error message is propagated to the caller instead of the opaque
+// "opFetchResponse:Internal Error".
+func TestIssue264(t *testing.T) {
+	test_dsn := GetTestDSN("test_issue264_")
+	conn, err := sql.Open("firebirdsql_createdb", test_dsn)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	_, err = conn.Exec(`CREATE EXCEPTION EX_ISSUE264 'issue264 error message'`)
+	require.NoError(t, err)
+
+	// Selectable procedure: returns one row successfully, then raises an
+	// exception.  When the client sends op_fetch, Firebird runs the procedure:
+	// it hits SUSPEND (row buffered), then immediately hits EXCEPTION — all in
+	// the same op_fetch batch.  It sends op_response (the exception) directly
+	// after the row data without a separate count=0 op_fetch_response trailer.
+	_, err = conn.Exec(`
+		CREATE PROCEDURE PROC_ISSUE264
+		RETURNS (N INTEGER)
+		AS
+		BEGIN
+		  N = 1;
+		  SUSPEND;
+		  EXCEPTION EX_ISSUE264 'issue264 error message';
+		END`)
+	require.NoError(t, err)
+
+	rows, err := conn.Query("SELECT * FROM PROC_ISSUE264")
+	require.NoError(t, err)
+	defer rows.Close()
+
+	// Drain rows; the exception may surface on the first or a later Next call
+	// depending on how the server batches the response.
+	for rows.Next() {
+		var n int
+		require.NoError(t, rows.Scan(&n))
+	}
+
+	err = rows.Err()
+	require.Error(t, err, "expected rows.Err() to be non-nil after server exception")
+
+	// The error must carry the real Firebird message, not the opaque fallback.
+	assert.NotContains(t, err.Error(), "opFetchResponse:Internal Error",
+		"error should not be the generic internal error fallback")
+	assert.Contains(t, err.Error(), "issue264 error message",
+		"error should contain the actual Firebird exception message")
 }
 
 func TestAuth(t *testing.T) {
