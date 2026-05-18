@@ -118,6 +118,42 @@ func TestScantypePositiveScale(t *testing.T) {
 	}
 }
 
+func TestValueInt128(t *testing.T) {
+	ff16 := bytes.Repeat([]byte{0xFF}, 16)
+	zero16 := bytes.Repeat([]byte{0x00}, 16)
+
+	one := append(bytes.Repeat([]byte{0x00}, 15), 0x01)
+	maxPos := append([]byte{0x7F}, bytes.Repeat([]byte{0xFF}, 15)...)
+	minNeg := append([]byte{0x80}, bytes.Repeat([]byte{0x00}, 15)...)
+	nearMinNeg := append(append([]byte{0x80}, bytes.Repeat([]byte{0x00}, 14)...), 0x01)
+	pos256 := append(append(bytes.Repeat([]byte{0x00}, 14), 0x01), 0x00)
+	neg256 := append(bytes.Repeat([]byte{0xFF}, 15), 0x00)
+
+	tests := []struct {
+		name     string
+		rawValue []byte
+		want     string
+	}{
+		{"zero", zero16, "0"},
+		{"one", one, "1"},
+		{"minus one", ff16, "-1"},
+		{"max positive 2^127-1", maxPos, "170141183460469231731687303715884105727"},
+		{"min negative -2^127", minNeg, "-170141183460469231731687303715884105728"},
+		{"near-min negative -(2^127-1)", nearMinNeg, "-170141183460469231731687303715884105727"},
+		{"small positive 256", pos256, "256"},
+		{"small negative -256", neg256, "-256"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			x := &xSQLVAR{sqltype: SQL_TYPE_INT128}
+			got, err := x.value(tt.rawValue, "", "")
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestValuePositiveScale(t *testing.T) {
 	tests := []struct {
 		name     string

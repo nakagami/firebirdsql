@@ -354,53 +354,11 @@ func (x *xSQLVAR) value(raw_value []byte, timezone string, charset string) (v in
 	case SQL_TYPE_INT64:
 		v = x.scaledIntValue(bytes_to_bint64(raw_value))
 	case SQL_TYPE_INT128:
-		var isNegative bool
-
-		// when raw_value[0] is > 127, then subtract 255 in every index
-		if raw_value[0] > 127 {
-			for i := range raw_value {
-				if raw_value[i] < 255 {
-					raw_value[i] = 255 - raw_value[i]
-				} else {
-					raw_value[i] -= 255
-				}
-			}
-			isNegative = true
+		n := new(big.Int).SetBytes(raw_value)
+		if raw_value[0]&0x80 != 0 {
+			n.Sub(n, new(big.Int).Lsh(big.NewInt(1), 128))
 		}
-
-		// reverse
-		for i, j := 0, len(raw_value)-1; i < j; i, j = i+1, j-1 {
-			raw_value[i], raw_value[j] = raw_value[j], raw_value[i]
-		}
-
-		// variable to return
-		var x = new(big.Int)
-
-		for i := len(raw_value) - 1; i >= 0; i-- {
-			if raw_value[i] == 0 {
-				continue
-			}
-
-			// get the 2^(i*8) in big.Float
-			var t = new(big.Float).SetFloat64(math.Pow(2, float64(i*8)))
-
-			// convert the float to int
-			var xx *big.Int
-			xx, _ = t.Int(xx)
-
-			// mul with the value in raw_value
-			xx.Mul(xx, big.NewInt(int64(raw_value[i])))
-
-			// add to x
-			x.Add(x, xx)
-		}
-
-		// when negative, add 1 and mul -1
-		if isNegative {
-			x.Add(x, big.NewInt(1))
-			x.Mul(x, big.NewInt(-1))
-		}
-		v = x.String()
+		v = n.String()
 	case SQL_TYPE_DATE:
 		v = x.parseDate(raw_value, timezone)
 	case SQL_TYPE_TIME:
