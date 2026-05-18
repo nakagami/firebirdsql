@@ -102,6 +102,9 @@ func (tx *firebirdsqlTx) begin() (err error) {
 		return
 	}
 	tx.transHandle, _, _, err = tx.fc.wp.opResponse()
+	if err != nil {
+		return
+	}
 	tx.needBegin = false
 	tx.fc.transactionSet[tx] = struct{}{}
 	return
