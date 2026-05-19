@@ -25,9 +25,14 @@ package firebirdsql
 
 import (
 	"fmt"
-	"github.com/shopspring/decimal"
-	"math"
 	"math/big"
+	"strconv"
+	"strings"
+)
+
+var (
+	decimal64DPDMask  = bigIntFromHexString("3ffffffffffff")
+	decimal128DPDMask = bigIntFromHexString("3fffffffffffffffffffffffffff")
 )
 
 func dpdBitToInt(dpd uint, mask uint) int {
@@ -123,146 +128,171 @@ func calcSignificand(prefix int64, dpdBits *big.Int, numBits int) (*big.Int, err
 	return v, nil
 }
 
-func decimal128ToSignDigitsExponent(b []byte) (v *decimal.Decimal, sign int, digits *big.Int, exponent int32, err error) {
+func decimal128ToSignDigitsExponent(b []byte) (coefficient *big.Int, exponent int32, negative bool, special string, err error) {
 	// https://en.wikipedia.org/wiki/Decimal128_floating-point_format
+	negative = (b[0] & 0x80) == 0x80
+	cf := (uint32(b[0]&0x7f) << 10) + (uint32(b[1]) << 2) + uint32(b[2]>>6)
+	if (cf & 0x1F000) == 0x1F000 {
+		special = "NaN"
+		return
+	}
+	if (cf & 0x1F000) == 0x1E000 {
+		special = "Infinity"
+		return
+	}
 
 	var prefix int64
-	if (b[0] & 0x80) == 0x80 {
-		sign = 1
-	}
-	cf := (uint32(b[0]&0x7f) << 10) + uint32(b[1]<<2) + uint32(b[2]>>6)
-	if (cf & 0x1F000) == 0x1F000 {
-		var d decimal.Decimal
-		if sign == 1 {
-			d = decimal.NewFromFloat(math.Float64frombits(0xFFF8000000000001))
-		} else {
-			d = decimal.NewFromFloat(math.NaN())
-		}
-		v = &d
-		return
-	} else if (cf & 0x1F000) == 0x1E000 {
-		var d decimal.Decimal
-		if sign == 1 {
-			d = decimal.NewFromFloat(math.Inf(-1))
-		} else {
-			d = decimal.NewFromFloat(math.Inf(1))
-		}
-		v = &d
-		return
-	} else if (cf & 0x18000) == 0x00000 {
-		exponent = int32(0x0000 + (cf & 0x00fff))
+	switch {
+	case (cf & 0x18000) == 0x00000:
+		exponent = int32(cf & 0x00fff)
 		prefix = int64((cf >> 12) & 0x07)
-	} else if (cf & 0x18000) == 0x08000 {
+	case (cf & 0x18000) == 0x08000:
 		exponent = int32(0x1000 + (cf & 0x00fff))
 		prefix = int64((cf >> 12) & 0x07)
-	} else if (cf & 0x18000) == 0x10000 {
+	case (cf & 0x18000) == 0x10000:
 		exponent = int32(0x2000 + (cf & 0x00fff))
 		prefix = int64((cf >> 12) & 0x07)
-	} else if (cf & 0x1e000) == 0x18000 {
-		exponent = int32(0x0000 + (cf & 0x00fff))
+	case (cf & 0x1e000) == 0x18000:
+		exponent = int32(cf & 0x00fff)
 		prefix = int64(8 + (cf>>12)&0x01)
-	} else if (cf & 0x1e000) == 0x1a000 {
+	case (cf & 0x1e000) == 0x1a000:
 		exponent = int32(0x1000 + (cf & 0x00fff))
 		prefix = int64(8 + (cf>>12)&0x01)
-	} else if (cf & 0x1e000) == 0x1c000 {
+	case (cf & 0x1e000) == 0x1c000:
 		exponent = int32(0x2000 + (cf & 0x00fff))
 		prefix = int64(8 + (cf>>12)&0x01)
-	} else {
+	default:
 		err = fmt.Errorf("decimal128 combination field error: cf=0x%x", cf)
 		return
 	}
 	exponent -= 6176
 
 	dpdBits := bytesToBigInt(b)
-	mask := bigIntFromHexString("3fffffffffffffffffffffffffff")
-	dpdBits.And(dpdBits, mask)
-	digits, err = calcSignificand(prefix, dpdBits, 110)
-
+	dpdBits.And(dpdBits, decimal128DPDMask)
+	coefficient, err = calcSignificand(prefix, dpdBits, 110)
 	return
 }
 
-func decimalFixedToDecimal(b []byte, scale int32) (decimal.Decimal, error) {
-	v, sign, digits, _, err := decimal128ToSignDigitsExponent(b)
+func decimalFixedToString(b []byte, scale int32) (string, error) {
+	coefficient, _, negative, special, err := decimal128ToSignDigitsExponent(b)
 	if err != nil {
-		return decimal.Decimal{}, err
+		return "", err
 	}
-	if v != nil {
-		return *v, nil
-	}
-	if sign != 0 {
-		digits.Mul(digits, big.NewInt(-1))
-	}
-	return decimal.NewFromBigInt(digits, scale), nil
+	return formatDecimalGDA(coefficient, scale, negative, special), nil
 }
 
-func decimal64ToDecimal(b []byte) (decimal.Decimal, error) {
+func decimal64ToString(b []byte) (string, error) {
 	// https://en.wikipedia.org/wiki/Decimal64_floating-point_format
-	var prefix int64
-	var sign int
-	if (b[0] & 0x80) == 0x80 {
-		sign = 1
-	}
+	negative := (b[0] & 0x80) == 0x80
 	cf := (uint32(b[0]) >> 2) & 0x1f
 	exponent := ((int32(b[0]) & 3) << 6) + ((int32(b[1]) >> 2) & 0x3f)
 
-	dpdBits := bytesToBigInt(b)
-	mask := bigIntFromHexString("3ffffffffffff")
-	dpdBits.And(dpdBits, mask)
-
 	if cf == 0x1f {
-		if sign == 1 {
-			return decimal.NewFromFloat(math.Float64frombits(0xFFF8000000000001)), nil
-		}
-		return decimal.NewFromFloat(math.NaN()), nil
-	} else if cf == 0x1e {
-		if sign == 1 {
-			return decimal.NewFromFloat(math.Inf(-1)), nil
-		}
-		return decimal.NewFromFloat(math.Inf(1)), nil
-	} else if (cf & 0x18) == 0x00 {
-		exponent = 0x000 + exponent
-		prefix = int64(cf & 0x07)
-	} else if (cf & 0x18) == 0x08 {
-		exponent = 0x100 + exponent
-		prefix = int64(cf & 0x07)
-	} else if (cf & 0x18) == 0x10 {
-		exponent = 0x200 + exponent
-		prefix = int64(cf & 0x07)
-	} else if (cf & 0x1e) == 0x18 {
-		exponent = 0x000 + exponent
-		prefix = int64(8 + cf&1)
-	} else if (cf & 0x1e) == 0x1a {
-		exponent = 0x100 + exponent
-		prefix = int64(8 + cf&1)
-	} else if (cf & 0x1e) == 0x1c {
-		exponent = 0x200 + exponent
-		prefix = int64(8 + cf&1)
-	} else {
-		return decimal.Decimal{}, fmt.Errorf("decimal64 combination field error: cf=0x%x", cf)
+		return formatDecimalGDA(nil, 0, negative, "NaN"), nil
 	}
-	digits, err := calcSignificand(prefix, dpdBits, 50)
+	if cf == 0x1e {
+		return formatDecimalGDA(nil, 0, negative, "Infinity"), nil
+	}
+
+	var prefix int64
+	switch {
+	case (cf & 0x18) == 0x00:
+		prefix = int64(cf & 0x07)
+	case (cf & 0x18) == 0x08:
+		exponent = 0x100 + exponent
+		prefix = int64(cf & 0x07)
+	case (cf & 0x18) == 0x10:
+		exponent = 0x200 + exponent
+		prefix = int64(cf & 0x07)
+	case (cf & 0x1e) == 0x18:
+		prefix = int64(8 + cf&1)
+	case (cf & 0x1e) == 0x1a:
+		exponent = 0x100 + exponent
+		prefix = int64(8 + cf&1)
+	case (cf & 0x1e) == 0x1c:
+		exponent = 0x200 + exponent
+		prefix = int64(8 + cf&1)
+	default:
+		return "", fmt.Errorf("decimal64 combination field error: cf=0x%x", cf)
+	}
+
+	dpdBits := bytesToBigInt(b)
+	dpdBits.And(dpdBits, decimal64DPDMask)
+	coefficient, err := calcSignificand(prefix, dpdBits, 50)
 	if err != nil {
-		return decimal.Decimal{}, err
+		return "", err
 	}
 	exponent -= 398
-
-	if sign != 0 {
-		digits.Mul(digits, big.NewInt(-1))
-	}
-	return decimal.NewFromBigInt(digits, exponent), nil
+	return formatDecimalGDA(coefficient, exponent, negative, ""), nil
 }
 
-func decimal128ToDecimal(b []byte) (decimal.Decimal, error) {
-	// https://en.wikipedia.org/wiki/Decimal64_floating-point_format
-	v, sign, digits, exponent, err := decimal128ToSignDigitsExponent(b)
+func decimal128ToString(b []byte) (string, error) {
+	coefficient, exponent, negative, special, err := decimal128ToSignDigitsExponent(b)
 	if err != nil {
-		return decimal.Decimal{}, err
+		return "", err
 	}
-	if v != nil {
-		return *v, nil
+	return formatDecimalGDA(coefficient, exponent, negative, special), nil
+}
+
+// formatDecimalGDA renders an IEEE 754 / GDA "to-scientific-string" canonical
+// form for a decimal number (coefficient * 10^exponent, signed). Matches
+// fbclient (decNumber), Jaybird, and Python firebird-driver output.
+//
+// special != "" short-circuits numeric formatting. Allowed: "NaN",
+// "Infinity". The sign prefix is prepended for negative specials.
+//
+// Reference: http://speleotrove.com/decimal/daconvs.html#reftostr
+func formatDecimalGDA(coefficient *big.Int, exponent int32, negative bool, special string) string {
+	var body string
+	if special != "" {
+		body = special
+	} else {
+		// big.Int.String() returns "0" (length 1) for a zero coefficient, so the
+		// standard adjexp formula naturally collapses to adjexp = exponent for
+		// zero — matching the GDA spec's adjusted-exponent rule with no special
+		// case required.
+		digits := coefficient.String()
+		adjexp := exponent + int32(len(digits)) - 1
+		if exponent <= 0 && adjexp >= -6 {
+			body = formatPlain(digits, exponent)
+		} else {
+			body = formatScientific(digits, adjexp)
+		}
 	}
-	if sign != 0 {
-		digits.Mul(digits, big.NewInt(-1))
+	if negative {
+		return "-" + body
 	}
-	return decimal.NewFromBigInt(digits, exponent), nil
+	return body
+}
+
+// formatPlain — exponent <= 0 && adjusted >= -6. Insert a decimal point so
+// that exactly (-exponent) digits follow it. Trailing zeros in `digits` are
+// preserved (IEEE 754 cohort quantum).
+func formatPlain(digits string, exponent int32) string {
+	if exponent == 0 {
+		return digits
+	}
+	frac := int(-exponent)
+	if len(digits) > frac {
+		return digits[:len(digits)-frac] + "." + digits[len(digits)-frac:]
+	}
+	return "0." + strings.Repeat("0", frac-len(digits)) + digits
+}
+
+// formatScientific — exponent > 0 OR adjusted < -6. Emit d.dddE[+-]adjexp
+// with a single digit before the point (point omitted for single-digit
+// mantissa). Sign on the exponent is always present.
+func formatScientific(digits string, adjexp int32) string {
+	var mant string
+	if len(digits) == 1 {
+		mant = digits
+	} else {
+		mant = digits[:1] + "." + digits[1:]
+	}
+	sign := "+"
+	if adjexp < 0 {
+		sign = "-"
+		adjexp = -adjexp
+	}
+	return mant + "E" + sign + strconv.Itoa(int(adjexp))
 }

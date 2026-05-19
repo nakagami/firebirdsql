@@ -26,7 +26,6 @@ package firebirdsql
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/shopspring/decimal"
 	"math"
 	"math/big"
 	"reflect"
@@ -321,7 +320,7 @@ func (x *xSQLVAR) scaledIntValue(i int64) interface{} {
 	case x.sqlscale > 0:
 		return i * int64(math.Pow10(x.sqlscale))
 	case x.sqlscale < 0:
-		return decimal.New(i, int32(x.sqlscale)).String()
+		return formatDecimalGDA(new(big.Int).Abs(big.NewInt(i)), int32(x.sqlscale), i < 0, "")
 	default:
 		return i
 	}
@@ -426,20 +425,11 @@ func (x *xSQLVAR) value(raw_value []byte, timezone string, charset string) (v in
 	case SQL_TYPE_BLOB:
 		v = raw_value
 	case SQL_TYPE_DEC_FIXED:
-		var d decimal.Decimal
-		if d, err = decimalFixedToDecimal(raw_value, int32(x.sqlscale)); err == nil {
-			v = d.String()
-		}
+		v, err = decimalFixedToString(raw_value, int32(x.sqlscale))
 	case SQL_TYPE_DEC64:
-		var d decimal.Decimal
-		if d, err = decimal64ToDecimal(raw_value); err == nil {
-			v = d.String()
-		}
+		v, err = decimal64ToString(raw_value)
 	case SQL_TYPE_DEC128:
-		var d decimal.Decimal
-		if d, err = decimal128ToDecimal(raw_value); err == nil {
-			v = d.String()
-		}
+		v, err = decimal128ToString(raw_value)
 	}
 	return
 }

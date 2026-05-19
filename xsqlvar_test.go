@@ -77,7 +77,7 @@ func TestScaledIntValue(t *testing.T) {
 		{"positive scale 2", 2, 5, int64(500)},
 		{"positive scale 3", 3, 7, int64(7000)},
 		{"negative scale -3", -3, 1234, "1.234"},
-		{"negative scale -2", -2, 50, "0.5"},
+		{"negative scale -2", -2, 50, "0.50"},
 	}
 
 	for _, tt := range tests {
@@ -114,6 +114,29 @@ func TestScantypePositiveScale(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			x := &xSQLVAR{sqltype: tt.sqltype, sqlscale: tt.sqlscale}
 			assert.Equal(t, tt.want, x.scantype())
+		})
+	}
+}
+
+func TestScaledIntValueTrailingZeros(t *testing.T) {
+	tests := []struct {
+		name     string
+		sqlscale int
+		input    int64
+		want     interface{}
+	}{
+		{"12.00 as NUMERIC(9,2)", -2, 1200, "12.00"},
+		{"0.50 as NUMERIC(9,2)", -2, 50, "0.50"},
+		{"-12.00 as NUMERIC(9,2)", -2, -1200, "-12.00"},
+		{"123.450 as NUMERIC(18,3)", -3, 123450, "123.450"},
+		{"0.0050 as NUMERIC(18,4)", -4, 50, "0.0050"},
+		{"42 as INTEGER (zero-scale pass-through)", 0, 42, int64(42)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			x := &xSQLVAR{sqlscale: tt.sqlscale}
+			got := x.scaledIntValue(tt.input)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }

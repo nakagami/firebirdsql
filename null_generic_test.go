@@ -78,7 +78,7 @@ func TestNullGeneric(t *testing.T) {
 	runNullCase(t, db, "INTEGER/int64", "int32", "INTEGER", int64(1_000_001), eqCmp[int64], 0, fbMajor)
 	runNullCase(t, db, "BIGINT/int64", "int64", "BIGINT", int64(9_000_000_000), eqCmp[int64], 0, fbMajor)
 
-	// fixed-point decimal — driver returns decimal.Decimal; float64 dest works via asString→ParseFloat
+	// fixed-point decimal — driver returns string; float64 dest works via asString→ParseFloat
 	runNullCase(t, db, "DECIMAL_18_4/float64", "dec_f64", "DECIMAL(18,4)", float64(123.45), eqCmp[float64], 0, fbMajor)
 
 	// floating point — float64 is the only strict Value float; server narrows float64→FLOAT on write
@@ -132,9 +132,11 @@ func TestNullGeneric(t *testing.T) {
 	// BOOLEAN (Firebird 3+)
 	runNullCase(t, db, "BOOLEAN/bool", "bool_col", "BOOLEAN", true, eqCmp[bool], 3, fbMajor)
 
-	// INT128 (Firebird 4+) — write via string binding (server coerces); read into *big.Int.
-	// Binding *big.Int directly is rejected by database/sql's DefaultParameterConverter.
-	t.Run("INT128/big.Int", func(t *testing.T) {
+	// INT128 (Firebird 4+) — write via string binding (server coerces); read as string,
+	// then parse to *big.Int. The driver returns string for SQL_TYPE_INT128 (see
+	// TestInt128, TestNegativeInt128); promoting to *big.Int is the caller's job. App
+	// developers who want sql.Null[*big.Int] semantics can wrap a custom sql.Scanner.
+	t.Run("INT128/string", func(t *testing.T) {
 		if fbMajor < 4 {
 			t.Skip("requires Firebird 4+")
 		}
@@ -149,21 +151,23 @@ func TestNullGeneric(t *testing.T) {
 		want := new(big.Int)
 		want.SetString("170141183460469231731687303715884105727", 10)
 
-		var got1 sql.Null[*big.Int]
+		var got1 sql.Null[string]
 		require.NoError(t, db.QueryRow(`SELECT v FROM tnull_int128 WHERE id=1`).Scan(&got1))
 		assert.True(t, got1.Valid, "id=1: expected Valid=true")
-		assert.Equal(t, 0, got1.V.Cmp(want), "id=1: value mismatch: got %v want %v", got1.V, want)
+		got1Int, ok := new(big.Int).SetString(got1.V, 10)
+		require.True(t, ok, "id=1: failed to parse INT128 string %q", got1.V)
+		assert.Equal(t, 0, got1Int.Cmp(want), "id=1: value mismatch: got %v want %v", got1Int, want)
 
-		var got2 sql.Null[*big.Int]
+		var got2 sql.Null[string]
 		require.NoError(t, db.QueryRow(`SELECT v FROM tnull_int128 WHERE id=2`).Scan(&got2))
 		assert.False(t, got2.Valid, "id=2: expected Valid=false")
 	})
 
-	// DECFLOAT(34) (Firebird 4+) — driver returns decimal.Decimal; float64 works via asString→ParseFloat
+	// DECFLOAT(34) (Firebird 4+) — driver returns string; float64 works via asString→ParseFloat
 	runNullCase(t, db, "DECFLOAT34/float64", "dec34f64", "DECFLOAT(34)", float64(1.5), eqCmp[float64], 4, fbMajor)
 
 	// Asserted failure: a fractional DECFLOAT value cannot scan into sql.Null[int64]
-	// because decimal.Decimal.Value() → "1.1" and strconv.ParseInt("1.1") fails.
+	// because the driver returns "1.1" and strconv.ParseInt("1.1") fails.
 	// Use sql.Null[float64] for DECFLOAT instead.
 	t.Run("DECFLOAT34/int64/rejects_fractional", func(t *testing.T) {
 		if fbMajor < 4 {
