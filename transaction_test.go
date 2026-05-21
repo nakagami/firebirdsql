@@ -25,7 +25,11 @@ package firebirdsql
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
+	"database/sql/driver"
+	"errors"
+	"net"
 	"testing"
 	"time"
 )
@@ -320,6 +324,147 @@ func TestIssue67(t *testing.T) {
 		t.Fatalf("Error Close: %v", err)
 	}
 
+}
+
+func TestPingDoesNotCreateTransaction(t *testing.T) {
+	test_dsn := GetTestDSN("test_ping_does_not_create_transaction_")
+	conn1, err := sql.Open("firebirdsql_createdb", test_dsn)
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	defer conn1.Close()
+
+	ctx := context.Background()
+	pingConn, err := conn1.Conn(ctx)
+	if err != nil {
+		t.Fatalf("Error getting dedicated ping connection: %v", err)
+	}
+	defer pingConn.Close()
+
+	if err = pingConn.PingContext(ctx); err != nil {
+		t.Fatalf("Error ping: %v", err)
+	}
+
+	conn2, err := sql.Open("firebirdsql", test_dsn)
+	if err != nil {
+		t.Fatalf("Error connecting monitor connection: %v", err)
+	}
+	defer conn2.Close()
+
+	var numberTrans int
+	err = conn2.QueryRowContext(ctx, "select count(*) from mon$transactions where mon$attachment_id <> current_connection").Scan(&numberTrans)
+	if err != nil {
+		t.Fatalf("Error querying monitor transactions: %v", err)
+	}
+	if numberTrans != 0 {
+		t.Fatalf("Ping left %d transaction(s)", numberTrans)
+	}
+
+	var n int
+	err = pingConn.QueryRowContext(ctx, "select 1 from rdb$database").Scan(&n)
+	if err != nil {
+		t.Fatalf("Error querying after ping: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("expected 1, got %d", n)
+	}
+}
+
+func TestPingContextCanceled(t *testing.T) {
+	test_dsn := GetTestDSN("test_ping_context_canceled_")
+	conn, err := sql.Open("firebirdsql_createdb", test_dsn)
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	defer conn.Close()
+
+	pingConn, err := conn.Conn(context.Background())
+	if err != nil {
+		t.Fatalf("Error getting dedicated ping connection: %v", err)
+	}
+	defer pingConn.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err = pingConn.PingContext(ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+}
+
+// TestPingContextDeadlineMidFlight exercises the SetDeadline-based
+// cancellation harness without a Firebird server. A "black-hole" TCP
+// listener accepts the op_info_database packet but never sends op_response.
+// Ping must return context.DeadlineExceeded shortly after the ctx deadline
+// rather than hanging on the half-open read.
+func TestPingContextDeadlineMidFlight(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Failed to start black-hole listener: %v", err)
+	}
+
+	acceptDone := make(chan struct{})
+	go func() {
+		defer close(acceptDone)
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			go func(c net.Conn) {
+				defer c.Close()
+				buf := make([]byte, 1024)
+				for {
+					if _, err := c.Read(buf); err != nil {
+						return
+					}
+				}
+			}(conn)
+		}
+	}()
+	t.Cleanup(func() {
+		listener.Close()
+		<-acceptDone
+	})
+
+	netConn, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatalf("Failed to dial black-hole listener: %v", err)
+	}
+	defer netConn.Close()
+
+	wc, err := newWireChannel(netConn)
+	if err != nil {
+		t.Fatalf("newWireChannel failed: %v", err)
+	}
+	// Leaving protocolVersion/acceptType/lazyResponseCount zero is fine while
+	// opInfoDatabase + sendPackets don't consult them; revisit if that changes.
+	fc := &firebirdsqlConn{
+		wp: &wireProtocol{
+			buf:      make([]byte, 0, BUFFER_LEN),
+			conn:     wc,
+			dbHandle: 1,
+		},
+	}
+
+	const pingDeadline = 150 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), pingDeadline)
+	defer cancel()
+
+	start := time.Now()
+	err = fc.Ping(ctx)
+	elapsed := time.Since(start)
+
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected context.DeadlineExceeded, got %v (after %v)", err, elapsed)
+	}
+	if !errors.Is(err, driver.ErrBadConn) {
+		t.Fatalf("expected driver.ErrBadConn (so the pool discards the corrupted conn), got %v", err)
+	}
+	if elapsed > pingDeadline*3 {
+		t.Fatalf("Ping returned too late: %v (deadline was %v)", elapsed, pingDeadline)
+	}
 }
 
 func TestIssue89(t *testing.T) {

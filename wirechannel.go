@@ -29,9 +29,11 @@ import (
 	"crypto/rc4"
 	"crypto/sha256"
 	"fmt"
-	"github.com/nakagami/chacha20"
 	"io"
 	"net"
+	"time"
+
+	"github.com/nakagami/chacha20"
 	//"unsafe"
 )
 
@@ -157,6 +159,10 @@ func (c *wireChannel) Write(buf []byte) (n int, err error) {
 
 func (c *wireChannel) Flush() error {
 	return c.writer.Flush()
+}
+
+func (c *wireChannel) SetDeadline(t time.Time) error {
+	return c.conn.SetDeadline(t)
 }
 
 func (c *wireChannel) Close() error {
