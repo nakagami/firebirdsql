@@ -28,7 +28,10 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"fmt"
+	"os"
 	"sort"
+	"time"
 )
 
 func flattenNamedValues(named []driver.NamedValue) []driver.Value {
@@ -84,18 +87,51 @@ func (fc *firebirdsqlConn) ExecContext(ctx context.Context, query string, nameda
 	return fc.exec(ctx, query, flattenNamedValues(namedargs))
 }
 
-// This file implements the optional pinger interface for the database/sql package
+// isc_info_ods_version chosen over isc_info_ping for FB 2.5 compatibility (Jaybird does the same).
+var pingInfoItems = []byte{isc_info_ods_version, isc_info_end}
+
+// Ping uses op_info_database (1 round-trip) instead of a SQL query — no transaction is opened.
+// Cancellation needs SetDeadline + watcher goroutine: wire path has no statement to cancel.
 func (fc *firebirdsqlConn) Ping(ctx context.Context) (err error) {
-	if fc == nil {
-		return errors.New("Connection was closed")
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
-	rows, err := fc.query(ctx, "SELECT 1 from rdb$database", nil)
-	if err != nil {
-		return driver.ErrBadConn
-	}
-	rows.Close()
+	if ctx.Done() != nil {
+		completed := make(chan struct{})
+		defer close(completed)
 
+		if d, ok := ctx.Deadline(); ok {
+			defer fc.wp.conn.SetDeadline(time.Time{})
+			_ = fc.wp.conn.SetDeadline(d)
+		}
+
+		go func() {
+			select {
+			case <-ctx.Done():
+				_ = fc.wp.conn.SetDeadline(time.Now())
+			case <-completed:
+			}
+		}()
+	}
+
+	if err = fc.wp.opInfoDatabase(pingInfoItems); err != nil {
+		return fmt.Errorf("ping info_database failed: %w: %w", err, driver.ErrBadConn)
+	}
+
+	if _, _, _, err = fc.wp.opResponse(); err != nil {
+		if errors.Is(err, os.ErrDeadlineExceeded) {
+			// ctx is the source of truth. The OS conn deadline can fire a hair
+			// before the ctx timer at the same deadline instant; wait so the
+			// ctx.Err() check below sees the populated cause.
+			<-ctx.Done()
+		}
+
+		if cerr := ctx.Err(); cerr != nil {
+			return fmt.Errorf("ping cancelled: %w: %w", cerr, driver.ErrBadConn)
+		}
+		return fmt.Errorf("ping response failed: %w: %w", err, driver.ErrBadConn)
+	}
 	return nil
 }
 
