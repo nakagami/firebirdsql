@@ -357,7 +357,15 @@ func (x *xSQLVAR) value(raw_value []byte, timezone string, charset string) (v in
 		if raw_value[0]&0x80 != 0 {
 			n.Sub(n, new(big.Int).Lsh(big.NewInt(1), 128))
 		}
-		v = n.String()
+		switch {
+		case x.sqlscale < 0:
+			v = formatDecimalGDA(new(big.Int).Abs(n), int32(x.sqlscale), n.Sign() < 0, "")
+		case x.sqlscale > 0:
+			mul := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(x.sqlscale)), nil)
+			v = new(big.Int).Mul(n, mul).String()
+		default:
+			v = n.String()
+		}
 	case SQL_TYPE_DATE:
 		v = x.parseDate(raw_value, timezone)
 	case SQL_TYPE_TIME:

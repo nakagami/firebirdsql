@@ -3,6 +3,7 @@ package firebirdsql
 import (
 	"bytes"
 	"database/sql/driver"
+	"math/big"
 	"reflect"
 	"testing"
 
@@ -171,6 +172,78 @@ func TestValueInt128(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			x := &xSQLVAR{sqltype: SQL_TYPE_INT128}
 			got, err := x.value(tt.rawValue, "", "")
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// int128Bytes encodes n as a 16-byte big-endian two's-complement value, the
+// on-wire representation Firebird sends for SQL_TYPE_INT128.
+func int128Bytes(n *big.Int) []byte {
+	out := make([]byte, 16)
+	if n.Sign() >= 0 {
+		b := n.Bytes()
+		copy(out[16-len(b):], b)
+		return out
+	}
+	bias := new(big.Int).Lsh(big.NewInt(1), 128)
+	b := new(big.Int).Add(n, bias).Bytes()
+	copy(out[16-len(b):], b)
+	return out
+}
+
+func TestValueInt128WithScale(t *testing.T) {
+	maxPos := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 127), big.NewInt(1))
+	minNeg := new(big.Int).Neg(new(big.Int).Lsh(big.NewInt(1), 127))
+
+	tests := []struct {
+		name     string
+		value    *big.Int
+		sqlscale int
+		want     string
+	}{
+		// Zero scale — current behavior must be preserved (TestInt128/TestNegativeInt128 path).
+		{"scale 0, +1", big.NewInt(1), 0, "1"},
+		{"scale 0, -1", big.NewInt(-1), 0, "-1"},
+
+		// Negative scale, formatPlain branch (exponent <= 0 && adjexp >= -6).
+		// Trailing zeros are preserved per IEEE 754 cohort quantum, matching #268.
+		{"scale -5, +12345000 → 123.45000", big.NewInt(12345000), -5, "123.45000"},
+		{"scale -5, -12345000 → -123.45000", big.NewInt(-12345000), -5, "-123.45000"},
+		{"scale -2, +99 → 0.99", big.NewInt(99), -2, "0.99"},
+		{"scale -2, -99 → -0.99", big.NewInt(-99), -2, "-0.99"},
+
+		// Zero coefficient at negative scale — IEEE 754 cohort quantum:
+		// "0.00000" preserves the column's scale information, matching
+		// Jaybird / Python firebird-driver / decNumber.
+		{"scale -5, 0 (cohort quantum)", big.NewInt(0), -5, "0.00000"},
+
+		// Positive scale — multiply by 10^scale via big.Int (overflow-safe).
+		{"scale +2, +5 → 500", big.NewInt(5), 2, "500"},
+		{"scale +2, -5 → -500", big.NewInt(-5), 2, "-500"},
+
+		// Large positive scale on near-max INT128 — proves big.Int.Exp +
+		// big.Int.Mul renders a 49-digit string without overflow,
+		// scientific fallback, or precision loss (the failure modes #18
+		// documents for the SHORT/LONG/INT64 helper).
+		{"scale +10, 2^127-1 (49-digit string)", maxPos, 10, "1701411834604692317316873037158841057270000000000"},
+
+		// Boundary: 2^127 - 1 with scale -38, the canonical NUMERIC(38, 38) max.
+		// digits len = 39, exponent = -38, adjexp = 0 → formatPlain → "1." + 38 frac digits.
+		{"scale -38, 2^127-1", maxPos, -38, "1.70141183460469231731687303715884105727"},
+		// Boundary: -2^127 with scale -38 (NUMERIC(38, 38) min).
+		{"scale -38, -2^127", minNeg, -38, "-1.70141183460469231731687303715884105728"},
+
+		// formatPlain → formatScientific crossover: adjexp < -6 forces scientific.
+		// digits len = 5, exponent = -20, adjexp = -16 → formatScientific → "1.2345E-16".
+		{"scale -20, +12345 (scientific)", big.NewInt(12345), -20, "1.2345E-16"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			x := &xSQLVAR{sqltype: SQL_TYPE_INT128, sqlscale: tt.sqlscale}
+			got, err := x.value(int128Bytes(tt.value), "", "")
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 		})
