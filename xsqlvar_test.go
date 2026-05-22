@@ -3,6 +3,7 @@ package firebirdsql
 import (
 	"bytes"
 	"database/sql/driver"
+	"math"
 	"reflect"
 	"testing"
 
@@ -74,8 +75,8 @@ func TestScaledIntValue(t *testing.T) {
 		want     interface{}
 	}{
 		{"zero scale", 0, 42, int64(42)},
-		{"positive scale 2", 2, 5, int64(500)},
-		{"positive scale 3", 3, 7, int64(7000)},
+		{"positive scale 2", 2, 5, "500"},
+		{"positive scale 3", 3, 7, "7000"},
 		{"negative scale -3", -3, 1234, "1.234"},
 		{"negative scale -2", -2, 50, "0.50"},
 	}
@@ -100,13 +101,13 @@ func TestScantypePositiveScale(t *testing.T) {
 		want     reflect.Type
 	}{
 		{"SHORT scale 0", SQL_TYPE_SHORT, 0, wantInt64},
-		{"SHORT scale +2", SQL_TYPE_SHORT, 2, wantInt64},
+		{"SHORT scale +2", SQL_TYPE_SHORT, 2, wantString},
 		{"SHORT scale -3", SQL_TYPE_SHORT, -3, wantString},
 		{"LONG scale 0", SQL_TYPE_LONG, 0, wantInt64},
-		{"LONG scale +1", SQL_TYPE_LONG, 1, wantInt64},
+		{"LONG scale +1", SQL_TYPE_LONG, 1, wantString},
 		{"LONG scale -2", SQL_TYPE_LONG, -2, wantString},
 		{"INT64 scale 0", SQL_TYPE_INT64, 0, wantInt64},
-		{"INT64 scale +3", SQL_TYPE_INT64, 3, wantInt64},
+		{"INT64 scale +3", SQL_TYPE_INT64, 3, wantString},
 		{"INT64 scale -4", SQL_TYPE_INT64, -4, wantString},
 	}
 
@@ -189,19 +190,19 @@ func TestValuePositiveScale(t *testing.T) {
 			"SHORT scale +2 value 5",
 			SQL_TYPE_SHORT, 2,
 			bint32_to_bytes(5),
-			int64(500),
+			"500",
 		},
 		{
 			"LONG scale +2 value 7",
 			SQL_TYPE_LONG, 2,
 			bint32_to_bytes(7),
-			int64(700),
+			"700",
 		},
 		{
 			"INT64 scale +1 value 3",
 			SQL_TYPE_INT64, 1,
 			bint64_to_bytes(3),
-			int64(30),
+			"30",
 		},
 	}
 
@@ -210,6 +211,54 @@ func TestValuePositiveScale(t *testing.T) {
 			x := &xSQLVAR{sqltype: tt.sqltype, sqlscale: tt.sqlscale}
 			got, err := x.value(tt.rawValue, "", "")
 			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestScaledIntValuePositiveOverflow(t *testing.T) {
+	tests := []struct {
+		name     string
+		sqlscale int
+		input    int64
+		want     interface{}
+	}{
+		{"MaxInt64 scale +1 (mult wrap)", 1, math.MaxInt64, "92233720368547758070"},
+		{"1e16-1 scale +5 (mult wrap)", 5, 9_999_999_999_999_999, "999999999999999900000"},
+		{"i=1 scale +19 (factor exceeds int64)", 19, 1, "10000000000000000000"},
+		{"i=1 scale +25 (factor far past int64)", 25, 1, "10000000000000000000000000"},
+		{"MinInt64 scale +1 (negative wrap)", 1, math.MinInt64, "-92233720368547758080"},
+		{"negative i scale +3", 3, -123456789, "-123456789000"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			x := &xSQLVAR{sqlscale: tt.sqlscale}
+			got := x.scaledIntValue(tt.input)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestScaledIntValuePrecisionLoss(t *testing.T) {
+	// math.Pow10 returns exact float64 values for 10^0..10^22 (Go's lookup
+	// table). Real precision loss begins at scale >= 23, where int64(Pow10(23))
+	// returns 99999999999999991611392 instead of the true 1e23. These vectors
+	// document that the new big.Int implementation has no such boundary.
+	tests := []struct {
+		name     string
+		sqlscale int
+		input    int64
+		want     interface{}
+	}{
+		{"i=1 scale +23 (Pow10 precision loss)", 23, 1, "100000000000000000000000"},
+		{"i=1 scale +30 (Pow10 lossy + factor past int64)", 30, 1, "1000000000000000000000000000000"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			x := &xSQLVAR{sqlscale: tt.sqlscale}
+			got := x.scaledIntValue(tt.input)
 			assert.Equal(t, tt.want, got)
 		})
 	}

@@ -26,7 +26,6 @@ package firebirdsql
 import (
 	"bytes"
 	"encoding/binary"
-	"math"
 	"math/big"
 	"reflect"
 	"strings"
@@ -168,7 +167,7 @@ func (x *xSQLVAR) scantype() reflect.Type {
 	case SQL_TYPE_VARYING:
 		return reflect.TypeOf("")
 	case SQL_TYPE_SHORT, SQL_TYPE_LONG, SQL_TYPE_INT64:
-		if x.sqlscale < 0 {
+		if x.sqlscale != 0 {
 			return reflect.TypeOf("")
 		}
 		return reflect.TypeOf(int64(0))
@@ -318,7 +317,9 @@ func (x *xSQLVAR) parseString(raw_value []byte, charset string) interface{} {
 func (x *xSQLVAR) scaledIntValue(i int64) interface{} {
 	switch {
 	case x.sqlscale > 0:
-		return i * int64(math.Pow10(x.sqlscale))
+		// Plain integer matches isql; formatDecimalGDA would emit "5E+2".
+		mul := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(x.sqlscale)), nil)
+		return new(big.Int).Mul(big.NewInt(i), mul).String()
 	case x.sqlscale < 0:
 		return formatDecimalGDA(new(big.Int).Abs(big.NewInt(i)), int32(x.sqlscale), i < 0, "")
 	default:
