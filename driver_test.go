@@ -793,6 +793,68 @@ func TestNegativeInt128(t *testing.T) {
 	conn.Close()
 }
 
+// TestNumericInt128Scaled verifies that NUMERIC(p, s) and DECIMAL(p, s) with
+// p in 19-38 (stored as SQL_TYPE_INT128) honor sqlscale on read. Pre-fix the
+// driver returned the raw unscaled integer string ("12345000" for 123.45);
+// post-fix it routes through formatDecimalGDA matching scaledIntValue and
+// preserves the IEEE 754 cohort quantum that #268 established.
+func TestNumericInt128Scaled(t *testing.T) {
+	conn, err := sql.Open("firebirdsql_createdb", GetTestDSN("test_numeric_int128_scaled_"))
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	defer conn.Close()
+
+	if get_firebird_major_version(t) < 4 {
+		return
+	}
+
+	ddl := `
+        CREATE TABLE test_numeric_int128_scaled (
+            a NUMERIC(38, 0),
+            b NUMERIC(38, 5),
+            c NUMERIC(38, 18),
+            d NUMERIC(38, 38),
+            neg NUMERIC(38, 5)
+        )
+    `
+	if _, err := conn.Exec(ddl); err != nil {
+		t.Fatalf("CREATE TABLE failed: %v", err)
+	}
+
+	insert := `
+        INSERT INTO test_numeric_int128_scaled (a, b, c, d, neg) VALUES (
+            99999999999999999999999999999999999999,
+            123.45,
+            1.234567890123456789,
+            0.12345678901234567890123456789012345678,
+            -987.65
+        )
+    `
+	if _, err := conn.Exec(insert); err != nil {
+		t.Fatalf("INSERT failed: %v", err)
+	}
+
+	var a, b, c, d, neg string
+	err = conn.QueryRow("SELECT a, b, c, d, neg FROM test_numeric_int128_scaled").Scan(&a, &b, &c, &d, &neg)
+	if err != nil {
+		t.Fatalf("Error SELECT: %v", err)
+	}
+
+	cases := []struct{ name, got, want string }{
+		{"NUMERIC(38, 0) max positive", a, "99999999999999999999999999999999999999"},
+		{"NUMERIC(38, 5) trailing zeros preserved", b, "123.45000"},
+		{"NUMERIC(38, 18) full precision", c, "1.234567890123456789"},
+		{"NUMERIC(38, 38) sub-unit", d, "0.12345678901234567890123456789012345678"},
+		{"NUMERIC(38, 5) negative", neg, "-987.65000"},
+	}
+	for _, tc := range cases {
+		if tc.got != tc.want {
+			t.Errorf("%s: got %q, want %q", tc.name, tc.got, tc.want)
+		}
+	}
+}
+
 func TestLegacyAuthWireCrypt(t *testing.T) {
 	test_dsn := GetTestDSN("test_legacy_auth_")
 	var n int
