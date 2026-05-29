@@ -104,20 +104,28 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 	}
 
 	if rows.currentChunkIdx >= len(rows.currentChunk) && rows.moreData {
-		// Watch for context cancellation during the blocking network fetch.
-		var done chan struct{}
-		if rows.ctx.Done() != nil {
-			done = make(chan struct{}, 1)
-			go rows.stmt.sendOpCancel(rows.ctx, done)
-		}
+		// Mirror exec/query: bound the blocking fetch with an OS-level deadline a bit
+		// past the context deadline. This unblocks a starved Go timer (sysmon) and —
+		// just as importantly — bounds the watcher's op_cancel write, so the
+		// withCancelWatcher join below cannot hang even if that write meets TCP
+		// backpressure. (Unlike the single-response exec/query paths, a fetch is a
+		// stream, so we do not cancelAndDrain on timeout — the connection is left to
+		// be evicted rather than risk reading misaligned bytes mid-stream.)
+		defer rows.stmt.enforceDeadline(rows.ctx)()
 
+		// opFetch is a wire *write*; run it on the main goroutine with no watcher
+		// live (a goroutine-fired op_cancel would race the write). Cancellation is
+		// watched only around opFetchResponse — the blocking *read* — and the
+		// watcher is joined inside withCancelWatcher before control returns, so it
+		// can never overlap a later main-goroutine wire write (e.g. the stray
+		// op_cancel at the top of the next Next() call).
 		err = rows.stmt.fc.wp.opFetch(rows.stmt.stmtHandle, rows.stmt.blr)
 		if err == nil {
-			rows.currentChunk, rows.moreData, err = rows.stmt.fc.wp.opFetchResponse(rows.stmt.stmtHandle, rows.stmt.fc.tx.transHandle, rows.stmt.resultXsqlda)
-		}
-
-		if done != nil {
-			done <- struct{}{} // dismiss the watcher goroutine
+			err = rows.stmt.withCancelWatcher(rows.ctx, func() error {
+				var e error
+				rows.currentChunk, rows.moreData, e = rows.stmt.fc.wp.opFetchResponse(rows.stmt.stmtHandle, rows.stmt.fc.tx.transHandle, rows.stmt.resultXsqlda)
+				return e
+			})
 		}
 
 		if err != nil {

@@ -78,16 +78,54 @@ func (stmt *firebirdsqlStmt) NumInput() int {
 	return -1
 }
 
-func (stmt *firebirdsqlStmt) sendOpCancel(ctx context.Context, done chan struct{}) {
-	cancel := true
-	select {
-	case <-done:
-		cancel = false
-	case <-ctx.Done():
+// withCancelWatcher runs fn — a blocking wire *read* (opResponse, opSqlResponse,
+// or opFetchResponse) — while a watcher goroutine waits on ctx and fires op_cancel
+// if ctx is canceled first. The watcher is always joined before this returns, so no
+// op_cancel can still be in flight when the caller resumes writing the wire on the
+// main goroutine; that join is what keeps the unsynchronized send buffer
+// (wireProtocol.buf, the bufio.Writer, the write cipher) race-free.
+//
+// fn MUST be a read: op_cancel writes p.buf, which is only safe to overlap a read
+// (opResponse reads into a fresh buffer via recvPackets; wireChannel keeps read and
+// write state separate). Never wrap a wire write (e.g. opFetch) with this helper.
+//
+// The join can't hang: callers set SetDeadline(ctx.Deadline()+3s) before calling,
+// bounding the watcher's op_cancel write (and op_cancel is an 8-byte packet onto an
+// already-flushed buffer, so it returns promptly even without a deadline).
+func (stmt *firebirdsqlStmt) withCancelWatcher(ctx context.Context, fn func() error) error {
+	if ctx.Done() == nil {
+		// Context can never be canceled; skip the watcher goroutine entirely.
+		return fn()
 	}
-	if cancel {
-		stmt.fc.wp.opCancel(fb_cancel_raise)
+	stop := make(chan struct{})
+	watcherDone := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			stmt.fc.wp.opCancel(fb_cancel_raise)
+		case <-stop:
+		}
+		close(watcherDone)
+	}()
+	err := fn()
+	close(stop)
+	<-watcherDone // join: the watcher (and any in-flight op_cancel) has finished past here
+	return err
+}
+
+// enforceDeadline mirrors ctx's deadline onto the connection at the OS socket level
+// (ctx.Deadline()+3s) and returns a closure that clears it. It is the fallback that
+// enforces the context deadline when Go's sysmon timer is starved by a CPU-bound query
+// and the withCancelWatcher goroutine can't run. The +3s margin lets the watcher's
+// op_cancel win the race when scheduling is healthy. No-op when ctx has no deadline.
+// Use as:  defer stmt.enforceDeadline(ctx)()
+func (stmt *firebirdsqlStmt) enforceDeadline(ctx context.Context) func() {
+	dl, ok := ctx.Deadline()
+	if !ok {
+		return func() {}
 	}
+	stmt.fc.wp.conn.SetDeadline(dl.Add(3 * time.Second))
+	return func() { stmt.fc.wp.conn.SetDeadline(time.Time{}) }
 }
 
 // cancelAndDrain is called when the OS-level connection deadline fires before
@@ -141,20 +179,14 @@ func (stmt *firebirdsqlStmt) exec(ctx context.Context, args []driver.Value) (res
 		return
 	}
 
-	// Set a fallback OS-level deadline slightly after the context deadline.
-	// This unblocks the read when Go's timer goroutine (sysmon) is starved by a
-	// CPU-bound Firebird query, while still giving the normal sendOpCancel goroutine
-	// enough time to fire first and receive a clean "operation was cancelled" from
-	// the server.
-	if dl, ok := ctx.Deadline(); ok {
-		stmt.fc.wp.conn.SetDeadline(dl.Add(3 * time.Second))
-		defer stmt.fc.wp.conn.SetDeadline(time.Time{})
-	}
+	// Fallback OS-level deadline (see enforceDeadline): unblocks the read when sysmon
+	// is starved; withCancelWatcher's op_cancel still fires first when healthy.
+	defer stmt.enforceDeadline(ctx)()
 
-	var done = make(chan struct{}, 1)
-	go stmt.sendOpCancel(ctx, done)
-	_, _, _, err = stmt.fc.wp.opResponse()
-	done <- struct{}{}
+	err = stmt.withCancelWatcher(ctx, func() error {
+		_, _, _, e := stmt.fc.wp.opResponse()
+		return e
+	})
 
 	if err != nil {
 		if errors.Is(err, os.ErrDeadlineExceeded) {
@@ -207,7 +239,6 @@ func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (dr
 	var rows driver.Rows
 	var err error
 	var result []driver.Value
-	var done = make(chan struct{}, 1)
 
 	if stmt.fc.tx.needBegin {
 		if err = stmt.fc.tx.begin(); err != nil {
@@ -232,14 +263,18 @@ func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (dr
 			return nil, err
 		}
 
-		if dl, ok := ctx.Deadline(); ok {
-			stmt.fc.wp.conn.SetDeadline(dl.Add(3 * time.Second))
-			defer stmt.fc.wp.conn.SetDeadline(time.Time{})
-		}
+		defer stmt.enforceDeadline(ctx)()
 
-		go stmt.sendOpCancel(ctx, done)
-		result, err = stmt.fc.wp.opSqlResponse(stmt.resultXsqlda)
-		done <- struct{}{}
+		// op_sql_response and its trailing op_response are both wire reads with no
+		// main-goroutine write between them, so one joined watcher covers both.
+		err = stmt.withCancelWatcher(ctx, func() error {
+			var e error
+			if result, e = stmt.fc.wp.opSqlResponse(stmt.resultXsqlda); e != nil {
+				return e
+			}
+			_, _, _, e = stmt.fc.wp.opResponse()
+			return e
+		})
 		if err != nil {
 			if errors.Is(err, os.ErrDeadlineExceeded) {
 				err = stmt.cancelAndDrain()
@@ -248,25 +283,18 @@ func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (dr
 		}
 
 		rows = newFirebirdsqlRows(ctx, stmt, result)
-
-		_, _, _, err = stmt.fc.wp.opResponse()
-		if err != nil {
-			return nil, err
-		}
 	} else {
 		err := stmt.fc.wp.opExecute(stmt, args, stmt.inputXsqlda)
 		if err != nil {
 			return nil, err
 		}
 
-		if dl, ok := ctx.Deadline(); ok {
-			stmt.fc.wp.conn.SetDeadline(dl.Add(3 * time.Second))
-			defer stmt.fc.wp.conn.SetDeadline(time.Time{})
-		}
+		defer stmt.enforceDeadline(ctx)()
 
-		go stmt.sendOpCancel(ctx, done)
-		_, _, _, err = stmt.fc.wp.opResponse()
-		done <- struct{}{}
+		err = stmt.withCancelWatcher(ctx, func() error {
+			_, _, _, e := stmt.fc.wp.opResponse()
+			return e
+		})
 
 		if err != nil {
 			if errors.Is(err, os.ErrDeadlineExceeded) {
