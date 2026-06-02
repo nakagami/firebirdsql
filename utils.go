@@ -28,8 +28,23 @@ import (
 	"encoding/binary"
 	"math/big"
 	"strconv"
+	"strings"
 	"time"
 )
+
+// splitList parses a comma-separated DSN list value (e.g. auth_plugin_list or
+// wire_crypt_plugin) into an ordered slice, trimming surrounding whitespace and
+// dropping empty fields. Order is preserved to express client preference.
+func splitList(s string) []string {
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
 
 func str_to_bytes(s string) []byte {
 	return []byte(s)

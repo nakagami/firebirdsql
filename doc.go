@@ -56,8 +56,21 @@ Windows database path:
 	db, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost/C:/fbdata/mydb.fdb")
 
 See the README for the full list of optional query parameters (auth_plugin_name,
-charset, role, timezone, wire_crypt, wire_crypt_plugin, wire_compress,
-column_name_to_lower).
+auth_plugin_list, charset, role, timezone, wire_crypt, wire_crypt_plugin,
+wire_compress, column_name_to_lower).
+
+Authentication is controlled by two parameters:
+
+	auth_plugin_name  preferred authentication plugin (default "Srp256"). Must be
+	                  a member of auth_plugin_list.
+	auth_plugin_list  ordered, comma-separated allow-list of acceptable auth
+	                  plugins (default "Srp256,Srp,Legacy_Auth"; must be a subset
+	                  of the supported plugins). The plugin the server selects must
+	                  be a member, otherwise the connection is refused before any
+	                  credentials are sent. Omit a plugin to refuse it — e.g.
+	                  "Srp256,Srp" rejects a server downgrade to Legacy_Auth, which
+	                  would otherwise put a brute-forceable DES crypt(password) hash
+	                  on the wire.
 
 Wire encryption is controlled by two parameters that mirror the Firebird server's
 own WireCrypt / WireCryptPlugin settings:

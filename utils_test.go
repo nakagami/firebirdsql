@@ -24,8 +24,28 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
+	"reflect"
 	"testing"
 )
+
+func TestSplitList(t *testing.T) {
+	cases := []struct {
+		in   string
+		want []string
+	}{
+		{"Srp256,Srp,Legacy_Auth", []string{"Srp256", "Srp", "Legacy_Auth"}},
+		{"ChaCha64,ChaCha,Arc4", []string{"ChaCha64", "ChaCha", "Arc4"}},
+		{"Srp256, Srp", []string{"Srp256", "Srp"}},
+		{" Srp256 ,, Srp ,", []string{"Srp256", "Srp"}},
+		{"", []string{}},
+	}
+	for _, c := range cases {
+		got := splitList(c.in)
+		if !reflect.DeepEqual(got, c.want) {
+			t.Errorf("splitList(%q)=%v, want %v", c.in, got, c.want)
+		}
+	}
+}
 
 func TestDSNParse(t *testing.T) {
 	var testDSNs = []struct {

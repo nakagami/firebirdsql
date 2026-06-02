@@ -126,7 +126,8 @@ param1, param2... are
 
 | Name | Description | Default | Note |
 | --- | --- | --- | --- |
-| auth_plugin_name | Authentication plugin name. | Srp256 | Srp256/Srp/Legacy_Auth are available. |
+| auth_plugin_name | Preferred authentication plugin. Must be a member of `auth_plugin_list`. | Srp256 | Srp256/Srp/Legacy_Auth are available. |
+| auth_plugin_list | Ordered, comma-separated allow-list of acceptable authentication plugins (a subset of the supported `Srp256,Srp,Legacy_Auth`). The plugin the server selects must be a member, otherwise the connection is refused before any credentials are sent. Omit a plugin to refuse it (e.g. `Srp256,Srp` to refuse a server-forced downgrade to `Legacy_Auth`, which would otherwise put a brute-forceable DES `crypt(password)` hash on the wire). | Srp256,Srp,Legacy_Auth | `Legacy_Auth` is kept in the default for backward compatibility but is weak; set `Srp256,Srp` to harden. |
 | column_name_to_lower | Force column name to lower | false | For "github.com/jmoiron/sqlx" |
 | role | Role name | | |
 | timezone | IANA time zone name (e.g. `UTC`, `Europe/Berlin`) | | Controls client-side decoding of naive DATE/TIME/TIMESTAMP and server session time zone (FB 4+). See "Time and timestamp handling" below. |

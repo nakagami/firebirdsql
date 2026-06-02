@@ -870,7 +870,7 @@ func TestLegacyAuthWireCrypt(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	conn, err = sql.Open("firebirdsql", test_dsn+"?auth_plugin_anme=Legacy_Auth")
+	conn, err = sql.Open("firebirdsql", test_dsn+"?auth_plugin_name=Legacy_Auth")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
@@ -890,7 +890,7 @@ func TestLegacyAuthWireCrypt(t *testing.T) {
 	}
 	conn.Close()
 
-	conn, err = sql.Open("firebirdsql", test_dsn+"?auth_plugin_name=Legacy_Auth&wire_auth=true")
+	conn, err = sql.Open("firebirdsql", test_dsn+"?auth_plugin_name=Legacy_Auth&wire_crypt=true")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
@@ -900,7 +900,7 @@ func TestLegacyAuthWireCrypt(t *testing.T) {
 	}
 	conn.Close()
 
-	conn, err = sql.Open("firebirdsql", test_dsn+"?auth_plugin_name=Legacy_Auth&wire_auth=false")
+	conn, err = sql.Open("firebirdsql", test_dsn+"?auth_plugin_name=Legacy_Auth&wire_crypt=false")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
@@ -909,6 +909,48 @@ func TestLegacyAuthWireCrypt(t *testing.T) {
 		t.Fatalf("Error SELECT: %v", err)
 	}
 	conn.Close()
+}
+
+// TestAuthPluginListHardened exercises the #22 fix end-to-end: a client allow-list
+// that excludes Legacy_Auth still authenticates normally against an SRP server,
+// and a preferred plugin outside the allow-list is refused before dialing.
+func TestAuthPluginListHardened(t *testing.T) {
+	test_dsn := GetTestDSN("test_auth_hardened_")
+	var n int
+	conn, err := sql.Open("firebirdsql_createdb", test_dsn)
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	if err = conn.Ping(); err != nil {
+		t.Fatalf("Error ping: %v", err)
+	}
+	conn.Close()
+
+	time.Sleep(1 * time.Second)
+
+	// A hardened allow-list excluding Legacy_Auth must still connect: the server
+	// selects Srp256/Srp, which the client allows.
+	conn, err = sql.Open("firebirdsql", test_dsn+"?auth_plugin_list=Srp256,Srp")
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	if err = conn.QueryRow("SELECT Count(*) FROM rdb$relations").Scan(&n); err != nil {
+		t.Fatalf("hardened auth_plugin_list=Srp256,Srp should authenticate via SRP: %v", err)
+	}
+	conn.Close()
+
+	// A preferred plugin that is not in the allow-list must fail fast (config
+	// validation), with no successful connection.
+	conn, err = sql.Open("firebirdsql", test_dsn+"?auth_plugin_name=Legacy_Auth&auth_plugin_list=Srp256,Srp")
+	if err == nil {
+		err = conn.Ping()
+	}
+	if err == nil {
+		t.Fatalf("auth_plugin_name=Legacy_Auth outside auth_plugin_list should be refused, got success")
+	}
+	if conn != nil {
+		conn.Close()
+	}
 }
 
 func TestErrorConnect(t *testing.T) {

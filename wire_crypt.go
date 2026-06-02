@@ -73,21 +73,6 @@ func parseWireCryptMode(s string) (wireCryptMode, error) {
 	}
 }
 
-// parseWireCryptPlugins splits a wire_crypt_plugin DSN value into an ordered
-// client allow-list of acceptable wire-encryption ciphers. Order expresses
-// client preference; ciphers omitted from the list are refused even when the
-// server offers them (e.g. drop "Arc4" to refuse RC4).
-func parseWireCryptPlugins(s string) []string {
-	parts := strings.Split(s, ",")
-	plugins := make([]string, 0, len(parts))
-	for _, p := range parts {
-		if p = strings.TrimSpace(p); p != "" {
-			plugins = append(plugins, p)
-		}
-	}
-	return plugins
-}
-
 // errWireCryptRequired is returned when wire_crypt=required but the handshake
 // could not establish wire encryption (no acceptable cipher was negotiated on
 // any path — including the legacy plain op_accept, where no cipher is possible).

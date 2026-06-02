@@ -77,6 +77,7 @@ func parseDSN(dsns string) (*firebirdDsn, error) {
 
 	var default_options = map[string]string{
 		"auth_plugin_name":     "Srp256",
+		"auth_plugin_list":     defaultAuthPlugins,
 		"charset":              "UTF8",
 		"column_name_to_lower": "false",
 		"role":                 "",
@@ -97,6 +98,13 @@ func parseDSN(dsns string) (*firebirdDsn, error) {
 
 	// Fail fast on an invalid wire_crypt policy before dialing.
 	if _, err := parseWireCryptMode(dsn.options["wire_crypt"]); err != nil {
+		return nil, err
+	}
+
+	// Fail fast on an invalid auth-plugin configuration before dialing: the
+	// allow-list must be a subset of the supported plugins and contain the
+	// preferred auth_plugin_name.
+	if err := validateAuthPlugins(dsn.options["auth_plugin_name"], dsn.options["auth_plugin_list"]); err != nil {
 		return nil, err
 	}
 

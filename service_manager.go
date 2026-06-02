@@ -213,12 +213,23 @@ func NewServiceManager(addr string, user string, password string, options Servic
 
 	var connOptions = map[string]string{
 		"auth_plugin_name": options.AuthPlugin,
+		// Seed the auth-plugin allow-list with the supported plugins so the
+		// server-selected plugin is enforced on the admin path too (the DSN path
+		// defaults this in dsn.go). Without it the allow-list parses empty and
+		// _parse_connect_response rejects every server plugin.
+		"auth_plugin_list": defaultAuthPlugins,
 		"wire_crypt":       wireCryptStr,
 		// Seed the cipher allow-list with the default ciphers. Without this the
 		// allow-list parses empty, _guess_wire_crypt negotiates no cipher, and a
 		// WireCrypt=true admin connection silently downgrades to plaintext (the
 		// DSN path defaults this in dsn.go; the admin path must too).
 		"wire_crypt_plugin": defaultWireCryptPlugins,
+	}
+
+	// Fail fast on an invalid auth-plugin configuration before dialing, matching
+	// the DSN path (dsn.go).
+	if err = validateAuthPlugins(connOptions["auth_plugin_name"], connOptions["auth_plugin_list"]); err != nil {
+		return nil, err
 	}
 
 	clientPublic, clientSecret, err := getClientSeed()

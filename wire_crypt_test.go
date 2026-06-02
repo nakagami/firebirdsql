@@ -25,7 +25,6 @@ package firebirdsql
 
 import (
 	"errors"
-	"reflect"
 	"testing"
 )
 
@@ -55,24 +54,6 @@ func TestParseWireCryptMode(t *testing.T) {
 		}
 		if got != c.want {
 			t.Errorf("parseWireCryptMode(%q)=%v, want %v", c.in, got, c.want)
-		}
-	}
-}
-
-func TestParseWireCryptPlugins(t *testing.T) {
-	cases := []struct {
-		in   string
-		want []string
-	}{
-		{"ChaCha64,ChaCha,Arc4", []string{"ChaCha64", "ChaCha", "Arc4"}},
-		{"ChaCha64, ChaCha", []string{"ChaCha64", "ChaCha"}},
-		{" ChaCha64 ,, ChaCha ,", []string{"ChaCha64", "ChaCha"}},
-		{"", []string{}},
-	}
-	for _, c := range cases {
-		got := parseWireCryptPlugins(c.in)
-		if !reflect.DeepEqual(got, c.want) {
-			t.Errorf("parseWireCryptPlugins(%q)=%v, want %v", c.in, got, c.want)
 		}
 	}
 }

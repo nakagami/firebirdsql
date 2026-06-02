@@ -43,7 +43,6 @@ import (
 )
 
 const (
-	PLUGIN_LIST       = "Srp256,Srp,Legacy_Auth"
 	BUFFER_LEN        = 1024
 	MAX_CHAR_LENGTH   = 32767
 	BLOB_SEGMENT_SIZE = 32000
@@ -173,7 +172,7 @@ func getSrpClientPublicBytes(clientPublic *big.Int) (bs []byte) {
 	return bs
 }
 
-func (p *wireProtocol) uid(user string, password string, authPluginName string, wireCrypt bool, clientPublic *big.Int) []byte {
+func (p *wireProtocol) uid(user string, password string, authPluginName string, authPluginList string, wireCrypt bool, clientPublic *big.Int) []byte {
 	sysUser := os.Getenv("USER")
 	if sysUser == "" {
 		sysUser = os.Getenv("USERNAME")
@@ -182,7 +181,7 @@ func (p *wireProtocol) uid(user string, password string, authPluginName string, 
 
 	sysUserBytes := []byte(sysUser)
 	hostnameBytes := []byte(hostname)
-	pluginListNameBytes := []byte(PLUGIN_LIST)
+	pluginListNameBytes := []byte(authPluginList)
 	pluginNameBytes := []byte(authPluginName)
 	userBytes := []byte(strings.ToUpper(user))
 	var wireCryptByte byte
@@ -562,12 +561,23 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 		_, _ = p.recvPacketsAlignment(ln) // keys
 
 		if isAuthenticated == 0 {
+			// Refuse a server-selected auth plugin the client never sanctioned,
+			// before any authData is computed. This blocks a forced downgrade to
+			// Legacy_Auth (which would put a brute-forceable DES crypt(password)
+			// on the wire). Only meaningful when isAuthenticated == 0: otherwise
+			// the server already authenticated us from the initial uid() data,
+			// computes nothing here, and legitimately returns an empty plugin
+			// name — there is no downgrade to guard against.
+			if !isAuthPluginAllowed(p.pluginName, options["auth_plugin_list"]) {
+				err = fmt.Errorf("firebirdsql: server selected auth plugin %q which is not in the client allow-list auth_plugin_list=%q; refusing to avoid an auth-plugin downgrade", p.pluginName, options["auth_plugin_list"])
+				return
+			}
 			if p.pluginName == "Srp" || p.pluginName == "Srp256" {
 
 				// TODO: normalize user
 
 				if len(data) == 0 {
-					p.opContAuth(bigIntToBytes(clientPublic), p.pluginName, PLUGIN_LIST, "")
+					p.opContAuth(bigIntToBytes(clientPublic), p.pluginName, options["auth_plugin_list"], "")
 					b, _ := p.recvPackets(4)
 					op := bytes_to_bint32(b)
 					if op == op_response {
@@ -617,10 +627,10 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 			}
 		}
 
-		clientPlugins := parseWireCryptPlugins(options["wire_crypt_plugin"])
+		clientPlugins := splitList(options["wire_crypt_plugin"])
 
 		if opcode == op_cond_accept {
-			p.opContAuth(authData, options["auth_plugin_name"], PLUGIN_LIST, "")
+			p.opContAuth(authData, options["auth_plugin_name"], options["auth_plugin_list"], "")
 			var buf []byte
 			_, _, buf, err = p.opResponse()
 			if err != nil {
@@ -929,7 +939,7 @@ func (p *wireProtocol) opConnect(dbName string, user string, password string, op
 	p.packInt(1) // Arch type(GENERIC)
 	p.packString(dbName)
 	p.packInt(int32(len(protocols)))
-	p.packBytes(p.uid(strings.ToUpper(user), password, options["auth_plugin_name"], wire_crypt, clientPublic))
+	p.packBytes(p.uid(strings.ToUpper(user), password, options["auth_plugin_name"], options["auth_plugin_list"], wire_crypt, clientPublic))
 	buf, _ := hex.DecodeString(strings.Join(protocols, ""))
 	p.appendBytes(buf)
 	_, err = p.sendPackets()
