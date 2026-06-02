@@ -880,6 +880,8 @@ func TestLegacyAuthWireCrypt(t *testing.T) {
 	}
 	conn.Close()
 
+	time.Sleep(1 * time.Second)
+
 	conn, err = sql.Open("firebirdsql", test_dsn+"?wire_crypt=false")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
@@ -890,6 +892,8 @@ func TestLegacyAuthWireCrypt(t *testing.T) {
 	}
 	conn.Close()
 
+	time.Sleep(1 * time.Second)
+
 	conn, err = sql.Open("firebirdsql", test_dsn+"?auth_plugin_name=Legacy_Auth&wire_crypt=true")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
@@ -899,6 +903,8 @@ func TestLegacyAuthWireCrypt(t *testing.T) {
 		t.Fatalf("Error SELECT: %v", err)
 	}
 	conn.Close()
+
+	time.Sleep(1 * time.Second)
 
 	conn, err = sql.Open("firebirdsql", test_dsn+"?auth_plugin_name=Legacy_Auth&wire_crypt=false")
 	if err != nil {
