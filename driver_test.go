@@ -1924,3 +1924,69 @@ func TestSelectUntypedNull(t *testing.T) {
 		t.Fatalf("Expected 42 for second column, got %v", n)
 	}
 }
+
+// getWireCipher returns the cipher negotiated for db's connection, reached
+// through the driver's WireCipher accessor via sql.Conn.Raw. Empty means the
+// channel is plaintext.
+func getWireCipher(t *testing.T, db *sql.DB) string {
+	t.Helper()
+	conn, err := db.Conn(context.Background())
+	require.NoError(t, err)
+	defer conn.Close()
+	var cipher string
+	err = conn.Raw(func(dc any) error {
+		c, ok := dc.(interface{ WireCipher() string })
+		require.True(t, ok, "driver conn should expose WireCipher()")
+		cipher = c.WireCipher()
+		return nil
+	})
+	require.NoError(t, err)
+	return cipher
+}
+
+// TestWireCryptRequiredPolicy is the end-to-end regression for the wire_crypt
+// downgrade fix. It adapts to the live server version so it is meaningful in
+// both CI legs:
+//   - Firebird < 3.0 has no wire encryption and answers with a plain op_accept,
+//     the exact path that used to let wire_crypt=required connect in cleartext.
+//     The connection must now fail closed before any credentials are sent.
+//   - Firebird >= 3.0 negotiates a cipher via op_cond_accept, so required must
+//     succeed over an encrypted channel, while a client that refuses every
+//     cipher (empty wire_crypt_plugin) under required must still fail closed.
+func TestWireCryptRequiredPolicy(t *testing.T) {
+	major := get_firebird_major_version(t)
+
+	if major < 3 {
+		// Fail closed on the legacy op_accept handshake.
+		db, err := sql.Open("firebirdsql_createdb", GetTestDSN("test_wc_required_")+"?wire_crypt=required")
+		require.NoError(t, err)
+		defer db.Close()
+		err = db.Ping()
+		require.Error(t, err, "wire_crypt=required must fail closed on a non-encrypting (op_accept) server")
+		require.Contains(t, err.Error(), "wire_crypt=required but no wire encryption was established")
+
+		// enabled tolerates plaintext, so it still connects (and is plaintext).
+		db2, err := sql.Open("firebirdsql_createdb", GetTestDSN("test_wc_enabled_")+"?wire_crypt=enabled")
+		require.NoError(t, err)
+		defer db2.Close()
+		require.NoError(t, db2.Ping())
+		require.Empty(t, getWireCipher(t, db2), "FB <3.0 connection must be plaintext")
+		return
+	}
+
+	// FB 3.0+: required succeeds over an encrypted channel.
+	db, err := sql.Open("firebirdsql_createdb", GetTestDSN("test_wc_required_")+"?wire_crypt=required")
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, db.Ping(), "wire_crypt=required should succeed against a wire-crypt-capable server")
+	require.NotEmpty(t, getWireCipher(t, db), "wire_crypt=required connection must be encrypted")
+
+	// required while refusing every cipher (empty allow-list) must fail closed,
+	// proving the single decision point also fires on the op_cond_accept path.
+	dbNoCipher, err := sql.Open("firebirdsql_createdb", GetTestDSN("test_wc_required_nocipher_")+"?wire_crypt=required&wire_crypt_plugin=")
+	require.NoError(t, err)
+	defer dbNoCipher.Close()
+	err = dbNoCipher.Ping()
+	require.Error(t, err, "wire_crypt=required with no acceptable cipher must fail closed")
+	require.Contains(t, err.Error(), "wire_crypt=required but no wire encryption was established")
+}

@@ -214,6 +214,11 @@ func NewServiceManager(addr string, user string, password string, options Servic
 	var connOptions = map[string]string{
 		"auth_plugin_name": options.AuthPlugin,
 		"wire_crypt":       wireCryptStr,
+		// Seed the cipher allow-list with the default ciphers. Without this the
+		// allow-list parses empty, _guess_wire_crypt negotiates no cipher, and a
+		// WireCrypt=true admin connection silently downgrades to plaintext (the
+		// DSN path defaults this in dsn.go; the admin path must too).
+		"wire_crypt_plugin": defaultWireCryptPlugins,
 	}
 
 	clientPublic, clientSecret, err := getClientSeed()
@@ -240,6 +245,15 @@ func NewServiceManager(addr string, user string, password string, options Servic
 		wp: wp,
 	}
 	return manager, nil
+}
+
+// WireCipher returns the name of the wire-encryption cipher negotiated for this
+// service-manager connection ("ChaCha64", "ChaCha", or "Arc4"), or an empty
+// string when the connection is unencrypted (plaintext). It mirrors
+// firebirdsqlConn.WireCipher and lets callers verify that an admin channel
+// (backup/restore/user management) is actually encrypted.
+func (svc *ServiceManager) WireCipher() string {
+	return svc.wp.conn.plugin
 }
 
 func (svc *ServiceManager) Close() (err error) {

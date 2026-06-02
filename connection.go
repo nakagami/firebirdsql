@@ -40,6 +40,20 @@ type firebirdsqlConn struct {
 	transactionSet    map[*firebirdsqlTx]struct{}
 }
 
+// WireCipher returns the name of the wire-encryption cipher negotiated for this
+// connection ("ChaCha64", "ChaCha", or "Arc4"), or an empty string when the
+// connection is unencrypted (plaintext). Because the concrete connection type
+// is unexported, applications reach it through the database/sql layer by
+// asserting sql.Conn.Raw to an interface:
+//
+//	conn.Raw(func(dc any) error {
+//	    cipher := dc.(interface{ WireCipher() string }).WireCipher()
+//	    ...
+//	})
+func (fc *firebirdsqlConn) WireCipher() string {
+	return fc.wp.conn.plugin
+}
+
 // ============ driver.Conn implementation
 
 func (fc *firebirdsqlConn) begin(isolationLevel int) (driver.Tx, error) {

@@ -32,7 +32,6 @@ import (
 	"math/big"
 	"net"
 	"os"
-	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -449,7 +448,12 @@ func (p *wireProtocol) _parse_op_response() (int32, []byte, []byte, error) {
 	return h, oid, buf, nil
 }
 
-func (p *wireProtocol) _guess_wire_crypt(buf []byte) (string, []byte) {
+// _guess_wire_crypt picks a wire-encryption cipher by walking the client's
+// ordered allow-list (clientPlugins, from wire_crypt_plugin) and returning the
+// first cipher that the server also advertises. Ciphers absent from
+// clientPlugins are refused even when the server offers them. Returns ("", nil)
+// when no acceptable cipher is mutually supported.
+func (p *wireProtocol) _guess_wire_crypt(buf []byte, clientPlugins []string) (string, []byte) {
 	var available_plugins []string
 	plugin_nonce := make([][]byte, 0, 2)
 
@@ -467,20 +471,26 @@ func (p *wireProtocol) _guess_wire_crypt(buf []byte) (string, []byte) {
 			plugin_nonce = append(plugin_nonce, v)
 		}
 	}
-	if slices.Contains(available_plugins, "ChaCha64") {
-		for _, nonce := range plugin_nonce {
-			if reflect.DeepEqual(nonce[:9], []byte{'C', 'h', 'a', 'C', 'h', 'a', '6', '4', 0}) {
-				return "ChaCha64", nonce[9:]
-			}
+	for _, plugin := range clientPlugins {
+		if !slices.Contains(available_plugins, plugin) {
+			continue
 		}
-	} else if slices.Contains(available_plugins, "ChaCha") {
-		for _, nonce := range plugin_nonce {
-			if reflect.DeepEqual(nonce[:7], []byte{'C', 'h', 'a', 'C', 'h', 'a', 0}) {
-				return "ChaCha", nonce[7 : 7+12]
+		switch plugin {
+		case "ChaCha64":
+			for _, nonce := range plugin_nonce {
+				if bytes.Equal(nonce[:9], []byte("ChaCha64\x00")) {
+					return "ChaCha64", nonce[9:]
+				}
 			}
+		case "ChaCha":
+			for _, nonce := range plugin_nonce {
+				if bytes.Equal(nonce[:7], []byte("ChaCha\x00")) {
+					return "ChaCha", nonce[7 : 7+12]
+				}
+			}
+		case "Arc4":
+			return "Arc4", nil
 		}
-	} else if slices.Contains(available_plugins, "Arc4") {
-		return "Arc4", nil
 	}
 	return "", nil
 }
@@ -518,6 +528,19 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 		p.acceptType = p.acceptType & ptype_MASK
 	}
 
+	mode, err := parseWireCryptMode(options["wire_crypt"])
+	if err != nil {
+		return
+	}
+
+	// Hoisted to function scope so the single wire-crypt decision below runs on
+	// every handshake outcome — including the legacy op_accept path, where these
+	// remain at their zero values (no cipher negotiated).
+	var authData []byte
+	var sessionKey []byte
+	var enc_plugin string
+	var nonce []byte
+
 	if opcode == op_cond_accept || opcode == op_accept_data {
 		var readLength, ln int
 
@@ -538,8 +561,6 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 		ln = int(bytes_to_bint32(b))
 		_, _ = p.recvPacketsAlignment(ln) // keys
 
-		var authData []byte
-		var sessionKey []byte
 		if isAuthenticated == 0 {
 			if p.pluginName == "Srp" || p.pluginName == "Srp256" {
 
@@ -596,8 +617,7 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 			}
 		}
 
-		var enc_plugin string
-		var nonce []byte
+		clientPlugins := parseWireCryptPlugins(options["wire_crypt_plugin"])
 
 		if opcode == op_cond_accept {
 			p.opContAuth(authData, options["auth_plugin_name"], PLUGIN_LIST, "")
@@ -606,27 +626,33 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 			if err != nil {
 				return
 			}
-			enc_plugin, nonce = p._guess_wire_crypt(buf)
+			enc_plugin, nonce = p._guess_wire_crypt(buf, clientPlugins)
 		}
+	} else if opcode != op_accept {
+		err = errors.New("_parse_connect_response() protocol error")
+		return
+	}
 
-		wire_crypt, _ := strconv.ParseBool(options["wire_crypt"])
-		if enc_plugin != "" && wire_crypt && sessionKey != nil {
-			// Send op_crypt
-			p.opCrypt(enc_plugin)
-			p.conn.setCryptKey(enc_plugin, sessionKey, nonce)
-			_, _, _, err = p.opResponse()
-			if err != nil {
-				return
-			}
-		} else {
-			p.authData = authData // use later opAttach and opCreate
-		}
-
-	} else {
-		if opcode != op_accept {
-			err = errors.New("_parse_connect_response() protocol error")
+	// Single wire-crypt decision point. Unlike the old in-block check, this runs
+	// on every handshake outcome — op_cond_accept, op_accept_data, AND the legacy
+	// plain op_accept — so wire_crypt=required fails closed whenever no cipher was
+	// established instead of silently falling back to plaintext. It runs before
+	// opAttach/opCreate, so no credentials are sent over a connection we refuse.
+	encrypt, err := wireCryptResolve(mode, enc_plugin, sessionKey != nil)
+	if err != nil {
+		return
+	}
+	if encrypt {
+		// Send op_crypt, arm the local cipher, then read the now-encrypted ack.
+		p.opCrypt(enc_plugin)
+		if err = p.conn.setCryptKey(enc_plugin, sessionKey, nonce); err != nil {
 			return
 		}
+		if _, _, _, err = p.opResponse(); err != nil {
+			return
+		}
+	} else {
+		p.authData = authData // use later by opAttach and opCreate
 	}
 
 	return
@@ -861,8 +887,13 @@ func (p *wireProtocol) getBlobSegments(blobId []byte, transHandle int32) ([]byte
 
 func (p *wireProtocol) opConnect(dbName string, user string, password string, options map[string]string, clientPublic *big.Int) error {
 	p.debugPrint("opConnect")
-	wire_crypt := true
-	wire_crypt, _ = strconv.ParseBool(options["wire_crypt"]) // errors default to false
+	mode, err := parseWireCryptMode(options["wire_crypt"])
+	if err != nil {
+		return err
+	}
+	// Advertise wire-crypt willingness for any non-disabled policy; required is
+	// enforced later in _parse_connect_response.
+	wire_crypt := mode != wireCryptDisabled
 	wire_compress := false
 	wire_compress, _ = strconv.ParseBool(options["wire_compress"]) // errors default to false
 
@@ -901,7 +932,7 @@ func (p *wireProtocol) opConnect(dbName string, user string, password string, op
 	p.packBytes(p.uid(strings.ToUpper(user), password, options["auth_plugin_name"], wire_crypt, clientPublic))
 	buf, _ := hex.DecodeString(strings.Join(protocols, ""))
 	p.appendBytes(buf)
-	_, err := p.sendPackets()
+	_, err = p.sendPackets()
 	return err
 }
 

@@ -82,6 +82,7 @@ func parseDSN(dsns string) (*firebirdDsn, error) {
 		"role":                 "",
 		"timezone":             "",
 		"wire_crypt":           "true",
+		"wire_crypt_plugin":    defaultWireCryptPlugins,
 		"wire_compress":        "false",
 	}
 
@@ -92,6 +93,11 @@ func parseDSN(dsns string) (*firebirdDsn, error) {
 		} else {
 			dsn.options[k] = v
 		}
+	}
+
+	// Fail fast on an invalid wire_crypt policy before dialing.
+	if _, err := parseWireCryptMode(dsn.options["wire_crypt"]); err != nil {
+		return nil, err
 	}
 
 	return dsn, nil

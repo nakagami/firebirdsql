@@ -56,6 +56,26 @@ Windows database path:
 	db, err := sql.Open("firebirdsql", "sysdba:masterkey@localhost/C:/fbdata/mydb.fdb")
 
 See the README for the full list of optional query parameters (auth_plugin_name,
-charset, role, timezone, wire_crypt, wire_compress, column_name_to_lower).
+charset, role, timezone, wire_crypt, wire_crypt_plugin, wire_compress,
+column_name_to_lower).
+
+Wire encryption is controlled by two parameters that mirror the Firebird server's
+own WireCrypt / WireCryptPlugin settings:
+
+	wire_crypt        disabled | enabled | required  (default enabled; false/true
+	                  are accepted as aliases for disabled/enabled). "enabled"
+	                  encrypts when the server offers an acceptable cipher but
+	                  tolerates a plaintext channel; "required" fails the
+	                  connection closed on every non-encrypting handshake
+	                  outcome — including a legacy plain op_accept (protocol
+	                  versions <= 12) and an op_accept_data with no negotiated
+	                  cipher — and refuses before any credentials are sent.
+	wire_crypt_plugin ordered, comma-separated allow-list of acceptable ciphers
+	                  (default "ChaCha64,ChaCha,Arc4"). Order is client
+	                  preference; omit a cipher to refuse it — e.g.
+	                  "ChaCha64,ChaCha" rejects the weak RC4/Arc4 cipher.
+
+The negotiated cipher can be inspected via the WireCipher method on the driver
+connection (see firebirdsqlConn.WireCipher), reachable through sql.Conn.Raw.
 */
 package firebirdsql

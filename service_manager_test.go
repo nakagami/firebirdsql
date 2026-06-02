@@ -92,3 +92,24 @@ func TestServiceManagerOptions(t *testing.T) {
 	opts = NewServiceManagerOptions(WithoutWireCrypt(), WithAuthPlugin("LegacyAuth"))
 	assert.Equal(t, ServiceManagerOptions{WireCrypt: false, AuthPlugin: "LegacyAuth"}, opts)
 }
+
+// TestServiceManagerWireCryptDefault is the regression guard for the admin-path
+// wire-crypt downgrade: NewServiceManager must seed the cipher allow-list so a
+// default (WireCrypt=true) connection actually negotiates encryption instead of
+// silently falling back to plaintext. On a wire-crypt-capable server (FB 3.0+)
+// the negotiated cipher must be non-empty; FB <3.0 has no wire crypt and stays
+// plaintext, so the assertion is gated on the live server version.
+func TestServiceManagerWireCryptDefault(t *testing.T) {
+	major := get_firebird_major_version(t)
+
+	sm, err := NewServiceManager("localhost:3050", GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
+	require.NoError(t, err, "NewServiceManager")
+	require.NotNil(t, sm, "NewServiceManager")
+	defer sm.Close()
+
+	if major < 3 {
+		require.Empty(t, sm.WireCipher(), "FB <3.0 has no wire crypt; connection must be plaintext")
+		return
+	}
+	require.NotEmpty(t, sm.WireCipher(), "default service-manager connection must be encrypted on a wire-crypt-capable server")
+}
