@@ -105,14 +105,9 @@ func (fc *firebirdsqlConn) exec(ctx context.Context, query string, args []driver
 	if err != nil {
 		return
 	}
+	defer stmt.Close()
 
 	result, err = stmt.(*firebirdsqlStmt).exec(ctx, args)
-	if err != nil {
-		return
-	}
-
-	stmt.Close()
-
 	return
 }
 
