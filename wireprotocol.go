@@ -456,12 +456,21 @@ func (p *wireProtocol) _guess_wire_crypt(buf []byte, clientPlugins []string) (st
 	var available_plugins []string
 	plugin_nonce := make([][]byte, 0, 2)
 
-	i := 0
-	for i = 0; i < len(buf); {
+	// buf is server-controlled handshake data; bounds-check every read so a
+	// malformed/truncated record cannot panic the client (remote DoS). On any
+	// malformed record we stop parsing and proceed with whatever was validly
+	// parsed so far — which falls through to ("", nil) when nothing usable.
+	for i := 0; i < len(buf); {
 		t := buf[i]
 		i++
+		if i >= len(buf) {
+			break // missing length byte
+		}
 		ln := int(buf[i])
 		i++
+		if i+ln > len(buf) {
+			break // value runs past end of buffer
+		}
 		v := buf[i : i+ln]
 		i += ln
 		if t == 1 {
@@ -477,12 +486,20 @@ func (p *wireProtocol) _guess_wire_crypt(buf []byte, clientPlugins []string) (st
 		switch plugin {
 		case "ChaCha64":
 			for _, nonce := range plugin_nonce {
+				if len(nonce) < 9 {
+					continue // too short for the "ChaCha64\x00" prefix
+				}
 				if bytes.Equal(nonce[:9], []byte("ChaCha64\x00")) {
+					// variable-length IV; validated downstream by
+					// setCryptKey -> chacha20.NewCipher (errors, not panics)
 					return "ChaCha64", nonce[9:]
 				}
 			}
 		case "ChaCha":
 			for _, nonce := range plugin_nonce {
+				if len(nonce) < 7+12 {
+					continue // too short for "ChaCha\x00" prefix + 12-byte IV
+				}
 				if bytes.Equal(nonce[:7], []byte("ChaCha\x00")) {
 					return "ChaCha", nonce[7 : 7+12]
 				}
@@ -654,7 +671,11 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 	}
 	if encrypt {
 		// Send op_crypt, arm the local cipher, then read the now-encrypted ack.
-		p.opCrypt(enc_plugin)
+		// If op_crypt fails to send, bail before arming local crypto — otherwise
+		// we would try to parse an unencrypted server response as encrypted.
+		if err = p.opCrypt(enc_plugin); err != nil {
+			return
+		}
 		if err = p.conn.setCryptKey(enc_plugin, sessionKey, nonce); err != nil {
 			return
 		}

@@ -114,15 +114,12 @@ func (fc *firebirdsqlConn) Prepare(query string) (driver.Stmt, error) {
 // ============ driver.Tx implementation
 
 func (fc *firebirdsqlConn) exec(ctx context.Context, query string, args []driver.Value) (result driver.Result, err error) {
-
 	stmt, err := fc.prepare(ctx, query)
 	if err != nil {
 		return
 	}
 	defer stmt.Close()
-
-	result, err = stmt.(*firebirdsqlStmt).exec(ctx, args)
-	return
+	return stmt.(*firebirdsqlStmt).exec(ctx, args)
 }
 
 func (fc *firebirdsqlConn) Exec(query string, args []driver.Value) (result driver.Result, err error) {

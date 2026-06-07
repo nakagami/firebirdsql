@@ -104,6 +104,53 @@ func TestGuessWireCryptAllowList(t *testing.T) {
 	}
 }
 
+// TestGuessWireCryptMalformedInput exercises the bounds guards in
+// _guess_wire_crypt against server-controlled handshake bytes. Every case must
+// return ("", nil) WITHOUT panicking — a malformed/truncated nonce or TLV record
+// from a malicious server must not crash the client (remote DoS). The well-formed
+// and allow-list-refusal paths are covered by TestGuessWireCryptAllowList.
+func TestGuessWireCryptMalformedInput(t *testing.T) {
+	p := &wireProtocol{}
+	clients := []string{"ChaCha64", "ChaCha", "Arc4"}
+
+	cases := []struct {
+		name string
+		buf  []byte
+	}{
+		{"empty buffer", nil},
+		{"chacha64 nonce shorter than 9-byte prefix",
+			cryptBuf("ChaCha64", []byte("ChaCha6"))},
+		{"chacha nonce shorter than prefix",
+			cryptBuf("ChaCha", []byte("ChaC"))},
+		{"chacha nonce prefix present but IV truncated",
+			cryptBuf("ChaCha", []byte("ChaCha\x00short"))}, // 12 bytes total — prefix OK but IV short of 7+12
+		{"tlv length runs past end of buffer",
+			[]byte{1, 6, 'C', 'h', 'a', 'C', 'h'}}, // claims 6, only 5 follow
+		{"dangling tag byte with no length",
+			append(cryptBuf("ChaCha"), 3)},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			// A panic here is a test failure (the guards are missing).
+			got, nonce := p._guess_wire_crypt(c.buf, clients)
+			if got != "" || nonce != nil {
+				t.Errorf("_guess_wire_crypt=%q (nonce len %d), want \"\" / nil", got, len(nonce))
+			}
+		})
+	}
+}
+
+// TestGuessWireCryptSkipsTruncatedNonce verifies a short nonce is skipped
+// (continue, not break): a valid nonce later in the list must still be found.
+func TestGuessWireCryptSkipsTruncatedNonce(t *testing.T) {
+	p := &wireProtocol{}
+	buf := cryptBuf("ChaCha", []byte("ChaCha\x00short"), chaChaNonce())
+	got, nonce := p._guess_wire_crypt(buf, []string{"ChaCha"})
+	if got != "ChaCha" || len(nonce) != 12 {
+		t.Errorf("_guess_wire_crypt=%q (nonce len %d), want ChaCha / 12", got, len(nonce))
+	}
+}
+
 func TestWireCryptResolve(t *testing.T) {
 	cases := []struct {
 		name          string
