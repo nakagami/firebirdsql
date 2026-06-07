@@ -83,6 +83,8 @@ own WireCrypt / WireCryptPlugin settings:
 	                  outcome — including a legacy plain op_accept (protocol
 	                  versions <= 12) and an op_accept_data with no negotiated
 	                  cipher — and refuses before any credentials are sent.
+	                  Note: "enabled" tolerates an active-MITM downgrade to
+	                  plaintext; on untrusted networks use "required".
 	wire_crypt_plugin ordered, comma-separated allow-list of acceptable ciphers
 	                  (default "ChaCha64,ChaCha,Arc4"). Order is client
 	                  preference; omit a cipher to refuse it — e.g.
