@@ -1509,6 +1509,24 @@ func (p *wireProtocol) opResponse() (int32, []byte, []byte, error) {
 	return p._parse_op_response()
 }
 
+// abandonReadTimeout bounds a blocking op_response read on a connection that is being
+// abandoned (cancel-ack drain or teardown). See opResponseTimeout. It is a var (not a const)
+// only so tests can shorten it; production code never reassigns it.
+var abandonReadTimeout = 10 * time.Second
+
+// opResponseTimeout reads an op_response bounded by a fixed OS-level deadline (relative to
+// now, no context). It is used where the connection is effectively being abandoned and a
+// silent wire must not hang the caller: cancelAndDrain's cancel-ack read, and the teardown
+// reads (statement/cursor close, autocommit commit-retaining, rollback, detach) that
+// database/sql's awaitDone goroutine can reach automatically when a QueryContext deadline
+// fires mid-fetch. The deadline is cleared on return regardless; on timeout the caller
+// discards the connection rather than reusing it.
+func (p *wireProtocol) opResponseTimeout(d time.Duration) (int32, []byte, []byte, error) {
+	p.conn.SetDeadline(time.Now().Add(d))
+	defer p.conn.SetDeadline(time.Time{})
+	return p.opResponse()
+}
+
 func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) ([]driver.Value, error) {
 	p.debugPrint("opSqlResponse")
 	b, err := p.recvPackets(4)

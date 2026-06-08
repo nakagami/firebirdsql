@@ -87,7 +87,9 @@ func (fc *firebirdsqlConn) Close() (err error) {
 	if err != nil {
 		return
 	}
-	_, _, _, err = fc.wp.opResponse()
+	// Teardown read: bounded so pool eviction (database/sql closing a conn flagged
+	// ErrBadConn) cannot hang on a silent wire.
+	_, _, _, err = fc.wp.opResponseTimeout(abandonReadTimeout)
 	fc.wp.conn.Close()
 	return
 }

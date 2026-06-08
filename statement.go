@@ -50,7 +50,9 @@ func (stmt *firebirdsqlStmt) freeStatement(mode int32) error {
 	if (stmt.fc.wp.acceptType & ptype_MASK) == ptype_lazy_send {
 		stmt.fc.wp.lazyResponseCount++
 	} else {
-		_, _, _, err = stmt.fc.wp.opResponse()
+		// Teardown read: bound it so a silent wire can't hang rows.Close()/stmt.Close()
+		// (reached automatically by database/sql's awaitDone on a mid-fetch ctx deadline).
+		_, _, _, err = stmt.fc.wp.opResponseTimeout(abandonReadTimeout)
 	}
 	if stmt.fc.tx.isAutocommit {
 		stmt.fc.tx.commitRetainging()
@@ -144,11 +146,9 @@ func (stmt *firebirdsqlStmt) enforceDeadline(ctx context.Context) func() {
 // It resets the connection deadline, sends op_cancel so the server cleans up,
 // reads the resulting error response, and returns it.
 func (stmt *firebirdsqlStmt) cancelAndDrain() error {
-	stmt.fc.wp.conn.SetDeadline(time.Time{}) // re-enable I/O
+	stmt.fc.wp.conn.SetDeadline(time.Time{}) // re-enable I/O before the op_cancel write
 	stmt.fc.wp.opCancel(fb_cancel_raise)
-	stmt.fc.wp.conn.SetDeadline(time.Now().Add(10 * time.Second))
-	_, _, _, err := stmt.fc.wp.opResponse()
-	stmt.fc.wp.conn.SetDeadline(time.Time{})
+	_, _, _, err := stmt.fc.wp.opResponseTimeout(abandonReadTimeout)
 	return err
 }
 
