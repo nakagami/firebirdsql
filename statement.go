@@ -199,6 +199,10 @@ func (stmt *firebirdsqlStmt) exec(ctx context.Context, args []driver.Value) (res
 		return e
 	})
 
+	// Deadline-abandon disposition: drain the cancel ack if the OS deadline fired, then evict
+	// (ErrBadConn) if the ctx deadline has passed. This block is repeated verbatim at the other
+	// three blocking-read sites (exec's opInfoSql read; query's exec_procedure and select reads) —
+	// keep all four in sync.
 	if err != nil {
 		if errors.Is(err, os.ErrDeadlineExceeded) {
 			// OS deadline fired (sysmon was starved). The read was cleanly
