@@ -222,6 +222,15 @@ func (stmt *firebirdsqlStmt) exec(ctx context.Context, args []driver.Value) (res
 
 	_, _, buf, err := stmt.fc.wp.opResponse()
 	if err != nil {
+		// Mirror the 1st-read defense (above): this opInfoSql records read is bounded by the
+		// still-armed enforceDeadline, so it cannot hang, but on a ctx-deadline abandon the
+		// wire is desynced — cancel/drain and evict rather than pool the poisoned conn.
+		if errors.Is(err, os.ErrDeadlineExceeded) {
+			err = stmt.cancelAndDrain()
+		}
+		if contextErrOrDeadlineExceeded(ctx) != nil {
+			return result, fmt.Errorf("%w: %w", err, driver.ErrBadConn)
+		}
 		return
 	}
 
