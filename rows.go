@@ -29,7 +29,6 @@ import (
 	"io"
 	"reflect"
 	"strings"
-	"time"
 )
 
 type firebirdsqlRows struct {
@@ -40,6 +39,7 @@ type firebirdsqlRows struct {
 	moreData         bool
 	result           []driver.Value
 	closeStmtOnClose bool // true for internal stmts that should be dropped on rows.Close()
+	badConn          bool // set when a fetch was abandoned under an expired ctx (wire desynced)
 }
 
 func newFirebirdsqlRows(ctx context.Context, stmt *firebirdsqlStmt, result []driver.Value) *firebirdsqlRows {
@@ -66,24 +66,33 @@ func (rows *firebirdsqlRows) Columns() []string {
 }
 
 func (rows *firebirdsqlRows) Close() error {
+	var err error
 	if rows.closeStmtOnClose {
-		return rows.stmt.Close()
+		err = rows.stmt.Close()
+	} else {
+		err = rows.stmt.closeCursor()
 	}
-	return rows.stmt.closeCursor()
+	// database/sql drives connection eviction off *this* return value (Rows.close passes
+	// rowsi.Close()'s result to releaseConn -> putConn), not off Next's error. So when a fetch
+	// was abandoned mid-stream under an expired context the wire is desynced — return
+	// ErrBadConn here so the poisoned conn is evicted, not pooled (otherwise the next query
+	// reads leftover fetch bytes where it expects op_response -> "Error op_response:N").
+	if rows.badConn {
+		return driver.ErrBadConn
+	}
+	return err
 }
 
 func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
-	if rows.ctx.Err() != nil {
+	// contextErrOrDeadlineExceeded folds in the timer-starvation fallback: it returns the
+	// context error, or DeadlineExceeded when the wall clock has passed ctx.Deadline() even
+	// though ctx.Err() is still nil (Go's sysmon delayed by a CPU-bound Firebird query). We
+	// fire op_cancel, so the wire state is then uncertain — mark the conn bad so Close() evicts
+	// it (the eviction lever; see Close). The caller still sees the clean context error.
+	if cerr := contextErrOrDeadlineExceeded(rows.ctx); cerr != nil {
 		rows.stmt.fc.wp.opCancel(fb_cancel_raise)
-		return rows.ctx.Err()
-	}
-	// Fallback for timer-starved environments: check the wall clock directly
-	// against the context deadline. This catches the case where Go's sysmon
-	// is delayed by a CPU-bound Firebird query and ctx.Err() is still nil
-	// even though the deadline has passed.
-	if dl, ok := rows.ctx.Deadline(); ok && time.Now().After(dl) {
-		rows.stmt.fc.wp.opCancel(fb_cancel_raise)
-		return context.DeadlineExceeded
+		rows.badConn = true
+		return cerr
 	}
 
 	if rows.stmt.stmtType == isc_info_sql_stmt_exec_procedure {
@@ -129,7 +138,13 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 		}
 
 		if err != nil {
-			if cerr := rows.ctx.Err(); cerr != nil {
+			// A ctx-deadline abandon (incl. the OS-deadline fallback firing while
+			// ctx.Err() is still nil) leaves the fetch response bytes pending on the
+			// wire — the conn is desynced. Mark it bad so Close() evicts it rather than
+			// pooling a conn the next query would read misaligned ("Error op_response:N").
+			// A genuine server/wire error keeps the wire synced, so it stays reusable.
+			if cerr := contextErrOrDeadlineExceeded(rows.ctx); cerr != nil {
+				rows.badConn = true // fetch abandoned mid-stream: wire desynced
 				return cerr
 			}
 			return
