@@ -40,9 +40,14 @@ type firebirdsqlStmt struct {
 	inputXsqlda  []xSQLVAR
 	blr          []byte
 	stmtType     int32
+	activeBatch  *PreparedBatch
 }
 
 func (stmt *firebirdsqlStmt) freeStatement(mode int32) error {
+	if mode == DSQL_drop && stmt.activeBatch != nil {
+		stmt.activeBatch.releaseBeforeFree()
+		stmt.activeBatch = nil
+	}
 	err := stmt.fc.wp.opFreeStatement(stmt.stmtHandle, mode)
 	if err != nil {
 		return err

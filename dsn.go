@@ -25,6 +25,7 @@ package firebirdsql
 
 import (
 	"errors"
+	"net"
 	"net/url"
 	"strings"
 )
@@ -38,6 +39,7 @@ type firebirdDsn struct {
 }
 
 var ErrDsnUserUnknown = errors.New("User unknown")
+var ErrDsnDbNameUnknown = errors.New("Database name unknown")
 
 func newFirebirdDsn() *firebirdDsn {
 	return &firebirdDsn{options: make(map[string]string)}
@@ -60,17 +62,25 @@ func parseDSN(dsns string) (*firebirdDsn, error) {
 	dsn.user = u.User.Username()
 	dsn.passwd, _ = u.User.Password()
 	dsn.addr = u.Host
-	if !strings.ContainsRune(dsn.addr, ':') {
+	if _, _, err := net.SplitHostPort(dsn.addr); err != nil {
+		// No port suffix (SplitHostPort also rejects bracketed IPv6 without a
+		// port, where a naive strings.ContainsRune(addr, ':') would).
 		dsn.addr += ":3050"
 	}
 	dsn.dbName = u.Path
-	if !strings.ContainsRune(dsn.dbName[1:], '/') {
+	if len(dsn.dbName) > 0 && !strings.ContainsRune(dsn.dbName[1:], '/') {
 		dsn.dbName = dsn.dbName[1:]
 	}
 
 	//Windows Path
-	if strings.ContainsRune(dsn.dbName[2:], ':') {
+	if len(dsn.dbName) >= 2 && strings.ContainsRune(dsn.dbName[2:], ':') {
 		dsn.dbName = dsn.dbName[1:]
+	}
+	if strings.TrimLeft(dsn.dbName, "/") == "" {
+		// Empty (or "/"-only) database path: nothing to attach to. Fail
+		// here with a diagnosable error instead of an obscure attach-time
+		// failure later.
+		return nil, ErrDsnDbNameUnknown
 	}
 
 	m, _ := url.ParseQuery(u.RawQuery)
@@ -79,12 +89,17 @@ func parseDSN(dsns string) (*firebirdDsn, error) {
 		"auth_plugin_name":     "Srp256",
 		"auth_plugin_list":     defaultAuthPlugins,
 		"charset":              "UTF8",
+		"client_version":       "",
 		"column_name_to_lower": "false",
+		"host_name":            "",
+		"os_user":              "",
 		"role":                 "",
 		"timezone":             "",
 		"wire_crypt":           "true",
 		"wire_crypt_plugin":    defaultWireCryptPlugins,
 		"wire_compress":        "false",
+		"max_inline_blob_size": "65536",
+		"max_blob_cache_size":  "10485760",
 	}
 
 	for k, v := range default_options {
@@ -94,6 +109,14 @@ func parseDSN(dsns string) (*firebirdDsn, error) {
 		} else {
 			dsn.options[k] = v
 		}
+	}
+
+	// Aliases for protocol-19 blob options (fbx-compatible short names).
+	if values, ok := m["inline_blob_size"]; ok && len(values) > 0 {
+		dsn.options["max_inline_blob_size"] = values[0]
+	}
+	if values, ok := m["blob_cache_size"]; ok && len(values) > 0 {
+		dsn.options["max_blob_cache_size"] = values[0]
 	}
 
 	// Fail fast on an invalid wire_crypt policy before dialing.

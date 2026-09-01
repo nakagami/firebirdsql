@@ -100,3 +100,18 @@ func FuzzGetEventCounts(f *testing.F) {
 		_, _ = e.getEventCounts(data)
 	})
 }
+
+// FuzzParseDSN (Phase 9 of the Jaybird test port plan): parseDSN consumes
+// attacker-controlled connection strings; malformed input must return an
+// error, never panic.
+func FuzzParseDSN(f *testing.F) {
+	f.Add("user:password@localhost:3050/db.fdb")
+	f.Add("firebird://user:pass@[2001:db8::1]/db.fdb?wire_crypt=required")
+	f.Add("user:pass@localhost/db.fdb?charset=UTF8&wire_crypt=bogus")
+	f.Add(":@/:")
+	f.Add("firebird://")
+
+	f.Fuzz(func(t *testing.T, s string) {
+		_, _ = parseDSN(s)
+	})
+}

@@ -8,6 +8,7 @@ import (
 )
 
 func TestBackupManager(t *testing.T) {
+	requireServiceAvailable(t)
 	dbPathOrig := GetTestDatabase("test_backup_manager_orig_")
 	dbBackup := GetTestBackup("test_backup_manager_")
 	dbPathRest := GetTestDatabase("test_backup_manager_rest_")
@@ -20,7 +21,7 @@ func TestBackupManager(t *testing.T) {
 	_, err = conn.Exec("insert into test values(123)")
 	require.NoError(t, err, "Exec")
 
-	bm, err := NewBackupManager("localhost", GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
+	bm, err := NewBackupManager(testServerAddr(), GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
 	require.NoError(t, err, "NewBackupManager")
 	require.NotNil(t, bm, "NewBackupManager")
 
@@ -54,6 +55,7 @@ func TestBackupManager(t *testing.T) {
 }
 
 func TestBackupOptions(t *testing.T) {
+	requireServiceAvailable(t)
 	opts := NewBackupOptions()
 	assert.Equal(t, BackupOptions{IgnoreChecksums: false, IgnoreLimboTransactions: false, MetadataOnly: false, GarbageCollect: true, Transportable: true, ConvertExternalTablesToInternalTables: true, Expand: false, Zip: false, ParallelWorkers: 0}, opts)
 	opts = NewBackupOptions(WithIgnoreChecksums(), WithIgnoreLimboTransactions(), WithMetadataOnly(), WithoutGarbageCollect(), WithoutTransportable(), WithoutConvertExternalTablesToInternalTables(), WithExpand(), WithZip(), WithBackupParallelWorkers(4))
@@ -63,6 +65,7 @@ func TestBackupOptions(t *testing.T) {
 }
 
 func TestRestoreOptions(t *testing.T) {
+	requireServiceAvailable(t)
 	opts := NewRestoreOptions()
 	assert.Equal(t, RestoreOptions{Replace: false, DeactivateIndexes: false, RestoreShadows: true, EnforceConstraints: true, CommitAfterEachTable: false, UseAllPageSpace: false, PageSize: 0, CacheBuffers: 0, ParallelWorkers: 0}, opts)
 	opts = NewRestoreOptions(WithReplace(), WithDeactivateIndexes(), WithoutRestoreShadows(), WithoutEnforceConstraints(), WithCommitAfterEachTable(), WithUseAllPageSpace(), WithPageSize(8192), WithCacheBuffers(1024), WithRestoreParallelWorkers(8))

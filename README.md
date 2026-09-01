@@ -135,6 +135,41 @@ param1, param2... are
 | wire_crypt_plugin | Ordered, comma-separated allow-list of acceptable wire ciphers, mirroring the server's `WireCryptPlugin`. Order is client preference; omit a cipher to refuse it (e.g. `ChaCha64,ChaCha` to refuse the deprecated RC4/`Arc4`). | ChaCha64,ChaCha,Arc4 | For Firebird 3.0+. `Arc4` (RC4) is kept for FB 3.0 compatibility but is cryptographically weak. |
 | wire_compress | Enable wire protocol compression. | false | For Firebird 3.0+ (protocol version 13+) |
 | charset | Firebird Charecter Set | | |
+| max_inline_blob_size | Max size of BLOBs the server may send inline with fetch/execute2 responses (protocol 19 / Firebird 5.0.3+). `0` disables. Alias: `inline_blob_size`. | 65536 | Negotiated only when the server picks protocol ≥ 19 |
+| max_blob_cache_size | Client cache budget for inline BLOBs (bytes). Alias: `blob_cache_size`. | 10485760 | Also sent as DPB on attach when protocol ≥ 19 |
+
+## Wire protocols 16–19
+
+The driver advertises Firebird wire protocols 10–19. The server chooses the highest mutually supported version.
+
+- **Protocol 16+** (Firebird 4.0+): batch DML via `PrepareBatch` on the driver connection (`sql.Conn.Raw`). After `op_batch_msg`, protocol 17+ uses `op_batch_sync`; create/release still use `op_ping`. BLOB/array bind parameters are rejected. In autocommit mode, a successful `Exec` calls commit-retaining; any per-row error rolls back.
+- **Protocol 18** (Firebird 5.0+): scrollable cursors. Use `QueryScrollable` on the driver connection via `sql.Conn.Raw` (not `database/sql` `Rows`, which is forward-only). Orientations: `ScrollNext`, `ScrollPrior`, `ScrollFirst`, `ScrollLast`, `ScrollAbsolute`, `ScrollRelative`.
+- **Protocol 19** (Firebird 5.0.3+): inline BLOBs — small BLOB payloads arrive with fetch/sql responses and are served from a client cache on first read.
+
+`ExecImmediate` runs SQL with `op_execute_immediate` (no OpExecute trailers). Reach it the same way through `sql.Conn.Raw`.
+
+Inspect the negotiated version with `ProtocolVersion()` (same Raw pattern as `WireCipher`).
+
+### Local live tests
+
+Protocol 18/19 integration tests use a read-only EMPLOYEE database:
+
+```text
+localhost:3055
+E:\Projects_2026\firebirdsql\EMPLOYEE.FDB
+```
+
+They skip automatically when that instance is unreachable.
+
+Writable batch / `ExecImmediate` tests use `GetTestDSN` + `firebirdsql_createdb` on **localhost:3050** (override with `FIREBIRD_PORT`) and also dial-skip when unreachable. Do not run DML against EMPLOYEE.
+
+Optional 100k batch-vs-exec compare:
+
+```text
+FIREBIRDSQL_BENCH=1 go test -run TestCompareBatchVsExecInsert100k -timeout 15m
+```
+
+Large batches may need `BatchOptions.BufferBytes` above the server default so all flushed rows fit until `Exec`.
 
 ## Time and timestamp handling
 

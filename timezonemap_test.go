@@ -61,3 +61,38 @@ func TestTimezoneRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+// TestTimezoneLegacyAliases mirrors Jaybird's TimeZoneByNameMappingTest legacy
+// alias coverage: the 3-letter ICU aliases live at the very top of the id
+// space and must round-trip.
+func TestTimezoneLegacyAliases(t *testing.T) {
+	for _, name := range []string{"GMT", "ACT", "AET", "AGT", "ART", "AST"} {
+		id := getTimezoneIDByName(name)
+		if id == 0 {
+			t.Errorf("getTimezoneIDByName(%q) = 0, want non-zero", name)
+			continue
+		}
+		if got := getTimezoneNameByID(int(id)); got != name {
+			t.Errorf("getTimezoneNameByID(%d) = %q, want %q", id, got, name)
+		}
+	}
+	if id := getTimezoneIDByName("GMT"); id != 65535 {
+		t.Errorf("GMT id = %d, want 65535 (top of the Firebird id space)", id)
+	}
+}
+
+// TestTimezoneMapInvalidEntries mirrors Jaybird's TimeZoneMappingTest edge
+// cases: unknown names and out-of-range ids must yield zero values, never a
+// wrong zone and never a panic.
+func TestTimezoneMapInvalidEntries(t *testing.T) {
+	for _, name := range []string{"", "Not/AZone", "America/", "gmt", "UTC "} {
+		if id := getTimezoneIDByName(name); id != 0 {
+			t.Errorf("getTimezoneIDByName(%q) = %d, want 0", name, id)
+		}
+	}
+	for _, id := range []int{-1, 0, 1, 65536, 1 << 30} {
+		if name := getTimezoneNameByID(id); name != "" {
+			t.Errorf("getTimezoneNameByID(%d) = %q, want empty", id, name)
+		}
+	}
+}

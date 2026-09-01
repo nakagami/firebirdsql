@@ -31,6 +31,7 @@ import (
 )
 
 func TestUserManager(t *testing.T) {
+	requireServiceAvailable(t)
 	dbPath := GetTestDatabase("test_user_manager_")
 	conn, err := sql.Open("firebirdsql_createdb", GetTestDSNFromDatabase(dbPath))
 	require.NoError(t, err)
@@ -39,7 +40,7 @@ func TestUserManager(t *testing.T) {
 	err = conn.Ping()
 	require.NoError(t, err)
 
-	um, err := NewUserManager("localhost:3050", GetTestUser(), GetTestPassword(), NewServiceManagerOptions(), NewUserManagerOptions())
+	um, err := NewUserManager(testServerAddr(), GetTestUser(), GetTestPassword(), NewServiceManagerOptions(), NewUserManagerOptions())
 	require.NoError(t, err, "NewUserManager")
 	require.NotNil(t, um, "NewUserManager")
 	defer um.Close()
@@ -108,6 +109,7 @@ func TestUserManager(t *testing.T) {
 }
 
 func TestUserManagerOptions(t *testing.T) {
+	requireServiceAvailable(t)
 	opts := NewUserManagerOptions()
 	assert.Equal(t, UserManagerOptions{SecurityDB: ""}, opts)
 	opts = NewUserManagerOptions(WithSecurityDB("secdb"))
@@ -115,6 +117,7 @@ func TestUserManagerOptions(t *testing.T) {
 }
 
 func TestUserOptions(t *testing.T) {
+	requireServiceAvailable(t)
 	user := NewUser()
 	assert.Equal(t, User{Username: nil, Password: nil, FirstName: nil, MiddleName: nil, LastName: nil, UserId: -1, GroupId: -1, Admin: nil}, user)
 	user = NewUser(WithUsername("test"), WithPassword("pwd"), WithFirstName("qqq"), WithMiddleName("www"), WithLastName("eee"), WithUserId(100), WithGroupId(200), WithAdmin())

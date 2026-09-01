@@ -99,7 +99,20 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 	if rows.stmt.stmtType == isc_info_sql_stmt_exec_procedure {
 		if rows.result != nil {
 			for i, v := range rows.result {
-				dest[i] = v
+				if rows.stmt.resultXsqlda[i].sqltype == SQL_TYPE_BLOB && v != nil {
+					blobId := v.([]byte)
+					var blob []byte
+					blob, err = rows.stmt.fc.wp.getBlobSegments(blobId, rows.stmt.fc.tx.transHandle)
+					if err != nil {
+						if errors.Is(err, driver.ErrBadConn) {
+							rows.badConn = true
+						}
+						return
+					}
+					dest[i] = blob
+				} else {
+					dest[i] = v
+				}
 			}
 			rows.result = nil
 		} else {

@@ -21,3 +21,6 @@ _cgo_export.*
 _testmain.go
 
 *.exe
+
+# Sample database used by local protocol tests
+EMPLOYEE.FDB

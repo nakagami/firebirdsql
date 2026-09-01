@@ -1,6 +1,8 @@
 package firebirdsql
 
 import (
+	"encoding/binary"
+	"encoding/hex"
 	"strings"
 	"testing"
 )
@@ -305,4 +307,57 @@ func FuzzParseXsqlda(f *testing.F) {
 		}()
 		_, _, _ = wp.parse_xsqlda(buf, 1)
 	})
+}
+
+// TestAdvertisedProtocolRange mirrors Jaybird's ProtocolCollectionTest: the
+// connect packet must offer protocol descriptors 10–19, one per version in
+// ascending order with strictly increasing weights, arch type Generic (1) and
+// min version 0; pflag_compress may appear in the max field of the 13+ records
+// only when wire compression is enabled.
+func TestAdvertisedProtocolRange(t *testing.T) {
+	const pflagCompress = 0x100
+	for _, wireCompress := range []bool{false, true} {
+		records := advertisedProtocols(wireCompress)
+		if len(records) != 10 {
+			t.Fatalf("wireCompress=%v: %d protocol records, want 10", wireCompress, len(records))
+		}
+		prevWeight := uint32(0)
+		for i, rec := range records {
+			b, err := hex.DecodeString(rec)
+			if err != nil || len(b) != 20 {
+				t.Fatalf("record %d: bad hex record %q (len %d, err %v)", i, rec, len(b), err)
+			}
+			ver := binary.BigEndian.Uint32(b[0:4])
+			arch := binary.BigEndian.Uint32(b[4:8])
+			minV := binary.BigEndian.Uint32(b[8:12])
+			maxV := binary.BigEndian.Uint32(b[12:16])
+			weight := binary.BigEndian.Uint32(b[16:20])
+			// Protocols 11+ carry Firebird's FB_PROTOCOL flag: 0x8000 set in
+			// the low half and sign-extended into the upper half on the wire.
+			wantVer := uint32(10 + i)
+			if wantVer >= 11 {
+				wantVer = 0xFFFF8000 | wantVer
+			}
+			if ver != wantVer {
+				t.Errorf("record %d: protocol version %#x, want %#x", i, ver, wantVer)
+			}
+			if arch != 1 {
+				t.Errorf("record %d (v%d): arch type %d, want 1 (Generic)", i, ver, arch)
+			}
+			if minV != 0 {
+				t.Errorf("record %d (v%d): min version %d, want 0", i, ver, minV)
+			}
+			if weight <= prevWeight {
+				t.Errorf("record %d (v%d): weight %d must exceed previous %d", i, ver, weight, prevWeight)
+			}
+			prevWeight = weight
+			hasFlag := maxV&pflagCompress != 0
+			if wireCompress && 10+i >= 13 && !hasFlag {
+				t.Errorf("record %d (v%d): pflag_compress missing with wire_compress=true", i, 10+i)
+			}
+			if !wireCompress && hasFlag {
+				t.Errorf("record %d (v%d): pflag_compress set with wire_compress=false", i, 10+i)
+			}
+		}
+	}
 }

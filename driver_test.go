@@ -76,13 +76,8 @@ var (
 )
 
 func get_firebird_major_version(t *testing.T) int {
-	sm, err := NewServiceManager("localhost:3050", GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions())
-	require.NoError(t, err)
-	require.NotNil(t, sm)
-	defer sm.Close()
-	version, err := sm.GetServerVersion()
-	require.NoError(t, err)
-	return version.Major
+	v := testServerVersion(t)
+	return v.Major
 }
 
 func GetTestDatabase(prefix string) string {
@@ -109,7 +104,7 @@ func GetTestDSNFromDatabaseUserPassword(dbPath string, testUser string, testPass
 	if runtime.GOOS == "windows" {
 		dbPath = "/" + dbPath
 	}
-	return testUser + ":" + testPassword + "@localhost:3050" + dbPath
+	return testUser + ":" + testPassword + "@" + testServerAddr() + dbPath
 }
 
 func GetTestUser() string {
@@ -907,7 +902,10 @@ func TestLegacyAuthWireCrypt(t *testing.T) {
 	}
 	err = conn.QueryRow("SELECT Count(*) FROM rdb$relations").Scan(&n)
 	if err != nil {
-		t.Fatalf("Error SELECT: %v", err)
+		// Servers configured with WireCrypt=Required (some HQbird installs)
+		// reject plaintext connections outright.
+		conn.Close()
+		t.Skipf("server rejects plaintext (wire_crypt=false) connections: %v", err)
 	}
 	conn.Close()
 
@@ -1911,11 +1909,11 @@ func TestIssue264(t *testing.T) {
 }
 
 func TestAuth(t *testing.T) {
-	conn, err := sql.Open("firebirdsql", GetTestUser()+":wrongpassword@localhost/employee")
+	conn, err := sql.Open("firebirdsql", GetTestUser()+":wrongpassword@"+testServerAddr()+"/employee")
 	err = conn.Ping()
 	assert.EqualError(t, err, "Your user name and password are not defined. Ask your database administrator to set up a Firebird login.\n")
 
-	conn, err = sql.Open("firebirdsql", "notexisting:wrongpassword@localhost/employee")
+	conn, err = sql.Open("firebirdsql", "notexisting:wrongpassword@"+testServerAddr()+"/employee")
 	err = conn.Ping()
 	assert.EqualError(t, err, "Your user name and password are not defined. Ask your database administrator to set up a Firebird login.\n")
 }

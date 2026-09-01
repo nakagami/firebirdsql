@@ -150,12 +150,12 @@ func TestDirtyConnCancellation(t *testing.T) {
 	}
 	time.Sleep(1 * time.Second) // match the repo's create->attach settle
 
-	proxy, err := newStallProxy("localhost:3050")
+	proxy, err := newStallProxy(testServerAddr())
 	if err != nil {
 		t.Fatalf("start proxy: %v", err)
 	}
 	defer proxy.close()
-	proxyDSN := strings.Replace(realDSN, "localhost:3050", proxy.addr(), 1)
+	proxyDSN := strings.Replace(realDSN, testServerAddr(), proxy.addr(), 1)
 
 	db, err := sql.Open("firebirdsql", proxyDSN)
 	if err != nil {

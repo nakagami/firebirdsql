@@ -151,6 +151,51 @@ func TestParseStatusVector_SQLCodeFallback(t *testing.T) {
 	}
 }
 
+// TestGdsToSQLStateTable mirrors Jaybird's MessageTemplateTest spot checks:
+// representative GDS codes must map to the SQLSTATE classes documented by
+// Firebird, and unmapped codes yield an empty string (the caller then treats
+// it as "no fallback available").
+func TestGdsToSQLStateTable(t *testing.T) {
+	cases := []struct {
+		gdsCode int
+		want    string
+	}{
+		{335544321, "22000"}, // isc_arith_except
+		{335544336, "40001"}, // isc_deadlock → serialization failure
+		{335544349, "23000"}, // integrity constraint violation
+		{335544466, "23000"}, // foreign key violation
+		{335544558, "23000"}, // check constraint violation
+		{335544665, "23000"}, // unique key violation
+		{999999999, ""},      // unmapped code
+	}
+	for _, c := range cases {
+		if got := gdsToSQLState(c.gdsCode); got != c.want {
+			t.Errorf("gdsToSQLState(%d) = %q, want %q", c.gdsCode, got, c.want)
+		}
+	}
+}
+
+// TestGdsToSQLCodeTable mirrors Jaybird's MessageTemplateTest SQLCODE checks.
+func TestGdsToSQLCodeTable(t *testing.T) {
+	cases := []struct {
+		gdsCode int
+		want    int32
+	}{
+		{335544321, -802}, // arithmetic exception → numeric value out of range
+		{335544336, -913}, // deadlock → deadlock
+		{335544349, -803}, // integrity violation → uniqueness constraint
+		{335544466, -530}, // foreign key violation
+		{335544558, -297}, // check constraint violation
+		{335544665, -803}, // unique key violation
+		{999999999, 0},    // unmapped code
+	}
+	for _, c := range cases {
+		if got := gdsToSQLCode(c.gdsCode); got != c.want {
+			t.Errorf("gdsToSQLCode(%d) = %d, want %d", c.gdsCode, got, c.want)
+		}
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Integration tests — require a live Firebird server
 // ---------------------------------------------------------------------------

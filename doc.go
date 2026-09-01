@@ -57,7 +57,7 @@ Windows database path:
 
 See the README for the full list of optional query parameters (auth_plugin_name,
 auth_plugin_list, charset, role, timezone, wire_crypt, wire_crypt_plugin,
-wire_compress, column_name_to_lower).
+wire_compress, column_name_to_lower, max_inline_blob_size, max_blob_cache_size).
 
 Authentication is controlled by two parameters:
 
@@ -92,5 +92,15 @@ own WireCrypt / WireCryptPlugin settings:
 
 The negotiated cipher can be inspected via the WireCipher method on the driver
 connection (see firebirdsqlConn.WireCipher), reachable through sql.Conn.Raw.
+The negotiated wire protocol version is available via ProtocolVersion().
+
+Protocol 16+ adds batch DML (PrepareBatch via Raw; after op_batch_msg,
+protocol 17 uses op_batch_sync while create/release still use op_ping).
+BLOB and array parameters are rejected. Autocommit batches commit-retain on
+success and roll back on per-row errors. ExecImmediate runs SQL with
+op_execute_immediate (no OpExecute trailers).
+
+Protocol 18 adds scrollable cursors (QueryScrollable via Raw). Protocol 19 adds
+inline BLOB transfer controlled by max_inline_blob_size / max_blob_cache_size.
 */
 package firebirdsql

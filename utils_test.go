@@ -115,3 +115,94 @@ func TestDSNParse(t *testing.T) {
 	}
 
 }
+
+// TestDSNIPv6Formats mirrors Jaybird's DbAttachInfoTest IPv6 cases: a bracketed
+// IPv6 host must keep its address intact and, when no port is given, still
+// receive the default port 3050 (the ':' inside the brackets must not count
+// as a port separator).
+func TestDSNIPv6Formats(t *testing.T) {
+	cases := []struct {
+		dsn      string
+		wantAddr string
+	}{
+		{"user:password@[::1]:3050/db.fdb", "[::1]:3050"},
+		{"user:password@[::1]/db.fdb", "[::1]:3050"},
+		{"firebird://user:password@[2001:db8::1]:3051/db.fdb", "[2001:db8::1]:3051"},
+		{"firebird://user:password@[2001:db8::1]/db.fdb", "[2001:db8::1]:3050"},
+	}
+	for _, c := range cases {
+		dsn, err := parseDSN(c.dsn)
+		if err != nil {
+			t.Errorf("parseDSN(%q): %v", c.dsn, err)
+			continue
+		}
+		if dsn.addr != c.wantAddr {
+			t.Errorf("parseDSN(%q) addr = %q, want %q", c.dsn, dsn.addr, c.wantAddr)
+		}
+		if dsn.dbName != "db.fdb" {
+			t.Errorf("parseDSN(%q) dbName = %q, want %q", c.dsn, dsn.dbName, "db.fdb")
+		}
+	}
+}
+
+// TestDSNOptionsDefaults mirrors Jaybird's FbConnectionPropertiesTest: every
+// documented option must resolve to its documented default when absent.
+func TestDSNOptionsDefaults(t *testing.T) {
+	dsn, err := parseDSN("user:password@localhost/db.fdb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		"auth_plugin_name":     "Srp256",
+		"auth_plugin_list":     defaultAuthPlugins,
+		"charset":              "UTF8",
+		"column_name_to_lower": "false",
+		"role":                 "",
+		"timezone":             "",
+		"wire_crypt":           "true",
+		"wire_crypt_plugin":    defaultWireCryptPlugins,
+		"wire_compress":        "false",
+	}
+	for k, v := range want {
+		if dsn.options[k] != v {
+			t.Errorf("option %q default = %q, want %q", k, dsn.options[k], v)
+		}
+	}
+}
+
+// TestDSNOptionsOverridesAndAliases checks that explicit options win over the
+// defaults.
+func TestDSNOptionsOverridesAndAliases(t *testing.T) {
+	dsn, err := parseDSN("user:password@localhost/db.fdb?charset=WIN1251&column_name_to_lower=true" +
+		"&role=MYROLE&timezone=Asia/Tokyo&wire_compress=true")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		"charset":              "WIN1251",
+		"column_name_to_lower": "true",
+		"role":                 "MYROLE",
+		"timezone":             "Asia/Tokyo",
+		"wire_compress":        "true",
+	}
+	for k, v := range want {
+		if dsn.options[k] != v {
+			t.Errorf("option %q = %q, want %q", k, dsn.options[k], v)
+		}
+	}
+}
+
+// TestDSNOptionsFailFast mirrors Jaybird's invalid-property behavior: a bogus
+// wire_crypt policy or an auth plugin outside the supported set must fail at
+// parse time, before any network activity.
+func TestDSNOptionsFailFast(t *testing.T) {
+	for _, dsn := range []string{
+		"user:password@localhost/db.fdb?wire_crypt=bogus",
+		"user:password@localhost/db.fdb?auth_plugin_name=Srp256&auth_plugin_list=NoSuchPlugin",
+		"user:password@localhost/db.fdb?auth_plugin_name=Unknown_Plugin",
+	} {
+		if _, err := parseDSN(dsn); err == nil {
+			t.Errorf("parseDSN(%q): expected fail-fast error, got nil", dsn)
+		}
+	}
+}

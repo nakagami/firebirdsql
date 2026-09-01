@@ -232,6 +232,13 @@ func _convert_timestamp(t time.Time) []byte {
 	}, nil)
 }
 
+// _timezoneToBytes encodes the trailing 4 bytes of a WITH TIME ZONE wire
+// value: an empty GMT displacement (the server derives it from the zone)
+// followed by the 2-byte Firebird timezone id.
+func _timezoneToBytes(tzID int32) []byte {
+	return []byte{0, 0, byte(int32(tzID) >> 8), byte(tzID)}
+}
+
 func _convert_time_tz(t time.Time, tzID int32) []byte {
 	// TIME WITH TIME ZONE is a date-less type. Go applies historical LMT
 	// offsets to time.Date with year=0 (e.g., Asia/Seoul = +08:27:52 LMT
@@ -243,14 +250,14 @@ func _convert_time_tz(t time.Time, tzID int32) []byte {
 		t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), t.Location())
 	return bytes.Join([][]byte{
 		_convert_time(adjusted.UTC()),
-		bint32_to_bytes(tzID),
+		_timezoneToBytes(tzID),
 	}, nil)
 }
 
 func _convert_timestamp_tz(t time.Time, tzID int32) []byte {
 	return bytes.Join([][]byte{
 		_convert_timestamp(t.UTC()),
-		bint32_to_bytes(tzID),
+		_timezoneToBytes(tzID),
 	}, nil)
 }
 
@@ -288,6 +295,17 @@ func convertToBool(s string, defaultValue bool) bool {
 	v, err := strconv.ParseBool(s)
 	if err != nil {
 		v = defaultValue
+	}
+	return v
+}
+
+func parseOptionInt(s string, defaultValue int) int {
+	if s == "" {
+		return defaultValue
+	}
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return defaultValue
 	}
 	return v
 }

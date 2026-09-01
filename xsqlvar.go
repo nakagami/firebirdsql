@@ -203,12 +203,6 @@ func (x *xSQLVAR) scantype() reflect.Type {
 	return reflect.TypeOf(nil)
 }
 
-func (x *xSQLVAR) _parseTimezone(raw_value []byte) *time.Location {
-	timezone := getTimezoneNameByID(int(bytes_to_buint16(raw_value)))
-	tz, _ := time.LoadLocation(timezone)
-	return tz
-}
-
 func (x *xSQLVAR) _parseDate(raw_value []byte) (int, int, int) {
 	nday := int(bytes_to_bint32(raw_value)) + 678882
 	century := (4*nday - 1) / 146097
@@ -273,34 +267,37 @@ func (x *xSQLVAR) parseTimestamp(raw_value []byte, timezone string) time.Time {
 	return time.Date(year, time.Month(month), day, h, m, s, n, tz)
 }
 
-func (x *xSQLVAR) parseTimeTz(raw_value []byte) time.Time {
-	h, m, s, n := x._parseTime(raw_value[:4])
-	var tz, loc *time.Location
-	timezone_id := bytes_to_buint16(raw_value[4:6])
-	if timezone_id == 0 {
-		tz, _ = time.LoadLocation("GMT")
-		loc = tz
-	} else {
-		tz = x._parseTimezone(raw_value[4:6])
-		loc = x._parseTimezone(raw_value[6:8])
+// _parseTimezoneID resolves the 2-byte Firebird timezone id carried in a
+// WITH TIME ZONE wire value. Unresolvable ids fall back to UTC.
+func _parseTimezoneID(idRaw []byte) *time.Location {
+	name := getTimezoneNameByID(int(bytes_to_buint16(idRaw)))
+	if name != "" {
+		if tz, err := time.LoadLocation(name); err == nil {
+			return tz
+		}
 	}
-	now := time.Now()
-	t := time.Date(now.Year(), now.Month(), now.Day(), h, m, s, n, tz).In(loc)
+	return time.UTC
+}
+
+// timeTzBaseDate is the date Firebird uses to resolve the UTC offset of a
+// date-less TIME WITH TIME ZONE value (mirrors Jaybird's TIME_TZ_BASE_DATE).
+var timeTzBaseDate = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+
+func (x *xSQLVAR) parseTimeTz(raw_value []byte) time.Time {
+	// Wire layout: UTC time-of-day (4) + timezone id (2) + displacement (2).
+	h, m, s, n := x._parseTime(raw_value[:4])
+	loc := _parseTimezoneID(raw_value[6:8])
+	t := time.Date(timeTzBaseDate.Year(), timeTzBaseDate.Month(), timeTzBaseDate.Day(), h, m, s, n, time.UTC).In(loc)
 	zone, offset := t.Zone()
 	return time.Date(0, time.Month(1), 1, t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), time.FixedZone(zone, offset))
 }
 
 func (x *xSQLVAR) parseTimestampTz(raw_value []byte) time.Time {
+	// Wire layout: UTC timestamp (8) + timezone id (2) + displacement (2).
 	year, month, day := x._parseDate(raw_value[:4])
 	h, m, s, n := x._parseTime(raw_value[4:8])
-	timezone_id := bytes_to_buint16(raw_value[8:10])
-	if timezone_id == 0 {
-		tz, _ := time.LoadLocation("GMT")
-		return time.Date(year, time.Month(month), day, h, m, s, n, tz)
-	}
-	tz := x._parseTimezone(raw_value[8:10])
-	offset := x._parseTimezone(raw_value[10:12])
-	return time.Date(year, time.Month(month), day, h, m, s, n, tz).In(offset)
+	loc := _parseTimezoneID(raw_value[10:12])
+	return time.Date(year, time.Month(month), day, h, m, s, n, time.UTC).In(loc)
 }
 
 func (x *xSQLVAR) parseString(raw_value []byte, charset string) interface{} {

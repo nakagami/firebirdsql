@@ -54,6 +54,12 @@ func (fc *firebirdsqlConn) WireCipher() string {
 	return fc.wp.conn.plugin
 }
 
+// ProtocolVersion returns the negotiated Firebird wire protocol version
+// (for example 13, 18, or 19). Reach it through sql.Conn.Raw the same way as WireCipher.
+func (fc *firebirdsqlConn) ProtocolVersion() int {
+	return int(fc.wp.protocolVersion)
+}
+
 // ============ driver.Conn implementation
 
 func (fc *firebirdsqlConn) begin(isolationLevel int) (driver.Tx, error) {
@@ -82,6 +88,8 @@ func (fc *firebirdsqlConn) Close() (err error) {
 	for tx := range fc.transactionSet {
 		tx.Rollback()
 	}
+
+	fc.wp.clearAllInlineBlobCache()
 
 	err = fc.wp.opDetach()
 	if err != nil {
@@ -155,6 +163,13 @@ func openFirebirdsqlConn(dsn *firebirdDsn, dbOp func(*wireProtocol) error) (*fir
 	if err != nil {
 		return nil, err
 	}
+
+	wp.clientVersion = dsn.options["client_version"]
+	wp.osUser = dsn.options["os_user"]
+	wp.hostName = dsn.options["host_name"]
+	wp.maxInlineBlobSize = int32(parseOptionInt(dsn.options["max_inline_blob_size"], 65536))
+	wp.maxBlobCacheSize = int32(parseOptionInt(dsn.options["max_blob_cache_size"], 10485760))
+	wp.inlineBlobCache = newInlineBlobCache(int(wp.maxBlobCacheSize))
 
 	if err = wp.opConnect(dsn.dbName, dsn.user, dsn.passwd, dsn.options, clientPublic); err != nil {
 		return nil, err

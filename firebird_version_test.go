@@ -77,3 +77,50 @@ func TestParseFirebirdVersion_Garbage(t *testing.T) {
 		}
 	}
 }
+
+// TestFirebirdVersionEqualOrGreaterMatrix mirrors Jaybird's GDSServerVersionTest
+// isEqualOrAbove semantics: every released banner must compare correctly
+// against the version boundaries the driver gates features on.
+func TestFirebirdVersionEqualOrGreaterMatrix(t *testing.T) {
+	cases := []struct {
+		raw     string
+		atLeast [][2]int // EqualOrGreater must be true
+		below   [][2]int // EqualOrGreater must be false
+	}{
+		{"LI-V2.5.9.27139 Firebird 2.5", [][2]int{{2, 5}, {2, 0}}, [][2]int{{3, 0}, {5, 0}}},
+		{"LI-V3.0.11.33703 Firebird 3.0", [][2]int{{2, 5}, {3, 0}}, [][2]int{{3, 1}, {4, 0}}},
+		{"WI-V4.0.5.3140 Firebird 4.0", [][2]int{{3, 0}, {4, 0}}, [][2]int{{4, 1}, {5, 0}}},
+		{"WI-V5.0.5.1876 Firebird 5.0", [][2]int{{4, 0}, {5, 0}}, [][2]int{{5, 1}, {6, 0}}},
+	}
+	for _, c := range cases {
+		t.Run(c.raw, func(t *testing.T) {
+			v := ParseFirebirdVersion(c.raw)
+			for _, m := range c.atLeast {
+				if !v.EqualOrGreater(m[0], m[1]) {
+					t.Errorf("%s: EqualOrGreater(%d,%d) = false, want true", c.raw, m[0], m[1])
+				}
+			}
+			for _, m := range c.below {
+				if v.EqualOrGreater(m[0], m[1]) {
+					t.Errorf("%s: EqualOrGreater(%d,%d) = true, want false", c.raw, m[0], m[1])
+				}
+			}
+		})
+	}
+}
+
+// TestFirebirdVersionEqualOrGreaterPatch covers patch-level comparisons,
+// including the boundary patches a fix release depends on.
+func TestFirebirdVersionEqualOrGreaterPatch(t *testing.T) {
+	v := ParseFirebirdVersion("WI-V5.0.5.1876 Firebird 5.0")
+	for _, m := range [][3]int{{5, 0, 0}, {5, 0, 4}, {5, 0, 5}, {4, 9, 9}} {
+		if !v.EqualOrGreaterPatch(m[0], m[1], m[2]) {
+			t.Errorf("EqualOrGreaterPatch(%d,%d,%d) = false, want true", m[0], m[1], m[2])
+		}
+	}
+	for _, m := range [][3]int{{5, 0, 6}, {5, 1, 0}, {6, 0, 0}} {
+		if v.EqualOrGreaterPatch(m[0], m[1], m[2]) {
+			t.Errorf("EqualOrGreaterPatch(%d,%d,%d) = true, want false", m[0], m[1], m[2])
+		}
+	}
+}

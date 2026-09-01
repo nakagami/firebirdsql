@@ -118,6 +118,7 @@ func (tx *firebirdsqlTx) commitRetainging() (err error) {
 	// Teardown read: bounded so the autocommit commit-retaining cannot hang a silent-wire
 	// close (it runs in freeStatement's teardown path as well as the exec hot path).
 	_, _, _, err = tx.fc.wp.opResponseTimeout(abandonReadTimeout)
+	tx.fc.wp.clearInlineBlobCache(tx.transHandle)
 	tx.isAutocommit = tx.fc.isAutocommit
 	return
 }
@@ -128,6 +129,7 @@ func (tx *firebirdsqlTx) Commit() (err error) {
 		return err
 	}
 	_, _, _, err = tx.fc.wp.opResponse()
+	tx.fc.wp.clearInlineBlobCache(tx.transHandle)
 	tx.isAutocommit = tx.fc.isAutocommit
 	tx.needBegin = true
 	return
@@ -141,6 +143,7 @@ func (tx *firebirdsqlTx) Rollback() (err error) {
 	// Teardown read: bounded so connection.Close()'s rollback loop cannot hang on a silent
 	// wire before it ever reaches opDetach.
 	_, _, _, err = tx.fc.wp.opResponseTimeout(abandonReadTimeout)
+	tx.fc.wp.clearInlineBlobCache(tx.transHandle)
 	tx.isAutocommit = tx.fc.isAutocommit
 	tx.needBegin = true
 	return
