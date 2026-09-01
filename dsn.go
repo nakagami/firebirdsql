@@ -68,18 +68,15 @@ func parseDSN(dsns string) (*firebirdDsn, error) {
 		dsn.addr += ":3050"
 	}
 	dsn.dbName = u.Path
-	if len(dsn.dbName) > 0 && !strings.ContainsRune(dsn.dbName[1:], '/') {
+	if len(dsn.dbName) > 1 && !strings.ContainsRune(dsn.dbName[1:], '/') {
 		dsn.dbName = dsn.dbName[1:]
 	}
 
 	//Windows Path
-	if len(dsn.dbName) >= 2 && strings.ContainsRune(dsn.dbName[2:], ':') {
+	if len(dsn.dbName) > 2 && strings.ContainsRune(dsn.dbName[2:], ':') {
 		dsn.dbName = dsn.dbName[1:]
 	}
 	if strings.TrimLeft(dsn.dbName, "/") == "" {
-		// Empty (or "/"-only) database path: nothing to attach to. Fail
-		// here with a diagnosable error instead of an obscure attach-time
-		// failure later.
 		return nil, ErrDsnDbNameUnknown
 	}
 

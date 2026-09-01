@@ -28,9 +28,8 @@ import (
 	"testing"
 )
 
-// TestParseDSNValidPaths pins the parsing results for the shapes that must
-// not change (single-segment paths lose the leading slash, multi-segment
-// POSIX paths keep it, Windows drive paths lose it).
+// TestParseDSNValidPaths covers the shapes that must keep parsing exactly as
+// before (guarding the slicing must not change valid results).
 func TestParseDSNValidPaths(t *testing.T) {
 	cases := []struct {
 		dsn    string
@@ -39,7 +38,7 @@ func TestParseDSNValidPaths(t *testing.T) {
 		{"user:password@localhost:3050/dbname", "dbname"},
 		{"user:password@localhost/dbname", "dbname"},
 		{"user:password@localhost:3050/C:/db.fdb", "C:/db.fdb"},
-		{"user:password@localhost:3050/path/to/db.fdb", "/path/to/db.fdb"},
+		{"user:password@localhost:3050/path/to/db.fdb", "/path/to/db.fdb"}, // multi-segment POSIX keeps the leading slash (existing behavior)
 	}
 	for _, c := range cases {
 		dsn, err := parseDSN(c.dsn)
@@ -53,24 +52,32 @@ func TestParseDSNValidPaths(t *testing.T) {
 	}
 }
 
-// TestParseDSNEmptyPathNoPanic: DSNs with an empty (or "/"-only) database
-// path historically panicked on unguarded dsn.dbName slicing ("slice bounds
-// out of range", via database/sql before any connection attempt). The
-// slicing is bounds-checked now, and the remaining behavior must be a clean
-// ErrDsnDbNameUnknown at parse time instead of an obscure attach-time
-// failure from a "" database name.
+// TestParseDSNEmptyPathNoPanic: a DSN with an empty (or "/"-only) database
+// path used to panic with "slice bounds out of range" in the unguarded
+// dsn.dbName[1:] / dsn.dbName[2:] slicing (found via database/sql:
+// sql.Open + Query panic before any connection attempt). It must return a
+// clean error instead.
 func TestParseDSNEmptyPathNoPanic(t *testing.T) {
 	cases := []string{
-		"user:password@localhost:3050/?charset=UTF8", // url.Parse => Path "/"
-		"user:password@localhost:3050/",              // Path "/"
-		"user:password@localhost:3050",               // Path ""
-		"user:password@localhost",                    // Path ""
+		"user:password@localhost:3050/?charset=UTF8", // Path="/" + query
+		"user:password@localhost:3050/",              // Path="/"
+		"user:password@localhost:3050",               // no path at all
+		"user:password@localhost",                    // bare host
 		"user:password@localhost:3050//",             // slashes only
 	}
 	for _, dsn := range cases {
-		_, err := parseDSN(dsn)
-		if !errors.Is(err, ErrDsnDbNameUnknown) {
-			t.Errorf("parseDSN(%q) error = %v, want ErrDsnDbNameUnknown", dsn, err)
-		}
+		func() {
+			// parseDSN used to panic here; recover so the failure message
+			// names the offending DSN instead of killing the test binary.
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("parseDSN(%q) panicked: %v", dsn, r)
+				}
+			}()
+			_, err := parseDSN(dsn)
+			if !errors.Is(err, ErrDsnDbNameUnknown) {
+				t.Errorf("parseDSN(%q) error = %v, want ErrDsnDbNameUnknown", dsn, err)
+			}
+		}()
 	}
 }
