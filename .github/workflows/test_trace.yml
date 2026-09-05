@@ -1,0 +1,17 @@
+name: Trace compatibility
+on:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  trace:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        firebird: ['2.5.9', '3.0.10', '4.0.6', '5.0.0', '5.0.4']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trace lifecycle and service regressions (Go 1.22)
+        env:
+          TEST_PATTERN: 'Test(Trace|Service|GetUsers|GetBlobSegments)'
+        run: scripts/test-trace-matrix.sh '${{ matrix.firebird }}'
