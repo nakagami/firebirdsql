@@ -35,3 +35,14 @@ func (res *firebirdsqlResult) LastInsertId() (int64, error) {
 func (res *firebirdsqlResult) RowsAffected() (int64, error) {
 	return res.affectedRows, nil
 }
+
+// Only malformed metadata needs extra storage; the normal result keeps its
+// existing size and allocation behavior.
+type firebirdsqlResultCountError struct {
+	firebirdsqlResult
+	err error
+}
+
+func (res *firebirdsqlResultCountError) RowsAffected() (int64, error) {
+	return 0, res.err
+}
