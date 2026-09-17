@@ -25,6 +25,7 @@ package firebirdsql
 
 import (
 	"bytes"
+	"context"
 	"database/sql/driver"
 	"encoding/hex"
 	"errors"
@@ -135,11 +136,15 @@ type wireProtocol struct {
 }
 
 func newWireProtocol(addr string, timezone string, charset string) (*wireProtocol, error) {
+	return newWireProtocolContext(context.Background(), addr, timezone, charset)
+}
+
+func newWireProtocolContext(ctx context.Context, addr string, timezone string, charset string) (*wireProtocol, error) {
 	p := new(wireProtocol)
 	p.buf = make([]byte, 0, BUFFER_LEN)
 
 	p.addr = addr
-	conn, err := net.Dial("tcp", p.addr)
+	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", p.addr)
 	if err != nil {
 		return nil, err
 	}

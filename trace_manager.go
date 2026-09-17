@@ -1,225 +1,258 @@
 package firebirdsql
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
+	"sync"
+	"time"
 )
 
+// traceService keeps control connections separate from the streaming connection.
+type traceService interface {
+	ServiceStartContext(context.Context, []byte) error
+	GetStringContext(context.Context) (string, bool, error)
+	WaitStringContext(context.Context) (string, error)
+	WaitStringsContext(context.Context, chan string) error
+	WaitContext(context.Context) error
+	CloseContext(context.Context) error
+}
+
 type TraceManager struct {
-	connBuilder func() (*ServiceManager, error)
+	connBuilder func(context.Context) (traceService, error)
 }
 
 const (
 	SessionStopped = iota
 	SessionRunning
 	SessionPaused
+	SessionStarting
+	SessionStopping
+	SessionFailed
 )
 
+// TraceSession owns a single stream. Control operations use separate service
+// attachments, and may run concurrently with WaitStringsContext. A canceled
+// stream cannot be resumed: Close the session and explicitly start a new one.
 type TraceSession struct {
-	connBuilder func() (*ServiceManager, error)
-	conn        *ServiceManager
+	connBuilder func(context.Context) (traceService, error)
+	conn        traceService
 	id          int32
+	mu          sync.Mutex
 	state       int
+	control     chan struct{}
+	closeOnce   sync.Once
+	closeErr    error
+	closed      bool
 }
 
-func NewTraceManager(addr string, user string, password string, options ServiceManagerOptions) (*TraceManager, error) {
-	connBuilder := func() (*ServiceManager, error) {
-		return NewServiceManager(addr, user, password, options)
-	}
-	return &TraceManager{
-		connBuilder: connBuilder,
-	}, nil
+func NewTraceManager(addr, user, password string, options ServiceManagerOptions) (*TraceManager, error) {
+	return &TraceManager{connBuilder: func(ctx context.Context) (traceService, error) {
+		return NewServiceManagerContext(ctx, addr, user, password, options)
+	}}, nil
 }
 
 func (t *TraceManager) Start(config string) (*TraceSession, error) {
-	return t.StartWithName("", config)
+	return t.StartContext(context.Background(), config)
+}
+func (t *TraceManager) StartContext(ctx context.Context, config string) (*TraceSession, error) {
+	return t.StartWithNameContext(ctx, "", config)
+}
+func (t *TraceManager) StartWithName(name, config string) (*TraceSession, error) {
+	return t.StartWithNameContext(context.Background(), name, config)
 }
 
-func (t *TraceManager) StartWithName(name string, config string) (*TraceSession, error) {
-	var (
-		conn *ServiceManager
-		id   int64
-		err  error
-	)
-	if conn, err = t.connBuilder(); err != nil {
+var traceReply = regexp.MustCompile(`^Trace session ID ([0-9]+) (started|stopped|paused|resumed)$`)
+
+func parseTraceReply(reply, action string, expected int32) (int32, error) {
+	match := traceReply.FindStringSubmatch(strings.TrimSpace(reply))
+	if len(match) != 3 || match[2] != action {
+		return 0, fmt.Errorf("firebirdsql: unexpected trace %s response", action)
+	}
+	id, err := strconv.ParseInt(match[1], 10, 32)
+	if err != nil || id <= 0 || (expected != 0 && int32(id) != expected) {
+		return 0, fmt.Errorf("firebirdsql: invalid trace session ID in %s response", action)
+	}
+	return int32(id), nil
+}
+
+func (t *TraceManager) StartWithNameContext(ctx context.Context, name, config string) (_ *TraceSession, err error) {
+	// SPB strings use unsigned 16-bit lengths. Do not silently wrap them.
+	if len(name) > 65535 || len(config) > 65535 {
+		return nil, fmt.Errorf("firebirdsql: trace name or config exceeds 65535 bytes")
+	}
+	conn, err := t.connBuilder(ctx)
+	if err != nil {
 		return nil, err
 	}
-
-	var res string
-	var spb = NewXPBWriterFromTag(isc_action_svc_trace_start)
-
-	if len(name) > 0 {
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, conn.CloseContext(ctx))
+		}
+	}()
+	spb := NewXPBWriterFromTag(isc_action_svc_trace_start)
+	if name != "" {
 		spb.PutString(isc_spb_trc_name, name)
 	}
-
 	spb.PutString(isc_spb_trc_cfg, config)
-
-	if err = conn.ServiceStart(spb.Bytes()); err != nil {
+	if err = conn.ServiceStartContext(ctx, spb.Bytes()); err != nil {
 		return nil, err
 	}
-	if res, _, err = conn.GetString(); err != nil {
+	reply, _, err := conn.GetStringContext(ctx)
+	if err != nil {
 		return nil, err
 	}
-	re := regexp.MustCompile(`Trace session ID (\d+) started`)
-	match := re.FindStringSubmatch(res)
-	if len(match) == 0 {
-		_ = conn.Close()
-		return nil, fmt.Errorf("unable to start trace session: %s", res)
-	}
-	if id, err = strconv.ParseInt(match[1], 10, 32); err != nil {
+	id, err := parseTraceReply(reply, "started", 0)
+	if err != nil {
 		return nil, err
 	}
-
-	return &TraceSession{
-		connBuilder: t.connBuilder,
-		conn:        conn,
-		id:          int32(id),
-		state:       SessionRunning,
-	}, nil
+	return &TraceSession{connBuilder: t.connBuilder, conn: conn, id: id, state: SessionRunning, control: make(chan struct{}, 1)}, nil
 }
 
-func (t *TraceManager) List() (string, error) {
-	var (
-		err       error
-		line, res string
-		end       = false
-		conn      *ServiceManager
-	)
-	if conn, err = t.connBuilder(); err != nil {
-		return "", nil
-	}
-	defer func(conn *ServiceManager) {
-		_ = conn.Close()
-	}(conn)
-
-	if err = conn.ServiceStart([]byte{isc_action_svc_trace_list}); err != nil {
+func (t *TraceManager) List() (string, error) { return t.ListContext(context.Background()) }
+func (t *TraceManager) ListContext(ctx context.Context) (result string, err error) {
+	conn, err := t.connBuilder(ctx)
+	if err != nil {
 		return "", err
 	}
+	defer func() { err = errors.Join(err, conn.CloseContext(ctx)) }()
+	if err = conn.ServiceStartContext(ctx, []byte{isc_action_svc_trace_list}); err != nil {
+		return "", err
+	}
+	return conn.WaitStringContext(ctx)
+}
 
-	for {
-		if line, end, err = conn.GetString(); err != nil {
-			return "", nil
+// ID is the server's Trace session ID, not a database attachment or SQL handle.
+func (ts *TraceSession) ID() int32  { return ts.id }
+func (ts *TraceSession) State() int { ts.mu.Lock(); defer ts.mu.Unlock(); return ts.state }
+
+func (ts *TraceSession) acquire(ctx context.Context) error {
+	select {
+	case ts.control <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (ts *TraceSession) Close() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return ts.CloseContext(ctx)
+}
+
+// CloseContext always releases the stream, even when stopping the server-side
+// session fails. Repeated calls return the same combined stop/close error.
+func (ts *TraceSession) CloseContext(ctx context.Context) error {
+	ts.closeOnce.Do(func() {
+		ts.mu.Lock()
+		ts.closed = true
+		ts.mu.Unlock()
+		if err := ts.acquire(ctx); err != nil {
+			ts.closeErr = err
+		} else {
+			ts.closeErr = ts.change(ctx, isc_action_svc_trace_stop, "stopped", SessionStopped)
+			<-ts.control
 		}
-		if end {
-			return res, nil
+		ts.closeErr = errors.Join(ts.closeErr, ts.conn.CloseContext(ctx))
+		ts.mu.Lock()
+		if ts.closeErr != nil {
+			ts.state = SessionFailed
 		}
-		res += line + "\n"
-	}
+		ts.mu.Unlock()
+	})
+	return ts.closeErr
 }
 
-func (ts *TraceSession) Close() (err error) {
-	if ts.state != SessionStopped {
-		if err = ts.Stop(); err != nil {
-			return err
+func (ts *TraceSession) Stop() error { return ts.StopContext(context.Background()) }
+func (ts *TraceSession) StopContext(ctx context.Context) error {
+	return ts.command(ctx, isc_action_svc_trace_stop, "stopped", SessionStopped)
+}
+func (ts *TraceSession) Pause() error { return ts.PauseContext(context.Background()) }
+func (ts *TraceSession) PauseContext(ctx context.Context) error {
+	return ts.command(ctx, isc_action_svc_trace_suspend, "paused", SessionPaused)
+}
+func (ts *TraceSession) Resume() error { return ts.ResumeContext(context.Background()) }
+func (ts *TraceSession) ResumeContext(ctx context.Context) error {
+	return ts.command(ctx, isc_action_svc_trace_resume, "resumed", SessionRunning)
+}
+
+func (ts *TraceSession) command(ctx context.Context, action byte, reply string, next int) error {
+	if err := ts.acquire(ctx); err != nil {
+		return err
+	}
+	defer func() { <-ts.control }()
+	ts.mu.Lock()
+	closed := ts.closed
+	ts.mu.Unlock()
+	if closed {
+		return fmt.Errorf("firebirdsql: trace session closed")
+	}
+	return ts.change(ctx, action, reply, next)
+}
+
+func (ts *TraceSession) change(ctx context.Context, action byte, reply string, next int) (err error) {
+	ts.mu.Lock()
+	old := ts.state
+	if old == SessionStopped && next == SessionStopped {
+		ts.mu.Unlock()
+		return nil
+	}
+	if (next == SessionPaused && old != SessionRunning) || (next == SessionRunning && old != SessionPaused) {
+		ts.mu.Unlock()
+		return fmt.Errorf("firebirdsql: invalid trace session state %d", old)
+	}
+	if next == SessionStopped {
+		ts.state = SessionStopping
+	}
+	ts.mu.Unlock()
+	defer func() {
+		ts.mu.Lock()
+		defer ts.mu.Unlock()
+		if err != nil {
+			ts.state = SessionFailed
+		} else {
+			ts.state = next
 		}
-	}
-	if err = ts.conn.Close(); err != nil {
+	}()
+	conn, err := ts.connBuilder(ctx)
+	if err != nil {
 		return err
 	}
-	ts.conn = nil
-	return nil
-}
-
-func (ts *TraceSession) Stop() (err error) {
-	if ts.state == SessionStopped {
-		return fmt.Errorf("session already stopped")
-	}
-	var auxConn *ServiceManager
-	if auxConn, err = ts.connBuilder(); err != nil {
-		return
-	}
-	defer func(auxConn *ServiceManager) {
-		_ = auxConn.Close()
-	}(auxConn)
-
-	var res string
-	spb := NewXPBWriterFromTag(isc_action_svc_trace_stop)
+	defer func() { err = errors.Join(err, conn.CloseContext(ctx)) }()
+	spb := NewXPBWriterFromTag(action)
 	spb.PutInt32(isc_spb_trc_id, ts.id)
-
-	if err = auxConn.ServiceStart(spb.Bytes()); err != nil {
+	if err = conn.ServiceStartContext(ctx, spb.Bytes()); err != nil {
 		return err
 	}
-	if res, _, err = auxConn.GetString(); err != nil {
+	result, _, err := conn.GetStringContext(ctx)
+	if err != nil {
 		return err
 	}
-	re := regexp.MustCompile(`Trace session ID (\d+) stopped`)
-	match := re.FindStringSubmatch(res)
-	if len(match) == 0 {
-		return fmt.Errorf("unable to stop trace session: %s", res)
-	}
-	ts.state = SessionStopped
-	return nil
+	_, err = parseTraceReply(result, reply, ts.id)
+	return err
 }
 
-func (ts *TraceSession) Pause() (err error) {
-	if ts.state != SessionRunning {
-		return fmt.Errorf("session not running")
-	}
-
-	var auxConn *ServiceManager
-	if auxConn, err = ts.connBuilder(); err != nil {
-		return
-	}
-	defer func(auxConn *ServiceManager) {
-		_ = auxConn.Close()
-	}(auxConn)
-
-	var res string
-	spb := NewXPBWriterFromTag(isc_action_svc_trace_suspend)
-	spb.PutInt32(isc_spb_trc_id, ts.id)
-
-	if err = auxConn.ServiceStart(spb.Bytes()); err != nil {
-		return err
-	}
-	if res, _, err = auxConn.GetString(); err != nil {
-		return err
-	}
-	re := regexp.MustCompile(`Trace session ID (\d+) paused`)
-	match := re.FindStringSubmatch(res)
-	if len(match) == 0 {
-		return fmt.Errorf("unable to pause trace session: %s", res)
-	}
-	ts.state = SessionPaused
-	return nil
+func (ts *TraceSession) Wait() error                           { return ts.WaitContext(context.Background()) }
+func (ts *TraceSession) WaitContext(ctx context.Context) error { return ts.conn.WaitContext(ctx) }
+func (ts *TraceSession) WaitStrings(result chan string) error {
+	return ts.WaitStringsContext(context.Background(), result)
 }
 
-func (ts *TraceSession) Resume() (err error) {
-	if ts.state != SessionPaused {
-		return fmt.Errorf("session not paused")
+// WaitStringsContext does not close result. There is at most one reader per
+// session; another reader returns ErrServiceBusy. Raw Trace may contain SQL,
+// arguments and results: sanitize before storing or exporting it.
+func (ts *TraceSession) WaitStringsContext(ctx context.Context, result chan string) error {
+	err := ts.conn.WaitStringsContext(ctx, result)
+	if err != nil && !errors.Is(err, ErrServiceBusy) {
+		ts.mu.Lock()
+		if ts.state != SessionStopped && ts.state != SessionStopping {
+			ts.state = SessionFailed
+		}
+		ts.mu.Unlock()
 	}
-
-	var auxConn *ServiceManager
-	if auxConn, err = ts.connBuilder(); err != nil {
-		return
-	}
-	defer func(auxConn *ServiceManager) {
-		_ = auxConn.Close()
-	}(auxConn)
-
-	var res string
-	spb := NewXPBWriterFromTag(isc_action_svc_trace_resume)
-	spb.PutInt32(isc_spb_trc_id, ts.id)
-
-	if err = auxConn.ServiceStart(spb.Bytes()); err != nil {
-		return err
-	}
-	if res, _, err = auxConn.GetString(); err != nil {
-		return err
-	}
-	re := regexp.MustCompile(`Trace session ID (\d+) resumed`)
-	match := re.FindStringSubmatch(res)
-	if len(match) == 0 {
-		return fmt.Errorf("unable to resume trace session: %s", res)
-	}
-	ts.state = SessionRunning
-	return nil
-}
-
-func (ts *TraceSession) Wait() (err error) {
-	return ts.conn.Wait()
-}
-
-func (ts *TraceSession) WaitStrings(result chan string) (err error) {
-	return ts.conn.WaitStrings(result)
+	return err
 }

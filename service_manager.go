@@ -24,15 +24,25 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
-	"bytes"
+	"context"
+	"errors"
 	"fmt"
+	"net"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
 type ServiceManager struct {
-	wp     *wireProtocol
-	handle int32
+	wp        *wireProtocol
+	handle    int32
+	mu        sync.Mutex
+	initOnce  sync.Once
+	done      chan struct{}
+	closeOnce sync.Once
+	closeErr  error
+	unusable  atomic.Bool
 }
 
 type StatisticsOptions struct {
@@ -197,13 +207,14 @@ func (sm ServiceManagerOptions) WithAuthPlugin(authPlugin string) ServiceManager
 }
 
 func NewServiceManager(addr string, user string, password string, options ServiceManagerOptions) (*ServiceManager, error) {
-	var err error
+	return NewServiceManagerContext(context.Background(), addr, user, password, options)
+}
+
+// NewServiceManagerContext bounds dialing, authentication and service attachment.
+func NewServiceManagerContext(ctx context.Context, addr string, user string, password string, options ServiceManagerOptions) (_ *ServiceManager, err error) {
 	var wp *wireProtocol
 	if !strings.ContainsRune(addr, ':') {
 		addr += ":3050"
-	}
-	if wp, err = newWireProtocol(addr, "", ""); err != nil {
-		return nil, err
 	}
 
 	wireCryptStr := "false"
@@ -232,28 +243,34 @@ func NewServiceManager(addr string, user string, password string, options Servic
 		return nil, err
 	}
 
-	clientPublic, clientSecret, err := getClientSeed()
+	if wp, err = newWireProtocolContext(ctx, addr, "", ""); err != nil {
+		return nil, err
+	}
+	manager := &ServiceManager{wp: wp}
+	defer func() {
+		if err != nil {
+			_ = wp.conn.Close()
+		}
+	}()
+	err = manager.withContext(ctx, func() error {
+		clientPublic, clientSecret, e := getClientSeed()
+		if e != nil {
+			return e
+		}
+		if e = wp.opConnect("", user, password, connOptions, clientPublic); e != nil {
+			return e
+		}
+		if e = wp._parse_connect_response(user, password, connOptions, clientPublic, clientSecret); e != nil {
+			return e
+		}
+		if e = wp.opServiceAttach(); e != nil {
+			return e
+		}
+		wp.dbHandle, _, _, e = wp.opResponse()
+		return e
+	})
 	if err != nil {
 		return nil, err
-	}
-	if err = wp.opConnect("", user, password, connOptions, clientPublic); err != nil {
-		return nil, err
-	}
-
-	if err = wp._parse_connect_response(user, password, connOptions, clientPublic, clientSecret); err != nil {
-		return nil, err
-	}
-
-	if err = wp.opServiceAttach(); err != nil {
-		return nil, err
-	}
-
-	if wp.dbHandle, _, _, err = wp.opResponse(); err != nil {
-		return nil, err
-	}
-
-	manager := &ServiceManager{
-		wp: wp,
 	}
 	return manager, nil
 }
@@ -267,27 +284,107 @@ func (svc *ServiceManager) WireCipher() string {
 	return svc.wp.conn.plugin
 }
 
-func (svc *ServiceManager) Close() (err error) {
-	if err = svc.wp.opServiceDetach(); err != nil {
-		svc.wp.conn.Close()
+// ErrServiceBusy means another operation owns this service response stream.
+var ErrServiceBusy = errors.New("firebirdsql: service operation already in progress")
+
+func (svc *ServiceManager) init() { svc.initOnce.Do(func() { svc.done = make(chan struct{}) }) }
+
+// withContext owns the protocol until its response reader has returned. Cancellation
+// closes only the socket (net.Conn supports concurrent Close), never sends detach
+// concurrently with a reader, and permanently abandons this service connection.
+func (svc *ServiceManager) withContext(ctx context.Context, fn func() error) error {
+	svc.init()
+	if err := ctx.Err(); err != nil {
 		return err
 	}
-
-	if _, _, _, err = svc.wp.opResponse(); err != nil {
-		svc.wp.conn.Close()
-		return err
+	if !svc.mu.TryLock() {
+		return ErrServiceBusy
 	}
+	defer svc.mu.Unlock()
+	select {
+	case <-svc.done:
+		return net.ErrClosed
+	default:
+	}
+	if svc.unusable.Load() {
+		return net.ErrClosed
+	}
+	stopped := make(chan struct{})
+	stop := context.AfterFunc(ctx, func() {
+		svc.unusable.Store(true)
+		_ = svc.wp.conn.Close()
+		close(stopped)
+	})
+	err := fn()
+	if !stop() {
+		<-stopped
+	}
+	if ctx.Err() != nil {
+		svc.unusable.Store(true)
+		_ = svc.wp.conn.Close()
+		return ctx.Err()
+	}
+	return err
+}
 
-	return svc.wp.conn.Close()
+// Close is idempotent and interrupts a blocked read or channel delivery. If a
+// reader owns the wire, only the transport is closed; no detach packet is sent.
+func (svc *ServiceManager) Close() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return svc.CloseContext(ctx)
+}
+
+// CloseContext bounds graceful detach. An expired context still closes the
+// transport immediately. The first Close call determines the stored result.
+func (svc *ServiceManager) CloseContext(ctx context.Context) error {
+	svc.init()
+	svc.closeOnce.Do(func() {
+		close(svc.done)
+		closeSocket := func() error {
+			err := svc.wp.conn.Close()
+			if errors.Is(err, net.ErrClosed) {
+				return nil
+			}
+			return err
+		}
+		if !svc.mu.TryLock() {
+			svc.closeErr = closeSocket()
+			svc.mu.Lock()
+		} else {
+			if !svc.unusable.Load() && ctx.Err() == nil {
+				stopped := make(chan struct{})
+				stop := context.AfterFunc(ctx, func() { _ = svc.wp.conn.Close(); close(stopped) })
+				svc.closeErr = svc.wp.opServiceDetach()
+				if svc.closeErr == nil {
+					_, _, _, svc.closeErr = svc.wp.opResponse()
+				}
+				if !stop() {
+					<-stopped
+				}
+				if ctx.Err() != nil {
+					svc.closeErr = ctx.Err()
+				}
+			}
+			svc.closeErr = errors.Join(svc.closeErr, closeSocket())
+		}
+		svc.mu.Unlock()
+	})
+	return svc.closeErr
 }
 
 func (svc *ServiceManager) ServiceStart(spb []byte) error {
-	var err error
-	if err = svc.wp.opServiceStart(spb); err != nil {
+	return svc.ServiceStartContext(context.Background(), spb)
+}
+
+func (svc *ServiceManager) ServiceStartContext(ctx context.Context, spb []byte) error {
+	return svc.withContext(ctx, func() error {
+		if err := svc.wp.opServiceStart(spb); err != nil {
+			return err
+		}
+		_, _, _, err := svc.wp.opResponse()
 		return err
-	}
-	_, _, _, err = svc.wp.opResponse()
-	return err
+	})
 }
 
 func (svc *ServiceManager) ServiceAttach(spb []byte, verbose chan string) error {
@@ -313,142 +410,231 @@ func (svc *ServiceManager) IsRunning() (bool, error) {
 	return res > 0, err
 }
 
-func (svc *ServiceManager) Wait() error {
-	var (
-		err     error
-		running bool
-	)
-	for {
-		if running, err = svc.IsRunning(); err != nil {
-			return err
+func (svc *ServiceManager) Wait() error { return svc.WaitContext(context.Background()) }
+
+func (svc *ServiceManager) WaitContext(ctx context.Context) error {
+	return svc.withContext(ctx, func() error {
+		for {
+			buf, err := svc.getServiceInfo(GetServiceInfoSPBPreamble(), []byte{isc_info_svc_running}, BUFFER_LEN)
+			if err != nil {
+				return err
+			}
+			rdr := NewXPBReader(buf[1:])
+			running := rdr.GetInt16()
+			if rdr.Err() != nil {
+				return rdr.Err()
+			}
+			if running == 0 {
+				return nil
+			}
+			if err := svc.waitPoll(ctx); err != nil {
+				return err
+			}
 		}
-		if !running {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
+	})
+}
+
+func (svc *ServiceManager) waitPoll(ctx context.Context) error {
+	timer := time.NewTimer(10 * time.Millisecond)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-svc.done:
+		return net.ErrClosed
+	case <-timer.C:
+		return nil
 	}
-	return nil
+}
+
+// serviceChunk validates the unsigned length before exposing any service output.
+// A nonempty payload without a trailer is accepted for legacy binary services.
+func serviceChunk(buf []byte, item byte) (data []byte, end, pending bool, err error) {
+	if len(buf) == 0 {
+		return nil, false, false, fmt.Errorf("firebirdsql: empty service response")
+	}
+	if buf[0] == isc_info_end {
+		return nil, true, false, nil
+	}
+	if buf[0] == isc_info_truncated {
+		return nil, false, false, fmt.Errorf("firebirdsql: service response truncated")
+	}
+	if buf[0] != item || len(buf) < 3 {
+		return nil, false, false, fmt.Errorf("firebirdsql: invalid service response")
+	}
+	n := int(bytes_to_uint16(buf[1:3]))
+	if n > len(buf)-3 {
+		return nil, false, false, fmt.Errorf("firebirdsql: invalid service payload length %d", n)
+	}
+	data = buf[3 : 3+n]
+	tail := buf[3+n:]
+	if len(tail) == 0 {
+		if n != 0 {
+			return data, false, false, nil
+		}
+		return nil, false, false, fmt.Errorf("firebirdsql: missing service status")
+	}
+	switch tail[0] {
+	case isc_info_end:
+		return data, n == 0, false, nil
+	case isc_info_svc_timeout, isc_info_data_not_ready:
+		return data, false, n == 0, nil
+	case isc_info_truncated:
+		return data, false, n == 0, nil
+	default:
+		return nil, false, false, fmt.Errorf("firebirdsql: unexpected service status %d", tail[0])
+	}
 }
 
 func (svc *ServiceManager) WaitBuffer(stream chan []byte) error {
-	var (
-		err          error
-		buf          []byte
-		cont               = true
-		bufferLength int32 = BUFFER_LEN
-	)
-	for cont {
-		spb := NewXPBWriterFromBytes(GetServiceInfoSPBPreamble())
-		spb.PutByte(isc_info_svc_timeout, 1)
-		if buf, err = svc.GetServiceInfo(spb.Bytes(), []byte{isc_info_svc_to_eof}, bufferLength); err != nil {
-			return err
-		}
-		switch buf[0] {
-		case isc_info_svc_to_eof:
-			if len(buf) < 4 {
-				return fmt.Errorf("firebirdsql: service stream chunk too short (%d bytes)", len(buf))
-			}
-			// dataLen is a USHORT; read it unsigned so a chunk over 32 KiB can't go negative.
-			dataLen := int(bytes_to_uint16(buf[1:3]))
-			if dataLen == 0 {
-				if buf[3] == isc_info_svc_timeout {
-					break
-				} else if buf[3] != isc_info_end {
-					return fmt.Errorf("unexpected end of stream")
-				} else {
-					cont = false
-					break
-				}
-			}
-			if 3+dataLen > len(buf) {
-				return fmt.Errorf("firebirdsql: service stream chunk length %d exceeds buffer (%d bytes)", dataLen, len(buf))
-			}
-			stream <- buf[3 : 3+dataLen]
-		case isc_info_truncated:
-			// Bound the growth: endless isc_info_truncated would overflow bufferLength negative.
-			if bufferLength >= maxWirePayload {
-				return fmt.Errorf("firebirdsql: service response exceeds %d bytes", maxWirePayload)
-			}
-			bufferLength *= 2
-		case isc_info_end:
-			cont = false
-		}
-	}
-	return nil
+	return svc.WaitBufferContext(context.Background(), stream)
 }
 
-func (svc *ServiceManager) WaitStrings(result chan string) error {
-	var (
-		err  error
-		line string
-		end  = false
-	)
+// WaitBufferContext delivers bounded chunks without closing the caller's channel.
+// Cancellation abandons this service connection; it must not be reused.
+func (svc *ServiceManager) WaitBufferContext(ctx context.Context, stream chan []byte) error {
+	return svc.withContext(ctx, func() error {
+		return svc.stream(ctx, isc_info_svc_to_eof, func(data []byte) error {
+			select {
+			case stream <- data:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-svc.done:
+				return net.ErrClosed
+			}
+		})
+	})
+}
 
+func (svc *ServiceManager) stream(ctx context.Context, item byte, consume func([]byte) error) error {
 	for {
-		if line, end, err = svc.GetString(); err != nil {
+		data, end, pending, err := svc.readChunk(item)
+		if err != nil {
 			return err
+		}
+		if len(data) != 0 {
+			if err = consume(data); err != nil {
+				return err
+			}
 		}
 		if end {
 			return nil
 		}
-		result <- line
+		if pending {
+			if err = svc.waitPoll(ctx); err != nil {
+				return err
+			}
+		}
+		if err = ctx.Err(); err != nil {
+			return err
+		}
 	}
+}
+
+func (svc *ServiceManager) readChunk(item byte) ([]byte, bool, bool, error) {
+	// Services API timeout is a length-prefixed integer, not an SPB boolean.
+	spb := []byte{isc_info_svc_timeout, 4, 0, 1, 0, 0, 0}
+	buf, err := svc.getServiceInfo(spb, []byte{item}, BUFFER_LEN)
+	if err != nil {
+		return nil, false, false, err
+	}
+	return serviceChunk(buf, item)
+}
+
+func (svc *ServiceManager) WaitStrings(result chan string) error {
+	return svc.WaitStringsContext(context.Background(), result)
+}
+
+// WaitStringsContext keeps the legacy channel ownership contract: the caller
+// closes result. Cancellation also interrupts delivery to an unread channel.
+func (svc *ServiceManager) WaitStringsContext(ctx context.Context, result chan string) error {
+	return svc.withContext(ctx, func() error {
+		return svc.stream(ctx, isc_info_svc_line, func(data []byte) error {
+			select {
+			case result <- string(data):
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-svc.done:
+				return net.ErrClosed
+			}
+		})
+	})
 }
 
 func (svc *ServiceManager) WaitString() (string, error) {
-	part := make(chan string)
-	errCh := make(chan error, 1)
-
-	go func() {
-		errCh <- svc.WaitStrings(part)
-		close(part)
-	}()
-
-	var result string
-	for s := range part {
-		result += s + "\n"
-	}
-
-	return result, <-errCh
+	return svc.WaitStringContext(context.Background())
 }
 
-func (svc *ServiceManager) GetString() (result string, end bool, err error) {
-	var buf []byte
-	if buf, err = svc.GetServiceInfo(GetServiceInfoSPBPreamble(), []byte{isc_info_svc_line}, -1); err != nil {
-		return "", false, err
-	}
-	if len(buf) < 4 {
-		return "", false, fmt.Errorf("firebirdsql: service line response too short (%d bytes)", len(buf))
-	}
-	if bytes.Equal(buf[:4], []byte{isc_info_svc_line, 0, 0, isc_info_end}) {
-		return "", true, nil
-	}
+// MaxServiceOutputBytes bounds convenience methods that collect a whole service
+// response. For larger output use WaitStringsContext or WaitBufferContext.
+const MaxServiceOutputBytes = 16 << 20
 
-	rdr := NewXPBReader(buf[1:])
-	result = rdr.GetString()
-	return result, false, rdr.Err()
+func (svc *ServiceManager) WaitStringContext(ctx context.Context) (string, error) {
+	var result strings.Builder
+	err := svc.withContext(ctx, func() error {
+		return svc.stream(ctx, isc_info_svc_line, func(data []byte) error {
+			if result.Len()+len(data)+1 > MaxServiceOutputBytes {
+				return fmt.Errorf("firebirdsql: service output exceeds %d bytes", MaxServiceOutputBytes)
+			}
+			result.Write(data)
+			result.WriteByte('\n')
+			return nil
+		})
+	})
+	return result.String(), err
 }
 
-func (svc *ServiceManager) GetServiceInfo(spb []byte, srb []byte, bufferLength int32) ([]byte, error) {
-	var buf []byte
-	var err error
+func (svc *ServiceManager) GetString() (string, bool, error) {
+	return svc.GetStringContext(context.Background())
+}
 
-	if err = svc.wp.opServiceInfo(spb, srb, bufferLength); err != nil {
+func (svc *ServiceManager) GetStringContext(ctx context.Context) (result string, end bool, err error) {
+	err = svc.withContext(ctx, func() error {
+		for {
+			data, finished, pending, e := svc.readChunk(isc_info_svc_line)
+			if e != nil {
+				return e
+			}
+			if !pending {
+				result, end = string(data), finished
+				return nil
+			}
+			if e = svc.waitPoll(ctx); e != nil {
+				return e
+			}
+		}
+	})
+	return
+}
+
+func (svc *ServiceManager) GetServiceInfo(spb []byte, srb []byte, bufferLength int32) (buf []byte, err error) {
+	err = svc.withContext(context.Background(), func() error {
+		var e error
+		buf, e = svc.getServiceInfo(spb, srb, bufferLength)
+		return e
+	})
+	return
+}
+
+func (svc *ServiceManager) getServiceInfo(spb []byte, srb []byte, bufferLength int32) ([]byte, error) {
+	if len(srb) == 0 {
+		return nil, fmt.Errorf("firebirdsql: empty service request")
+	}
+	if err := svc.wp.opServiceInfo(spb, srb, bufferLength); err != nil {
 		return nil, err
 	}
-
-	if _, _, buf, err = svc.wp.opResponse(); err != nil {
+	_, _, buf, err := svc.wp.opResponse()
+	if err != nil {
 		return nil, err
 	}
-
 	if len(buf) == 0 {
 		return nil, fmt.Errorf("response buffer is empty")
 	}
-
-	if buf[0] != srb[0] {
+	if buf[0] != srb[0] && buf[0] != isc_info_end && buf[0] != isc_info_truncated {
 		return nil, fmt.Errorf("wrong item '%d' response buffer", buf[0])
 	}
-
 	return buf, nil
 }
 
