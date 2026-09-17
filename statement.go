@@ -243,21 +243,19 @@ func (stmt *firebirdsqlStmt) exec(ctx context.Context, args []driver.Value) (res
 		return
 	}
 
+	records, countErr := decodeStatementRecords(buf)
 	var rowcount int64
-	if len(buf) >= 32 {
-		if stmt.stmtType == isc_info_sql_stmt_select ||
-			stmt.stmtType == isc_info_sql_stmt_select_for_upd {
-			rowcount = int64(bytes_to_int32(buf[20:24]))
-		} else {
-			rowcount = int64(bytes_to_int32(buf[27:31]) + bytes_to_int32(buf[6:10]) + bytes_to_int32(buf[13:17]))
-		}
+	if countErr == nil {
+		rowcount, countErr = records.rowsAffected(stmt.stmtType)
+	}
+	// Execution already succeeded. Invalid count metadata belongs to RowsAffected,
+	// never to Exec's error (and must not prevent the existing autocommit).
+	if countErr != nil {
+		result = &firebirdsqlResultCountError{err: countErr}
 	} else {
-		rowcount = 0
+		result = &firebirdsqlResult{affectedRows: rowcount}
 	}
 
-	result = &firebirdsqlResult{
-		affectedRows: rowcount,
-	}
 	if stmt.fc.tx.isAutocommit {
 		if cerr := stmt.fc.tx.commitRetainging(); cerr != nil {
 			return result, cerr
