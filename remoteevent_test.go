@@ -28,7 +28,8 @@ func TestEventManagerWait_OversizedBuffer(t *testing.T) {
 	f.int32(7)                // event handle
 	f.int32(maxEpbLength + 1) // claimed event-buffer size: out of range
 
-	em := &eventManager{wp: testProtocol(f.bytes())}
+	em := &eventManager{wp: testProtocol(f.bytes()), done: make(chan struct{})}
+	t.Cleanup(func() { <-em.done })
 	chErr := em.wait(newRemoteEvent(), make(chan Event, 1))
 	err := <-chErr
 	if err == nil {
@@ -44,7 +45,8 @@ func TestEventManagerWait_TruncatedRead(t *testing.T) {
 	f.int32(op_event)
 	f.int32(7) // handle, then the stream ends before the size word
 
-	em := &eventManager{wp: testProtocol(f.bytes())}
+	em := &eventManager{wp: testProtocol(f.bytes()), done: make(chan struct{})}
+	t.Cleanup(func() { <-em.done })
 	chErr := em.wait(newRemoteEvent(), make(chan Event, 1))
 	if err := <-chErr; err == nil {
 		t.Fatal("expected error for truncated event frame, got nil")

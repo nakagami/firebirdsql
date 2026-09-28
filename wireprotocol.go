@@ -2033,6 +2033,9 @@ func (p *wireProtocol) opConnectRequest() error {
 	p.packInt(p.dbHandle)
 	p.packInt(partner_identification)
 	_, err := p.sendPackets()
+	if err == nil {
+		err = p.conn.Flush()
+	}
 	return err
 }
 
@@ -2045,6 +2048,9 @@ func (p *wireProtocol) opQueEvents(auxHandle int32, epb []byte, eventId int32) e
 	p.packInt(argument_to_ast_routine)
 	p.packInt(eventId)
 	_, err := p.sendPackets()
+	if err == nil {
+		err = p.conn.Flush()
+	}
 	return err
 }
 
