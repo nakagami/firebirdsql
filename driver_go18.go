@@ -54,29 +54,46 @@ func (stmt *firebirdsqlStmt) QueryContext(ctx context.Context, namedargs []drive
 }
 
 func (fc *firebirdsqlConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
+	isolationLevel, err := txIsolationLevel(opts)
+	if err != nil {
+		return nil, err
+	}
+	var tx driver.Tx
+	err = fc.wp.withContextDeadline(ctx, func() error {
+		var err error
+		tx, err = fc.begin(isolationLevel)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return tx, nil
+}
+
+func txIsolationLevel(opts driver.TxOptions) (int, error) {
 	if opts.ReadOnly {
 		// Preserve existing behaviour: readonly always uses READ COMMITTED RO.
 		// The only extra knob we currently support here is NOWAIT.
 		if (sql.IsolationLevel)(opts.Isolation) == LevelReadCommittedNoWait {
-			return fc.begin(ISOLATION_LEVEL_READ_COMMITED_RO_NOWAIT)
+			return ISOLATION_LEVEL_READ_COMMITED_RO_NOWAIT, nil
 		}
-		return fc.begin(ISOLATION_LEVEL_READ_COMMITED_RO)
+		return ISOLATION_LEVEL_READ_COMMITED_RO, nil
 	}
 
 	switch (sql.IsolationLevel)(opts.Isolation) {
 	case sql.LevelDefault:
-		return fc.begin(ISOLATION_LEVEL_READ_COMMITED)
+		return ISOLATION_LEVEL_READ_COMMITED, nil
 	case sql.LevelReadCommitted:
-		return fc.begin(ISOLATION_LEVEL_READ_COMMITED)
+		return ISOLATION_LEVEL_READ_COMMITED, nil
 	case LevelReadCommittedNoWait:
-		return fc.begin(ISOLATION_LEVEL_READ_COMMITED_NOWAIT)
+		return ISOLATION_LEVEL_READ_COMMITED_NOWAIT, nil
 	case sql.LevelRepeatableRead:
-		return fc.begin(ISOLATION_LEVEL_REPEATABLE_READ)
+		return ISOLATION_LEVEL_REPEATABLE_READ, nil
 	case sql.LevelSerializable:
-		return fc.begin(ISOLATION_LEVEL_SERIALIZABLE)
+		return ISOLATION_LEVEL_SERIALIZABLE, nil
 	default:
 	}
-	return nil, errors.New("This isolation level is not supported.")
+	return 0, errors.New("This isolation level is not supported.")
 }
 
 func (fc *firebirdsqlConn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
@@ -142,7 +159,8 @@ func (fc *firebirdsqlConn) QueryContext(ctx context.Context, query string, named
 // ================== Implementation of the Connector interface ====================
 
 type firebirdConnector struct {
-	dsn *firebirdDsn
+	dsn    *firebirdDsn
+	dsnErr error
 }
 
 func (d *firebirdConnector) OpenConnector(dsns string) (driver.Connector, error) {
@@ -158,5 +176,8 @@ func (fc *firebirdConnector) Driver() driver.Driver {
 }
 
 func (fc *firebirdConnector) Connect(ctx context.Context) (driver.Conn, error) {
-	return attachFirebirdsqlConn(fc.dsn)
+	if fc.dsnErr != nil {
+		return nil, fc.dsnErr
+	}
+	return attachFirebirdsqlConn(ctx, fc.dsn)
 }

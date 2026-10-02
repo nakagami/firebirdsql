@@ -106,6 +106,11 @@ type wireProtocol struct {
 	dbHandle int32
 	addr     string
 
+	// desynced is set when a context abandoned a request/response exchange
+	// halfway (see withContextDeadline): the next bytes on the wire belong to
+	// that exchange, so Close drops the socket instead of talking to the server.
+	desynced bool
+
 	protocolVersion    int32
 	acceptArchitecture int32
 	acceptType         int32

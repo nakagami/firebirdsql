@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
+	"context"
 	"database/sql"
 	"database/sql/driver"
 )
@@ -35,7 +36,16 @@ func (d *firebirdsqlDriver) Open(dsns string) (driver.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return attachFirebirdsqlConn(dsn)
+	return attachFirebirdsqlConn(context.Background(), dsn)
+}
+
+// OpenConnector implements driver.DriverContext, so database/sql opens new
+// connections through Connector.Connect and the caller's context bounds the
+// dial and the handshake. A malformed DSN is still reported by the first
+// connection attempt, not by sql.Open, as before.
+func (d *firebirdsqlDriver) OpenConnector(dsns string) (driver.Connector, error) {
+	dsn, err := parseDSN(dsns)
+	return &firebirdConnector{dsn: dsn, dsnErr: err}, nil
 }
 
 type firebirdsqlCreateDbDriver struct{}
@@ -45,7 +55,7 @@ func (d *firebirdsqlCreateDbDriver) Open(dsns string) (driver.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return createFirebirdsqlConn(dsn)
+	return createFirebirdsqlConn(context.Background(), dsn)
 }
 
 func init() {
