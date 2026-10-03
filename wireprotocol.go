@@ -1824,12 +1824,17 @@ var abandonReadTimeout = 10 * time.Second
 // silent wire must not hang the caller: cancelAndDrain's cancel-ack read, and the teardown
 // reads (statement/cursor close, autocommit commit-retaining, rollback, detach) that
 // database/sql's awaitDone goroutine can reach automatically when a QueryContext deadline
-// fires mid-fetch. The deadline is cleared on return regardless; on timeout the caller
-// discards the connection rather than reusing it.
+// fires mid-fetch. The deadline is cleared on return regardless. On timeout the response
+// is still owed on the wire, so the protocol is marked desynced: IsValid then reports the
+// connection as unusable and database/sql discards it instead of pooling it.
 func (p *wireProtocol) opResponseTimeout(d time.Duration) (int32, []byte, []byte, error) {
 	p.conn.SetDeadline(time.Now().Add(d))
 	defer p.conn.SetDeadline(time.Time{})
-	return p.opResponse()
+	h, oid, buf, err := p.opResponse()
+	if errors.Is(err, os.ErrDeadlineExceeded) {
+		p.desynced = true
+	}
+	return h, oid, buf, err
 }
 
 func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) ([]driver.Value, error) {
