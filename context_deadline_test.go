@@ -28,6 +28,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"net"
 	"strings"
 	"testing"
@@ -170,19 +171,33 @@ func TestStalledServerHonorsContext(t *testing.T) {
 	})
 
 	for _, tc := range []struct {
-		name string
-		fn   func(ctx context.Context, db *sql.DB) error
+		name        string
+		stallBefore bool // stall before fn; otherwise fn stalls the wire itself
+		fn          func(ctx context.Context, db *sql.DB) error
 	}{
-		{"begin", func(ctx context.Context, db *sql.DB) error {
+		{"begin", true, func(ctx context.Context, db *sql.DB) error {
 			tx, err := db.BeginTx(ctx, nil)
 			if err == nil {
 				tx.Rollback()
 			}
 			return err
 		}},
-		{"prepare", func(ctx context.Context, db *sql.DB) error {
+		{"prepare", true, func(ctx context.Context, db *sql.DB) error {
 			var n int
 			return db.QueryRowContext(ctx, "select 1 from rdb$database").Scan(&n)
+		}},
+		// Tx.Commit takes no context: the BeginTx one has to bound it.
+		{"commit", false, func(ctx context.Context, db *sql.DB) error {
+			tx, err := db.BeginTx(ctx, nil)
+			if err != nil {
+				return fmt.Errorf("begin before the stall: %w", err)
+			}
+			var n int
+			if err := tx.QueryRowContext(ctx, "select 1 from rdb$database").Scan(&n); err != nil {
+				return fmt.Errorf("query before the stall: %w", err)
+			}
+			proxy.stall()
+			return tx.Commit()
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -197,7 +212,9 @@ func TestStalledServerHonorsContext(t *testing.T) {
 				t.Fatalf("warm-up ping: %v", err)
 			}
 
-			proxy.stall()
+			if tc.stallBefore {
+				proxy.stall()
+			}
 			expectDeadline(t, tc.name, func(ctx context.Context) error { return tc.fn(ctx, db) })
 			proxy.release()
 
@@ -208,5 +225,47 @@ func TestStalledServerHonorsContext(t *testing.T) {
 				t.Fatalf("query after release: n=%d err=%v", n, err)
 			}
 		})
+	}
+}
+
+// TestCommitWithLiveContext: bounding Commit by the BeginTx context must not
+// change a normal commit: the row is there afterwards, and the connection is
+// reused for an autocommit statement.
+func TestCommitWithLiveContext(t *testing.T) {
+	_, dsn, err := CreateTestDatabase("test_ctx_commit_")
+	if err != nil {
+		t.Fatalf("create test database: %v", err)
+	}
+	time.Sleep(1 * time.Second)
+	db, err := sql.Open("firebirdsql", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec("create table ctx_commit (i integer)"); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx, "insert into ctx_commit values (1)"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	cancel() // the finished transaction's context must not affect the connection
+
+	var n int
+	if err := db.QueryRow("select count(*) from ctx_commit").Scan(&n); err != nil || n != 1 {
+		t.Fatalf("after commit: n=%d err=%v", n, err)
+	}
+	if _, err := db.Exec("insert into ctx_commit values (2)"); err != nil {
+		t.Fatalf("autocommit after a ctx-bound commit: %v", err)
 	}
 }

@@ -67,6 +67,7 @@ func (fc *firebirdsqlConn) BeginTx(ctx context.Context, opts driver.TxOptions) (
 	if err != nil {
 		return nil, err
 	}
+	tx.(*firebirdsqlTx).ctx = ctx // bounds Commit (see firebirdsqlTx.Commit)
 	return tx, nil
 }
 

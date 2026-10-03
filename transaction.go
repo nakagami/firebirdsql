@@ -23,12 +23,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 package firebirdsql
 
+import "context"
+
 type firebirdsqlTx struct {
 	fc             *firebirdsqlConn
 	isolationLevel int
 	isAutocommit   bool
 	transHandle    int32
 	needBegin      bool
+	// ctx is the BeginTx context. database/sql documents it as used until the
+	// transaction is committed or rolled back, and Tx.Commit takes no context
+	// of its own, so Commit is bounded by it. Nil for the connection's
+	// autocommit transaction.
+	ctx context.Context
 }
 
 func tpbForIsolationLevel(isolationLevel int) ([]byte, error) {
@@ -123,19 +130,33 @@ func (tx *firebirdsqlTx) commitRetainging() (err error) {
 	return
 }
 
+// Commit is bounded by the BeginTx context: if it ends before the server answers,
+// Commit returns the context error wrapped with driver.ErrBadConn and the
+// connection is discarded. As with any connection lost mid-commit, the outcome of
+// the commit on the server is then unknown.
 func (tx *firebirdsqlTx) Commit() (err error) {
-	err = tx.fc.wp.opCommit(tx.transHandle)
-	if err != nil {
-		return err
+	ctx := tx.ctx
+	tx.ctx = nil
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	_, _, _, err = tx.fc.wp.opResponse()
+	err = tx.fc.wp.withContextDeadline(ctx, func() error {
+		if err := tx.fc.wp.opCommit(tx.transHandle); err != nil {
+			return err
+		}
+		_, _, _, err := tx.fc.wp.opResponse()
+		return err
+	})
 	tx.fc.wp.clearInlineBlobCache(tx.transHandle)
 	tx.isAutocommit = tx.fc.isAutocommit
 	tx.needBegin = true
 	return
 }
 
+// Rollback keeps its fixed teardown bound instead of the BeginTx context:
+// database/sql rolls back precisely when that context has ended.
 func (tx *firebirdsqlTx) Rollback() (err error) {
+	tx.ctx = nil
 	err = tx.fc.wp.opRollback(tx.transHandle)
 	if err != nil {
 		return err
