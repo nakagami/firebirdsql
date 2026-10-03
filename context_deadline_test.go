@@ -187,14 +187,16 @@ func TestStalledServerHonorsContext(t *testing.T) {
 			return db.QueryRowContext(ctx, "select 1 from rdb$database").Scan(&n)
 		}},
 		// Tx.Commit takes no context: the BeginTx one has to bound it.
+		// Setup errors are not wrapped (%v): a deadline hit before Commit must
+		// fail the test, not pass as the expected commit timeout.
 		{"commit", false, func(ctx context.Context, db *sql.DB) error {
 			tx, err := db.BeginTx(ctx, nil)
 			if err != nil {
-				return fmt.Errorf("begin before the stall: %w", err)
+				return fmt.Errorf("begin before the stall: %v", err)
 			}
 			var n int
 			if err := tx.QueryRowContext(ctx, "select 1 from rdb$database").Scan(&n); err != nil {
-				return fmt.Errorf("query before the stall: %w", err)
+				return fmt.Errorf("query before the stall: %v", err)
 			}
 			proxy.stall()
 			return tx.Commit()
