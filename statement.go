@@ -175,19 +175,30 @@ func (stmt *firebirdsqlStmt) ensureInputXsqlda(args []driver.Value) error {
 	return nil
 }
 
+// prepareExecute runs the round-trips that precede op_execute (lazy begin,
+// re-prepare of a freed handle, bind metadata) bounded by ctx. It returns the
+// statement to execute, which is a new one when the handle had been freed.
+func (stmt *firebirdsqlStmt) prepareExecute(ctx context.Context, args []driver.Value) (*firebirdsqlStmt, error) {
+	err := stmt.fc.wp.withContextDeadline(ctx, func() error {
+		if stmt.fc.tx.needBegin {
+			if err := stmt.fc.tx.begin(); err != nil {
+				return err
+			}
+		}
+		if stmt.stmtHandle == -1 {
+			s, err := newFirebirdsqlStmt(stmt.fc, stmt.queryString)
+			if err != nil {
+				return err
+			}
+			stmt = s
+		}
+		return stmt.ensureInputXsqlda(args)
+	})
+	return stmt, err
+}
+
 func (stmt *firebirdsqlStmt) exec(ctx context.Context, args []driver.Value) (result driver.Result, err error) {
-	if stmt.fc.tx.needBegin {
-		if err = stmt.fc.tx.begin(); err != nil {
-			return
-		}
-	}
-	if stmt.stmtHandle == -1 {
-		stmt, err = newFirebirdsqlStmt(stmt.fc, stmt.queryString)
-		if err != nil {
-			return
-		}
-	}
-	if err = stmt.ensureInputXsqlda(args); err != nil {
+	if stmt, err = stmt.prepareExecute(ctx, args); err != nil {
 		return
 	}
 	err = stmt.fc.wp.opExecute(stmt, args, stmt.inputXsqlda)
@@ -273,20 +284,7 @@ func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (dr
 	var err error
 	var result []driver.Value
 
-	if stmt.fc.tx.needBegin {
-		if err = stmt.fc.tx.begin(); err != nil {
-			return nil, err
-		}
-	}
-
-	if stmt.stmtHandle == -1 {
-		stmt, err = newFirebirdsqlStmt(stmt.fc, stmt.queryString)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if err = stmt.ensureInputXsqlda(args); err != nil {
+	if stmt, err = stmt.prepareExecute(ctx, args); err != nil {
 		return nil, err
 	}
 
