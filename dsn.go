@@ -97,6 +97,11 @@ func parseDSN(dsns string) (*firebirdDsn, error) {
 		"wire_compress":        "false",
 		"max_inline_blob_size": "65536",
 		"max_blob_cache_size":  "10485760",
+		// Cancel hard-drop: close the socket when a canceled statement's
+		// read has not returned after cancel_hard_drop_grace ms (op_cancel
+		// raise cannot interrupt waits inside an executing statement).
+		"cancel_hard_drop":       "false",
+		"cancel_hard_drop_grace": "3000",
 	}
 
 	for k, v := range default_options {

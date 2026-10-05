@@ -138,6 +138,17 @@ type wireProtocol struct {
 	maxInlineBlobSize int32
 	maxBlobCacheSize  int32
 	inlineBlobCache   *inlineBlobCache
+
+	// Hard-drop on cancel (opt-in, DSN cancel_hard_drop=true): after a
+	// ctx cancel fired op_cancel and the wrapped read still has not
+	// returned within cancelHardDropGrace, close the socket. FB does not
+	// honor op_cancel raise for waits inside an executing statement (e.g.
+	// a lock wait inside a running SP), so without this the read can
+	// outlive any client timeout. cancelHardDropOnce guards the one-shot
+	// close; the connection is dead either way once dropped.
+	cancelHardDrop      bool
+	cancelHardDropGrace time.Duration
+	cancelHardDropOnce  sync.Once
 }
 
 func newWireProtocol(addr string, timezone string, charset string) (*wireProtocol, error) {
