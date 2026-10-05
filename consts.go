@@ -509,6 +509,7 @@ const (
 	op_transaction        = 29
 	op_commit             = 30
 	op_rollback           = 31
+	op_prepare            = 32 // two-phase transaction prepare (limbo generator / 2PC)
 	op_open_blob          = 35
 	op_get_segment        = 36
 	op_put_segment        = 37
@@ -600,13 +601,57 @@ const (
 	ISOLATION_LEVEL_READ_COMMITED_RO_NOWAIT
 )
 
+// Additional isolation presets completing the matrix used by fb-loadgen
+// (values 7..10; the iota block above stays 0..6 for wire compatibility).
+const (
+	ISOLATION_LEVEL_READ_COMMITED_LEGACY_NOWAIT = 7 // RC, no_rec_version, nowait
+	ISOLATION_LEVEL_REPEATABLE_READ_NOWAIT      = 8 // snapshot (concurrency), nowait
+	ISOLATION_LEVEL_REPEATABLE_READ_RO          = 9 // snapshot, read-only
+	ISOLATION_LEVEL_SERIALIZABLE_RO             = 10 // consistency, read-only
+)
+
+// numInternalIsolationLevels bounds the iso component of the encoded levels below.
+const numInternalIsolationLevels = 11
+
 // Driver-specific transaction isolation levels for database/sql.
 //
-// database/sql doesn't have a way to express Firebird's NOWAIT/LOCK TIMEOUT,
-// so this driver exposes a custom value for use in sql.TxOptions.Isolation.
+// database/sql doesn't have a way to express Firebird's NOWAIT/LOCK TIMEOUT
+// or the transaction completion intents used by fb-loadgen, so this driver
+// encodes them into the numeric IsolationLevel value (it travels through
+// database/sql unchanged and is decoded in BeginTx):
 const (
-	// LevelReadCommittedNoWait starts a READ COMMITTED transaction with NOWAIT lock resolution.
-	LevelReadCommittedNoWait = 1000
+	// Unambiguous driver-level presets (1000..1999): plain internal constants
+	// 0..6 must not travel through database/sql as IsolationLevel values
+	// because they collide with the sql.Level* numbers.
+	LevelReadCommittedNoWait       = 1000 // RC rec_version, nowait
+	LevelReadCommittedRecVersion   = 1050 // RC rec_version, wait (LevelDefault equivalent, explicit)
+	LevelReadCommittedLegacy       = 1100 // RC no_rec_version, wait
+	LevelReadCommittedLegacyNoWait = 1150 // RC no_rec_version, nowait
+	LevelSnapshot                  = 1200 // snapshot (concurrency), wait
+	LevelSnapshotNoWait            = 1250 // snapshot, nowait
+	LevelConsistency               = 1300 // consistency (table stability), wait
+
+	// LevelLockTimeoutBase+n (1 <= n <= maxLockTimeout) starts a READ COMMITTED
+	// (rec_version) transaction in WAIT mode with isc_tpb_lock_timeout = n seconds.
+	LevelLockTimeoutBase = 2000
+	maxLockTimeout       = 2998 // keep the range below LevelCommitRetainingBase
+
+	// LevelCommitRetainingBase+iso commits with COMMIT RETAINING; the wire
+	// transaction stays live and is reused as the next transaction on the
+	// connection (iso = one of the ISOLATION_LEVEL_* constants).
+	LevelCommitRetainingBase = 5000
+	// LevelRollbackRetainingBase+iso rolls back with ROLLBACK RETAINING.
+	LevelRollbackRetainingBase = 6000
+	// LevelPrepareThenDieBase+iso prepares the transaction (isc_prepare_transaction)
+	// and then drops the socket: the transaction stays in limbo (single-database).
+	LevelPrepareThenDieBase = 7000
+	// LevelHardDropBase+iso closes the socket without rollback while the
+	// transaction is open (server-side cleanup / crash simulation).
+	LevelHardDropBase = 8000
+
+	// MaxLockTimeoutSec is the largest accepted lock-timeout value in seconds
+	// (also the server-side limit: MAX_SSHORT in tra.cpp).
+	MaxLockTimeoutSec = 32767
 )
 
 // Event
@@ -671,3 +716,29 @@ const (
 	ReplicaModeReadOnly  ReplicaMode = isc_spb_prp_rm_readonly
 	ReplicaModeReadWrite ReplicaMode = isc_spb_prp_rm_readwrite
 )
+
+// Exported aliases of the isolation presets so callers can compose the
+// encoded completion intents (e.g. LevelCommitRetainingBase + IsoRC) and
+// validate decoded scenarios.
+const (
+	IsoRCLegacy       = ISOLATION_LEVEL_READ_COMMITED_LEGACY      // RC, no_rec_version, wait
+	IsoRC             = ISOLATION_LEVEL_READ_COMMITED             // RC, rec_version, wait
+	IsoSnapshot       = ISOLATION_LEVEL_REPEATABLE_READ           // snapshot (concurrency), wait
+	IsoConsistency    = ISOLATION_LEVEL_SERIALIZABLE              // consistency, wait
+	IsoRCRO           = ISOLATION_LEVEL_READ_COMMITED_RO          // RC rec_version, read-only, wait
+	IsoRCNoWait       = ISOLATION_LEVEL_READ_COMMITED_NOWAIT      // RC rec_version, nowait
+	IsoRCRONoWait     = ISOLATION_LEVEL_READ_COMMITED_RO_NOWAIT   // RC RO, nowait
+	IsoRCLegacyNoWait = ISOLATION_LEVEL_READ_COMMITED_LEGACY_NOWAIT
+	IsoSnapshotNoWait = ISOLATION_LEVEL_REPEATABLE_READ_NOWAIT
+	IsoSnapshotRO     = ISOLATION_LEVEL_REPEATABLE_READ_RO
+	IsoConsistencyRO  = ISOLATION_LEVEL_SERIALIZABLE_RO
+)
+
+// NumInternalIsolationLevels is the bound of the internal preset values used
+// by the encoded completion intents (Level*Base + iso).
+const NumInternalIsolationLevels = numInternalIsolationLevels
+
+// MaxLockTimeoutEnc is the largest lock-timeout seconds value representable
+// in the LevelLockTimeoutBase encoding (keeps the range below
+// LevelCommitRetainingBase).
+const MaxLockTimeoutEnc = maxLockTimeout

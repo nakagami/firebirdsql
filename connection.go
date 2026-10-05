@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
+	"bytes"
 	"context"
 	"database/sql/driver"
 	"fmt"
@@ -70,6 +71,42 @@ func (fc *firebirdsqlConn) begin(isolationLevel int) (driver.Tx, error) {
 	return driver.Tx(tx), err
 }
 
+// beginScenario starts a transaction for a decoded scenario, reusing a live
+// retained context (commit/rollback-retaining leaves the wire transaction as
+// the next transaction on this connection) when the requested TPB matches.
+func (fc *firebirdsqlConn) beginScenario(sc txScenario) (driver.Tx, error) {
+	tpb, err := sc.tpbBytes()
+	if err != nil {
+		return nil, err
+	}
+	if t := fc.tx; t != nil && !t.needBegin && t.retained {
+		if bytes.Equal(tpb, t.tpb) {
+			t.isolationLevel = sc.isolation
+			t.completion = sc.completion
+			// the retained context becomes an explicit transaction again:
+			// never let the autocommit teardown commit it behind the caller's back
+			t.isAutocommit = false
+			return driver.Tx(t), nil
+		}
+		// Requested parameters differ from the retained context: end it, start fresh.
+		if err := t.Rollback(); err != nil {
+			return nil, err
+		}
+	}
+	tx := &firebirdsqlTx{
+		fc:             fc,
+		isolationLevel: sc.isolation,
+		isAutocommit:   false,
+		needBegin:      true,
+		completion:     sc.completion,
+	}
+	if err := tx.beginWithTPB(tpb); err != nil {
+		return nil, err
+	}
+	fc.tx = tx
+	return driver.Tx(tx), nil
+}
+
 // Begin starts and returns a new transaction.
 //
 // Deprecated: Drivers should implement ConnBeginTx instead (or additionally).
@@ -96,6 +133,11 @@ func (fc *firebirdsqlConn) Close() (err error) {
 		return fc.wp.conn.Close()
 	}
 	for tx := range fc.transactionSet {
+		if tx.plannedDrop {
+			// Hard-drop / prepare-then-die: the socket is gone (or about to die);
+			// do not roll the transaction back behind the planned drop.
+			continue
+		}
 		tx.Rollback()
 	}
 

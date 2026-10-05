@@ -25,7 +25,6 @@ package firebirdsql
 
 import (
 	"context"
-	"database/sql"
 	"database/sql/driver"
 	"errors"
 	"fmt"
@@ -54,14 +53,19 @@ func (stmt *firebirdsqlStmt) QueryContext(ctx context.Context, namedargs []drive
 }
 
 func (fc *firebirdsqlConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
-	isolationLevel, err := txIsolationLevel(opts)
-	if err != nil {
-		return nil, err
+	sc, ok := decodeDriverLevel(int(opts.Isolation))
+	if !ok {
+		return nil, errors.New("This isolation level is not supported.")
+	}
+	// ReadOnly composes with the requested isolation instead of replacing it
+	// (before, ReadOnly always degraded to READ COMMITTED RO).
+	if opts.ReadOnly {
+		sc.ro = true
 	}
 	var tx driver.Tx
-	err = fc.wp.withContextDeadline(ctx, func() error {
+	err := fc.wp.withContextDeadline(ctx, func() error {
 		var err error
-		tx, err = fc.begin(isolationLevel)
+		tx, err = fc.beginScenario(sc)
 		return err
 	})
 	if err != nil {
@@ -69,32 +73,6 @@ func (fc *firebirdsqlConn) BeginTx(ctx context.Context, opts driver.TxOptions) (
 	}
 	tx.(*firebirdsqlTx).ctx = ctx // bounds Commit (see firebirdsqlTx.Commit)
 	return tx, nil
-}
-
-func txIsolationLevel(opts driver.TxOptions) (int, error) {
-	if opts.ReadOnly {
-		// Preserve existing behaviour: readonly always uses READ COMMITTED RO.
-		// The only extra knob we currently support here is NOWAIT.
-		if (sql.IsolationLevel)(opts.Isolation) == LevelReadCommittedNoWait {
-			return ISOLATION_LEVEL_READ_COMMITED_RO_NOWAIT, nil
-		}
-		return ISOLATION_LEVEL_READ_COMMITED_RO, nil
-	}
-
-	switch (sql.IsolationLevel)(opts.Isolation) {
-	case sql.LevelDefault:
-		return ISOLATION_LEVEL_READ_COMMITED, nil
-	case sql.LevelReadCommitted:
-		return ISOLATION_LEVEL_READ_COMMITED, nil
-	case LevelReadCommittedNoWait:
-		return ISOLATION_LEVEL_READ_COMMITED_NOWAIT, nil
-	case sql.LevelRepeatableRead:
-		return ISOLATION_LEVEL_REPEATABLE_READ, nil
-	case sql.LevelSerializable:
-		return ISOLATION_LEVEL_SERIALIZABLE, nil
-	default:
-	}
-	return 0, errors.New("This isolation level is not supported.")
 }
 
 func (fc *firebirdsqlConn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
