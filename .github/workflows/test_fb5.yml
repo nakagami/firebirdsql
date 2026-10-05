@@ -1,0 +1,54 @@
+name: Go (Firebird 5)
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+
+  test:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        go: ['1.22', '1.23']
+
+    services:
+      firebird:
+        image: firebirdsql/firebird:5.0.3
+        env:
+          ISC_USER: sysdba
+          ISC_PASSWORD: masterkey
+        ports:
+          - 3050:3050
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Wait for Firebird
+      run: |
+        for i in $(seq 1 30); do
+          if (exec 3<>/dev/tcp/localhost/3050) 2>/dev/null; then
+            exec 3>&- 2>/dev/null
+            echo "Firebird is up"
+            break
+          fi
+          sleep 2
+        done
+
+    - name: Set up Go ${{ matrix.go }}
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.go }}
+
+    - name: Build
+      run: go build -v ./...
+
+    # Phase 10 of JAYBIRD_TEST_PORT_PLAN.md: FB5 negotiates protocol 18/19, so
+    # this job additionally runs the scrollable-cursor and inline-blob tests
+    # that skip on older servers.
+    - name: Test
+      run: |
+        export ISC_PASSWORD=masterkey
+        go test -race -v ./...
