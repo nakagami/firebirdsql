@@ -28,18 +28,72 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"math/big"
+	"reflect"
 	"time"
 )
 
 type firebirdsqlConn struct {
-	wp                *wireProtocol
-	tx                *firebirdsqlTx
-	dsn               *firebirdDsn
-	columnNameToLower bool
-	isAutocommit      bool
-	clientPublic      *big.Int
-	clientSecret      *big.Int
-	transactionSet    map[*firebirdsqlTx]struct{}
+	wp                 *wireProtocol
+	tx                 *firebirdsqlTx
+	dsn                *firebirdDsn
+	columnNameToLower  bool
+	isAutocommit       bool
+	clientPublic       *big.Int
+	clientSecret       *big.Int
+	transactionSet     map[*firebirdsqlTx]struct{}
+	resolvingArrayMeta bool // guards the internal array-metadata queries against recursion
+}
+
+// CheckNamedValue implements driver.NamedValueChecker. It lets array values
+// through untouched (they are encoded during parameter packing, where the
+// column metadata is available), converts plain slices into array values, and
+// resolves driver.Valuer arguments before falling back to the standard
+// converter for everything else.
+func (fc *firebirdsqlConn) CheckNamedValue(nv *driver.NamedValue) error {
+	if av, ok := nv.Value.(ArrayValue); ok {
+		nv.Value = av
+		return nil
+	}
+	if v, ok := nv.Value.(driver.Valuer); ok {
+		resolved, err := v.Value()
+		if err != nil {
+			return err
+		}
+		if av, ok := resolved.(ArrayValue); ok {
+			nv.Value = av
+			return nil
+		}
+		cv, err := driver.DefaultParameterConverter.ConvertValue(resolved)
+		if err != nil {
+			return err
+		}
+		nv.Value = cv
+		return nil
+	}
+	switch reflect.ValueOf(nv.Value).Kind() {
+	case reflect.Slice, reflect.Array:
+		// []byte is a blob/bytes argument, not an array — let the standard
+		// converter handle it (and everything that is not an array shape).
+		if _, isBytes := nv.Value.([]byte); isBytes {
+			break
+		}
+		getter, err := getArrayEncodeType(nv.Value)
+		if err != nil {
+			return err
+		}
+		elements, _, err := elementsFromGetter(getter, nil)
+		if err != nil {
+			return err
+		}
+		nv.Value = ArrayValue{Elements: elements}
+		return nil
+	}
+	cv, err := driver.DefaultParameterConverter.ConvertValue(nv.Value)
+	if err != nil {
+		return err
+	}
+	nv.Value = cv
+	return nil
 }
 
 // WireCipher returns the name of the wire-encryption cipher negotiated for this

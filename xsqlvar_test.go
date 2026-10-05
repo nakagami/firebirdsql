@@ -54,7 +54,10 @@ func TestCalcBlr(t *testing.T) {
 
 func TestParamsToBlrNil(t *testing.T) {
 	p := &wireProtocol{}
-	blr, v := p.paramsToBlr(0, []driver.Value{nil}, PROTOCOL_VERSION13, nil)
+	blr, v, err := p.paramsToBlr(0, []driver.Value{nil}, PROTOCOL_VERSION13, nil)
+	if err != nil {
+		t.Fatalf("paramsToBlr: %v", err)
+	}
 
 	// BLR identical to calcBlr output for SQL_TYPE_NULL: both paths emit {blr_text, 0, 0}
 	wantBlr := []byte{5, 2, 4, 0, 2, 0, 14, 0, 0, 7, 0, 255, 76}

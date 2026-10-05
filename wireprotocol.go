@@ -1485,7 +1485,11 @@ func (p *wireProtocol) opExecute(stmt *firebirdsqlStmt, params []driver.Value, i
 		p.packInt(0)
 		p.packInt(0)
 	} else {
-		blr, values := p.paramsToBlr(transHandle, params, p.protocolVersion, inputXsqlda)
+		blr, values, err := p.paramsToBlr(transHandle, params, p.protocolVersion, inputXsqlda)
+		if err != nil {
+			p.buf = p.buf[:0] // drop the packed op_execute2 header (see opExecute)
+			return err
+		}
 		p.packBytes(blr)
 		p.packInt(0)
 		p.packInt(1)
@@ -1509,7 +1513,13 @@ func (p *wireProtocol) opExecute2(stmt *firebirdsqlStmt, params []driver.Value, 
 		p.packInt(0)
 		p.packInt(0)
 	} else {
-		blr, values := p.paramsToBlr(transHandle, params, p.protocolVersion, inputXsqlda)
+		blr, values, err := p.paramsToBlr(transHandle, params, p.protocolVersion, inputXsqlda)
+		if err != nil {
+			// Nothing was sent, but the op_execute header is already in the
+			// packet buffer — drop it or the next statement desyncs the wire.
+			p.buf = p.buf[:0]
+			return err
+		}
 		p.packBytes(blr)
 		p.packInt(0)
 		p.packInt(1)
@@ -1534,6 +1544,152 @@ func (p *wireProtocol) opFetch(stmtHandle int32, blr []byte) error {
 	p.packInt(fetchRowBatchSize)
 	_, err := p.sendPackets()
 	return err
+}
+
+// opGetSlice fetches one array slice (op_get_slice → op_slice) and returns
+// the slice data in element-wise wire encoding.
+func (p *wireProtocol) opGetSlice(transHandle int32, arrayID int64, meta *ArrayMeta) ([]byte, error) {
+	appLen := arraySliceGetLength(meta, meta.Dimensions)
+	if appLen <= 0 || appLen > maxWirePayload {
+		return nil, fmt.Errorf("firebirdsql: array slice length %d out of range", appLen)
+	}
+	p.debugPrint("opGetSlice():%d,%d", transHandle, arrayID)
+	p.packInt(op_get_slice)
+	p.packInt(transHandle)
+	p.buf = append(p.buf, bint64_to_bytes(arrayID)...)
+	p.packInt(int32(appLen))
+	p.packBytes(generateSDL(meta, meta.Dimensions, true))
+	p.packBytes(nil)
+	p.packBytes(nil)
+	if _, err := p.sendPackets(); err != nil {
+		return nil, err
+	}
+	return p.opSliceResponse(meta)
+}
+
+// opPutSlice stores one array slice (op_put_slice) and returns the array id
+// the server assigned (carried in the op_response object id, like a blob id).
+// Both p_slc_length fields carry the application-buffer length (elements ×
+// stride); the slice itself is appended element-wise in wire encoding. The
+// element count the server derives is length/stride, so a short data buffer
+// encodes the driver's partial-write semantics (missing tail elements stored
+// as zeros).
+//
+// Like createBlob, this runs while an op_execute packet is partially packed:
+// suspend the pending buffer, round-trip the slice, then resume packing.
+func (p *wireProtocol) opPutSlice(transHandle int32, meta *ArrayMeta, data []byte, elementCount int) (int64, error) {
+	appLen := arraySliceAppLength(meta, meta.Dimensions)
+	if appLen <= 0 || appLen > maxWirePayload || len(data) > maxWirePayload {
+		return 0, fmt.Errorf("firebirdsql: array slice length %d out of range", appLen)
+	}
+	wire := padSliceWire(meta, data, elementCount)
+	p.debugPrint("opPutSlice():%d,%d,%d", transHandle, appLen, len(wire))
+	buf := p.suspendBuffer()
+	p.packInt(op_put_slice)
+	p.packInt(transHandle)
+	p.buf = append(p.buf, bint64_to_bytes(0)...)
+	p.packInt(int32(appLen))
+	p.packBytes(generateSDL(meta, meta.Dimensions, false))
+	p.packBytes(nil)
+	p.packInt(int32(appLen))
+	p.buf = append(p.buf, wire...) // element-wise wire form; every element is 4-aligned
+	if _, err := p.sendPackets(); err != nil {
+		p.resumeBuffer(buf)
+		return 0, err
+	}
+	_, oid, _, err := p.opResponse()
+	if err != nil {
+		p.resumeBuffer(buf)
+		return 0, err
+	}
+	p.resumeBuffer(buf)
+	arrayID := bytes_to_bint64(oid)
+	if arrayID == 0 {
+		return 0, fmt.Errorf("firebirdsql: array put failed: server returned array id 0")
+	}
+	return arrayID, nil
+}
+
+// opSliceResponse parses an op_slice response: two lengths (p_slr_length and
+// the slice lstr_length, both in application-buffer units) followed by the
+// element-wise wire data. The element count is lstr_length divided by the
+// application element stride; each element is read in its wire form and the
+// result is returned as the flat element-wise buffer decodeSliceElements
+// consumes. Encoding verified against Firebird's remote/protocol.cpp
+// (xdr_slice) and common/xdr.cpp (xdr_datum).
+func (p *wireProtocol) opSliceResponse(meta *ArrayMeta) ([]byte, error) {
+	b, err := p.recvPackets(4)
+	if err != nil {
+		return nil, err
+	}
+	for bytes_to_bint32(b) == op_dummy {
+		b, err = p.recvPackets(4)
+		if err != nil {
+			return nil, err
+		}
+	}
+	switch bytes_to_bint32(b) {
+	case op_slice_response:
+		// fall through to the parser below
+	case op_response:
+		_, _, buf, err := p._parse_op_response()
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("firebirdsql: array slice request failed: %s", buf)
+	default:
+		return nil, NewErrOpResonse(bytes_to_bint32(b))
+	}
+
+	b, err = p.recvPackets(8)
+	if err != nil {
+		return nil, err
+	}
+	slrLen := int(bytes_to_bint32(b[0:4]))
+	lstrLen := int(bytes_to_bint32(b[4:8]))
+	if lstrLen < 0 || slrLen < 0 || lstrLen > maxWirePayload {
+		return nil, fmt.Errorf("firebirdsql: slice length %d/%d out of range: %w", slrLen, lstrLen, driver.ErrBadConn)
+	}
+	if lstrLen == 0 {
+		return nil, nil
+	}
+
+	stride := arrayGetElementStride(meta)
+	if stride < 1 {
+		return nil, fmt.Errorf("firebirdsql: invalid array element stride %d", stride)
+	}
+	count := lstrLen / stride
+	if max := allElementsCount(meta.Dimensions); max > 0 && count > max {
+		return nil, fmt.Errorf("firebirdsql: slice reports %d elements, column declares %d: %w", count, max, driver.ErrBadConn)
+	}
+
+	elemLen, varying := sliceWireElementSize(meta)
+	data := make([]byte, 0, count*elemLen)
+	for i := 0; i < count; i++ {
+		if varying {
+			lenBuf, err := p.recvPackets(4) // XDR-encoded element length
+			if err != nil {
+				return nil, err
+			}
+			l := int(bytes_to_bint32(lenBuf))
+			if l < 0 || l > int(meta.FieldBytes) || l > maxWirePayload {
+				return nil, fmt.Errorf("firebirdsql: array varchar element length %d out of range: %w", l, driver.ErrBadConn)
+			}
+			elemData, err := p.recvPacketsAlignment(l)
+			if err != nil {
+				return nil, err
+			}
+			data = append(data, lenBuf...)
+			data = append(data, elemData...)
+			continue
+		}
+		chunk, err := p.recvPacketsAlignment(elemLen)
+		if err != nil {
+			return nil, err
+		}
+		data = append(data, chunk...)
+	}
+	return data, nil
 }
 
 // opFetchScroll sends op_fetch_scroll (protocol 18+) for a scrollable cursor.
@@ -1905,11 +2061,21 @@ func (p *wireProtocol) createBlob(value []byte, transHandle int32) ([]byte, erro
 	return blobId, err
 }
 
+// isArrayParamNull reports whether a bound parameter value represents a SQL
+// NULL array (an explicit nil, or an ArrayValue with no elements).
+func isArrayParamNull(param driver.Value) bool {
+	if param == nil {
+		return true
+	}
+	av, ok := param.(ArrayValue)
+	return ok && av.Elements == nil
+}
+
 // paramsToBlr converts parameters to BLR type descriptors and serialized values for the wire protocol.
 // inputXsqlda contains the server-reported types for bind parameters (from isc_info_sql_bind).
 // It is used to select the correct encoding for time.Time values: TIMESTAMP/TIME (without TZ)
 // columns are encoded as local wall clock time to preserve round-trip correctness when time.Local != UTC.
-func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, protocolVersion int32, inputXsqlda []xSQLVAR) ([]byte, []byte) {
+func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, protocolVersion int32, inputXsqlda []xSQLVAR) ([]byte, []byte, error) {
 	var v, blr []byte
 
 	ln := len(params) * 2
@@ -1926,7 +2092,7 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 		}
 		nullBytes := make([]byte, n)
 		for i, param := range params {
-			if param == nil {
+			if isArrayParamNull(param) {
 				nullBytes[i/8] |= 1 << (i % 8)
 			}
 		}
@@ -1934,6 +2100,9 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 	}
 
 	for i, param := range params {
+		if isArrayParamNull(param) {
+			param = nil
+		}
 		switch f := param.(type) {
 		case string:
 			f = p.encodeString(f)
@@ -1995,6 +2164,27 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 				v, _ = p.createBlob(f, transHandle)
 				blr = []byte{9, 0}
 			}
+		case ArrayValue:
+			// The column metadata resolved at prepare time is authoritative:
+			// it names the target column for the slice descriptor and carries
+			// the declared dimensions.
+			var meta *ArrayMeta
+			if i < len(inputXsqlda) {
+				meta = inputXsqlda[i].arrayMeta
+			}
+			if meta == nil {
+				return nil, nil, fmt.Errorf("firebirdsql: array parameter %d: column metadata unavailable", i+1)
+			}
+			data, err := p.encodeSliceElements(meta, f.Elements)
+			if err != nil {
+				return nil, nil, fmt.Errorf("firebirdsql: array parameter %d: %w", i+1, err)
+			}
+			arrayID, err := p.opPutSlice(transHandle, meta, data, len(f.Elements))
+			if err != nil {
+				return nil, nil, fmt.Errorf("firebirdsql: array parameter %d: %w", i+1, err)
+			}
+			blr = []byte{9, 0} // quad: the 8-byte array id
+			v = bint64_to_bytes(arrayID)
 		default:
 			// can't convert directory
 			b := str_to_bytes(fmt.Sprintf("%v", f))
@@ -2021,14 +2211,22 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 	blr = bytes.Join(blrList, nil)
 	v = bytes.Join(valuesList, nil)
 
-	return blr, v
+	return blr, v, nil
 }
 
 func (p *wireProtocol) debugPrint(s string, a ...interface{}) {
-	//if len(a) > 0 {
-	//	s = fmt.Sprintf(s, a...)
-	//}
-	//fmt.Printf("[%x] %s\n", uintptr(unsafe.Pointer(p)), s)
+	if os.Getenv("FB_DEBUG") == "" {
+		return
+	}
+	if len(a) > 0 {
+		for i, arg := range a {
+			if b, ok := arg.([]byte); ok && len(b) > 64 {
+				a[i] = fmt.Sprintf("(%d bytes) %v...", len(b), b[:64])
+			}
+		}
+		s = fmt.Sprintf(s, a...)
+	}
+	fmt.Fprintf(os.Stderr, "[fb-debug] %s\n", s)
 }
 
 func (p *wireProtocol) opConnectRequest() error {

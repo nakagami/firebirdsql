@@ -171,6 +171,36 @@ FIREBIRDSQL_BENCH=1 go test -run TestCompareBatchVsExecInsert100k -timeout 15m
 
 Large batches may need `BatchOptions.BufferBytes` above the server default so all flushed rows fit until `Exec`.
 
+## Array columns
+
+Firebird array columns are read through `op_get_slice` and written through `op_put_slice`. Metadata (element type, dimensions) is resolved from the system tables at prepare time.
+
+```go
+// Write: generic wrappers, or plain slices (converted via the driver's NamedValueChecker)
+db.ExecContext(ctx, "INSERT INTO t (id, ints) VALUES (?, ?)",
+    1, firebirdsql.FlatArray[int64]{10, 20, 30})
+
+// Read: 1-D flat target
+var ints firebirdsql.FlatArray[int64]
+rows.Scan(&ints)
+
+// Multi-dimensional arrays keep their dimensions
+db.ExecContext(ctx, "INSERT INTO t (id, grid) VALUES (?, ?)",
+    1, firebirdsql.Array[int64]{Elements: []int64{1, 2, 3, 4},
+        Dims:    []firebirdsql.ArrayDimension{{LowerBound: 0, Length: 2}, {LowerBound: 0, Length: 2}},
+        Valid:   true})
+var grid firebirdsql.Array[int64]
+rows.Scan(&grid)
+```
+
+Element types: `int16`, `int32`, `int64`, `float32`, `float64`, `string`, `time.Time` (and `bool` for BOOLEAN arrays, Firebird 3+). Notes:
+
+- Writes shorter than the declared shape zero-fill the tail; reads always return the declared element count (never-written elements read as zeros / empty strings).
+- `nil` slices scan/param as SQL NULL. NULL *elements* inside an array are not representable in Firebird and are rejected on encode.
+- Scan targets must use `FlatArray[T]` / `Array[T]` (`database/sql` has no conversion from array columns to plain slices).
+- `TIME/TIMESTAMP WITH TIME ZONE` element types are not supported yet.
+- Array parameters are rejected in the batch API (server limitation).
+
 ## Time and timestamp handling
 
 Firebird's `DATE`, `TIME`, and `TIMESTAMP` types store wall-clock components without zone information - by design. When the driver decodes such a column into a Go `time.Time`, it must attach some `*time.Location`. Resolution order:
