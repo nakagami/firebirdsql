@@ -138,6 +138,11 @@ type xSQLVAR struct {
 	relname    string
 	ownname    string
 	aliasname  string
+
+	// arrayMeta carries the resolved system-table metadata for array-typed
+	// vars (SQL_TYPE_ARRAY); nil when the column is not an array or the
+	// metadata could not be resolved. See array_meta.go.
+	arrayMeta *ArrayMeta
 }
 
 func (x *xSQLVAR) ioLength() int {
@@ -189,6 +194,8 @@ func (x *xSQLVAR) scantype() reflect.Type {
 		return reflect.TypeOf(false)
 	case SQL_TYPE_BLOB:
 		return reflect.TypeOf([]byte{})
+	case SQL_TYPE_ARRAY:
+		return reflect.TypeOf(ArrayValue{})
 	case SQL_TYPE_TIMESTAMP_TZ:
 		return reflect.TypeOf(time.Time{})
 	case SQL_TYPE_TIME_TZ:
@@ -405,6 +412,11 @@ func (x *xSQLVAR) value(raw_value []byte, timezone string, charset string) (v in
 	case SQL_TYPE_BOOLEAN:
 		v = raw_value[0] != 0
 	case SQL_TYPE_BLOB:
+		v = raw_value
+	case SQL_TYPE_ARRAY:
+		// Raw 8-byte array id; materialized into an ArrayValue by
+		// firebirdsqlRows.Next (a get_slice round-trip must not run
+		// mid-row while the fetch response is still streaming).
 		v = raw_value
 	case SQL_TYPE_DEC_FIXED:
 		v, err = decimalFixedToString(raw_value, int32(x.sqlscale))

@@ -199,7 +199,7 @@ func (stmt *firebirdsqlStmt) ensureInputXsqlda(args []driver.Value) error {
 		xs = []xSQLVAR{}
 	}
 	stmt.inputXsqlda = xs
-	return nil
+	return resolveArrayMeta(stmt.fc, stmt.inputXsqlda)
 }
 
 // prepareExecute runs the round-trips that precede op_execute (lazy begin,
@@ -423,6 +423,12 @@ func newFirebirdsqlStmt(fc *firebirdsqlConn, query string) (stmt *firebirdsqlStm
 	}
 
 	stmt.blr = calcBlr(stmt.resultXsqlda)
+
+	// Resolve array column metadata (element type, dimensions) for any
+	// array-typed output columns; failures fail the prepare, mirroring fbx.
+	if err = resolveArrayMeta(fc, stmt.resultXsqlda); err != nil {
+		return nil, err
+	}
 
 	return
 }

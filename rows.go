@@ -27,6 +27,7 @@ import (
 	"context"
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"io"
 	"reflect"
 	"strings"
@@ -84,6 +85,33 @@ func (rows *firebirdsqlRows) Close() error {
 	return err
 }
 
+// materializeArray turns a fetched array column value (the raw 8-byte server
+// array id) into an ArrayValue by fetching the slice (op_get_slice) and
+// decoding its elements. Runs in Next(), after the row has been fully consumed
+// from the wire — a get_slice round-trip must not run mid-row while the fetch
+// response is still streaming.
+func (rows *firebirdsqlRows) materializeArray(x xSQLVAR, v driver.Value) (driver.Value, error) {
+	if x.arrayMeta == nil {
+		return nil, fmt.Errorf("firebirdsql: array column %s: metadata unavailable", x.aliasname)
+	}
+	if len(v.([]byte)) != 8 {
+		return nil, fmt.Errorf("firebirdsql: array column %s: short array id (%d bytes): %w", x.aliasname, len(v.([]byte)), driver.ErrBadConn)
+	}
+	id := bytes_to_bint64(v.([]byte))
+	if id == 0 {
+		return nil, nil
+	}
+	data, err := rows.stmt.fc.wp.opGetSlice(rows.stmt.fc.tx.transHandle, id, x.arrayMeta)
+	if err != nil {
+		return nil, err
+	}
+	elements, err := rows.stmt.fc.wp.decodeSliceElements(x.arrayMeta, data)
+	if err != nil {
+		return nil, err
+	}
+	return ArrayValue{Meta: x.arrayMeta, Elements: elements}, nil
+}
+
 func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 	// contextErrOrDeadlineExceeded folds in the timer-starvation fallback: it returns the
 	// context error, or DeadlineExceeded when the wall clock has passed ctx.Deadline() even
@@ -99,7 +127,15 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 	if rows.stmt.stmtType == isc_info_sql_stmt_exec_procedure {
 		if rows.result != nil {
 			for i, v := range rows.result {
-				if rows.stmt.resultXsqlda[i].sqltype == SQL_TYPE_BLOB && v != nil {
+				if rows.stmt.resultXsqlda[i].sqltype == SQL_TYPE_ARRAY && v != nil {
+					dest[i], err = rows.materializeArray(rows.stmt.resultXsqlda[i], v)
+					if err != nil {
+						if errors.Is(err, driver.ErrBadConn) {
+							rows.badConn = true
+						}
+						return
+					}
+				} else if rows.stmt.resultXsqlda[i].sqltype == SQL_TYPE_BLOB && v != nil {
 					blobId := v.([]byte)
 					var blob []byte
 					blob, err = rows.stmt.fc.wp.getBlobSegments(blobId, rows.stmt.fc.tx.transHandle)
@@ -180,7 +216,18 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 	}
 	row := rows.currentChunk[rows.currentChunkIdx]
 	for i, v := range row {
-		if rows.stmt.resultXsqlda[i].sqltype == SQL_TYPE_BLOB && v != nil {
+		x := rows.stmt.resultXsqlda[i]
+		if x.sqltype == SQL_TYPE_ARRAY && v != nil {
+			dest[i], err = rows.materializeArray(x, v)
+			if err != nil {
+				// materializeArray tags wire-level failures with
+				// driver.ErrBadConn; Close() evicts off rows.badConn.
+				if errors.Is(err, driver.ErrBadConn) {
+					rows.badConn = true
+				}
+				return
+			}
+		} else if x.sqltype == SQL_TYPE_BLOB && v != nil {
 			blobId := v.([]byte)
 			var blob []byte
 			blob, err = rows.stmt.fc.wp.getBlobSegments(blobId, rows.stmt.fc.tx.transHandle)
@@ -192,7 +239,7 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 				}
 				return
 			}
-			if rows.stmt.resultXsqlda[i].sqlsubtype == 1 {
+			if x.sqlsubtype == 1 {
 				charset := rows.stmt.fc.wp.charset
 				if s, ok := decodeCharset(blob, charset); ok {
 					dest[i] = s

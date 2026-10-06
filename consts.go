@@ -523,6 +523,9 @@ const (
 	op_connect_request    = 53
 	op_open_blob2         = 56
 	op_create_blob2       = 57
+	op_get_slice          = 58
+	op_put_slice          = 59
+	op_slice_response     = 60
 	op_allocate_statement = 62
 	op_execute            = 63
 	op_execute_immediate  = 64
@@ -566,6 +569,45 @@ const (
 	op_batch_cs     = 103
 	op_batch_cancel = 109
 	op_batch_sync   = 110
+)
+
+// Slice descriptor (SDL) node marks, used to address an array slice on the
+// server (see array_sdl.go). Values follow gds.cpp / fbx fbproto consts.
+const (
+	isc_sdl_version1      = 1
+	isc_sdl_relation      = 2
+	isc_sdl_field         = 4
+	isc_sdl_struct        = 6
+	isc_sdl_variable      = 7
+	isc_sdl_scalar        = 8
+	isc_sdl_tiny_integer  = 9
+	isc_sdl_short_integer = 10
+	isc_sdl_long_integer  = 11
+	isc_sdl_do2           = 34
+	isc_sdl_do1           = 35
+	isc_sdl_element       = 36
+	isc_sdl_schema        = 37
+	isc_sdl_eoc           = 255
+)
+
+// Element BLR type codes as stored in RDB$FIELD_TYPE (and used inside SDL),
+// mapped to/from the DSQL SQL_TYPE_* values by array_sdl.go.
+const (
+	blr_type_text      = 14
+	blr_type_text2     = 15
+	blr_type_int64     = 16
+	blr_type_bool      = 23
+	blr_type_dec64     = 24
+	blr_type_dec128    = 25
+	blr_type_int128    = 26
+	blr_type_double    = 27
+	blr_type_time_tz   = 28
+	blr_type_ts_tz     = 29
+	blr_type_timestamp = 35
+	blr_type_varying   = 37
+	blr_type_varying2  = 38
+	blr_type_cstring   = 40
+	blr_type_cstring2  = 41
 )
 
 // Batch parameter-buffer tags (protocol 16+).
