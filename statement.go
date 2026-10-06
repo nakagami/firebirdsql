@@ -111,6 +111,7 @@ func (stmt *firebirdsqlStmt) withCancelWatcher(ctx context.Context, fn func() er
 		select {
 		case <-ctx.Done():
 			stmt.fc.wp.opCancel(fb_cancel_raise)
+			stmt.hardDropAfterGrace(stop)
 		case <-stop:
 		}
 		close(watcherDone)
@@ -119,6 +120,32 @@ func (stmt *firebirdsqlStmt) withCancelWatcher(ctx context.Context, fn func() er
 	close(stop)
 	<-watcherDone // join: the watcher (and any in-flight op_cancel) has finished past here
 	return err
+}
+
+// hardDropAfterGrace is the cancel_hard_drop extension of the watcher: when
+// the context is canceled, op_cancel raise has been sent but the wrapped read
+// still has not returned after cancelHardDropGrace, close the socket. The
+// parked read fails with a network error, database/sql flags the pooled
+// connection bad, and the application rebuilds — instead of waiting for a
+// server-side wait (a lock wait inside a running SP) that FB will not
+// interrupt via op_cancel. When fn returns first, the stop channel fires and
+// the socket is never touched; the drop can also land in the window where fn
+// is completing — harmless, the connection is discarded either way once its
+// context timed out. No-op unless the DSN opted in.
+func (stmt *firebirdsqlStmt) hardDropAfterGrace(stop <-chan struct{}) {
+	wp := stmt.fc.wp
+	if !wp.cancelHardDrop {
+		return
+	}
+	timer := time.NewTimer(wp.cancelHardDropGrace)
+	defer timer.Stop()
+	select {
+	case <-stop:
+	case <-timer.C:
+		wp.cancelHardDropOnce.Do(func() {
+			_ = wp.conn.Close()
+		})
+	}
 }
 
 func contextErrOrDeadlineExceeded(ctx context.Context) error {
