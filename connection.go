@@ -70,6 +70,25 @@ func (fc *firebirdsqlConn) begin(isolationLevel int) (driver.Tx, error) {
 	return driver.Tx(tx), err
 }
 
+// beginScenario starts a transaction for a decoded isolation scenario.
+func (fc *firebirdsqlConn) beginScenario(sc txScenario) (driver.Tx, error) {
+	tpb, err := sc.tpbBytes()
+	if err != nil {
+		return nil, err
+	}
+	tx := &firebirdsqlTx{
+		fc:             fc,
+		isolationLevel: sc.isolation,
+		isAutocommit:   false,
+		needBegin:      true,
+	}
+	if err := tx.beginWithTPB(tpb); err != nil {
+		return nil, err
+	}
+	fc.tx = tx
+	return driver.Tx(tx), nil
+}
+
 // Begin starts and returns a new transaction.
 //
 // Deprecated: Drivers should implement ConnBeginTx instead (or additionally).

@@ -78,7 +78,7 @@ func TestGo18(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	opts := &sql.TxOptions{sql.LevelDefault, true} // Default isolation leve and ReadOnly
+	opts := &sql.TxOptions{Isolation: sql.LevelDefault, ReadOnly: true} // Default isolation leve and ReadOnly
 	tx, err := conn.BeginTx(ctx, opts)
 	if err != nil {
 		t.Fatalf("Error BeginTx(): %v", err)
