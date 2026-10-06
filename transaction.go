@@ -117,14 +117,34 @@ func (tx *firebirdsqlTx) begin() (err error) {
 	return
 }
 
-func (tx *firebirdsqlTx) commitRetainging() (err error) {
-	err = tx.fc.wp.opCommitRetaining(tx.transHandle)
-	if err != nil {
-		return
+// commitRetainging commits the autocommit transaction.
+//
+// On the statement hot path (exec, ExecImmediate, batch) the caller passes its
+// context: the commit response carries the statement's server-side work, so a
+// fixed cap would fail a server that is merely slow (#288). The read is bounded by
+// that context alone, and unbounded when it has no deadline (the v0.9.19
+// behaviour). A context that has already ended falls back to the teardown bound,
+// so the statement's work is still committed rather than left pending on a
+// pooled connection.
+//
+// The teardown caller (freeStatement) passes nil and keeps the fixed
+// abandonReadTimeout bound, so a silent wire cannot hang rows.Close/stmt.Close.
+func (tx *firebirdsqlTx) commitRetainging(ctx context.Context) (err error) {
+	if ctx != nil && ctx.Err() == nil {
+		err = tx.fc.wp.withContextDeadline(ctx, func() error {
+			if err := tx.fc.wp.opCommitRetaining(tx.transHandle); err != nil {
+				return err
+			}
+			_, _, _, err := tx.fc.wp.opResponse()
+			return err
+		})
+	} else {
+		err = tx.fc.wp.opCommitRetaining(tx.transHandle)
+		if err != nil {
+			return
+		}
+		_, _, _, err = tx.fc.wp.opResponseTimeout(abandonReadTimeout)
 	}
-	// Teardown read: bounded so the autocommit commit-retaining cannot hang a silent-wire
-	// close (it runs in freeStatement's teardown path as well as the exec hot path).
-	_, _, _, err = tx.fc.wp.opResponseTimeout(abandonReadTimeout)
 	tx.fc.wp.clearInlineBlobCache(tx.transHandle)
 	tx.isAutocommit = tx.fc.isAutocommit
 	return
