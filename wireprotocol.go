@@ -595,10 +595,15 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 	p.debugPrint("_parse_connect_response")
 
 	b, err := p.recvPackets(4)
+	if err != nil {
+		return
+	}
 	opcode := bytes_to_bint32(b)
 
 	for opcode == op_dummy {
-		b, _ = p.recvPackets(4)
+		if b, err = p.recvPackets(4); err != nil {
+			return
+		}
 		opcode = bytes_to_bint32(b)
 	}
 
@@ -611,7 +616,9 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 		return
 	}
 
-	b, _ = p.recvPackets(12)
+	if b, err = p.recvPackets(12); err != nil {
+		return
+	}
 	p.protocolVersion = int32(b[3])
 	p.acceptArchitecture = bytes_to_bint32(b[4:8])
 	p.acceptType = bytes_to_bint32(b[8:12])
