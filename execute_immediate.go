@@ -54,7 +54,7 @@ func (fc *firebirdsqlConn) ExecImmediate(ctx context.Context, sql string) error 
 		return err
 	}
 	if fc.tx.isAutocommit {
-		if cerr := fc.tx.commitRetainging(); cerr != nil {
+		if cerr := fc.tx.commitRetainingInternal(); cerr != nil {
 			return cerr
 		}
 	}

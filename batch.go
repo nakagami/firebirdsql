@@ -324,7 +324,7 @@ func (b *PreparedBatch) Exec(ctx context.Context) (*BatchResult, error) {
 	if b.fc.tx.isAutocommit {
 		if batchErr != nil {
 			_ = b.fc.tx.Rollback()
-		} else if cerr := b.fc.tx.commitRetainging(); cerr != nil {
+		} else if cerr := b.fc.tx.commitRetainingInternal(); cerr != nil {
 			return res, cerr
 		}
 	}

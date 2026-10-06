@@ -117,7 +117,7 @@ func (tx *firebirdsqlTx) begin() (err error) {
 	return
 }
 
-func (tx *firebirdsqlTx) commitRetainging() (err error) {
+func (tx *firebirdsqlTx) commitRetainingInternal() (err error) {
 	err = tx.fc.wp.opCommitRetaining(tx.transHandle)
 	if err != nil {
 		return
