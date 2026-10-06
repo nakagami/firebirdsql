@@ -99,6 +99,9 @@ func (fc *firebirdsqlConn) PrepareBatch(ctx context.Context, sql string, opts Ba
 	if fc == nil || fc.wp == nil {
 		return nil, driver.ErrBadConn
 	}
+	if err := fc.checkWire(); err != nil {
+		return nil, err
+	}
 	if fc.wp.protocolVersion < PROTOCOL_VERSION16 {
 		return nil, fmt.Errorf("firebirdsql: batch requires wire protocol 16+, got %d", fc.wp.protocolVersion)
 	}
@@ -258,6 +261,9 @@ func (b *PreparedBatch) Flush(ctx context.Context) error {
 	if len(b.encodedRows) == 0 {
 		return nil
 	}
+	if err := b.fc.checkWire(); err != nil {
+		return err
+	}
 	if err := b.ensureCreated(); err != nil {
 		return err
 	}
@@ -279,6 +285,9 @@ func (b *PreparedBatch) Exec(ctx context.Context) (*BatchResult, error) {
 	if !b.created {
 		return &BatchResult{}, nil
 	}
+	if err := b.fc.checkWire(); err != nil {
+		return nil, err
+	}
 
 	if err := b.fc.wp.opBatchExec(b.stmt.stmtHandle, b.fc.tx.transHandle); err != nil {
 		return nil, err
@@ -291,8 +300,13 @@ func (b *PreparedBatch) Exec(ctx context.Context) (*BatchResult, error) {
 		completion, e = b.fc.wp.opBatchCompletion()
 		return e
 	})
-	if err != nil {
-		_ = b.fc.wp.opBatchRelease(b.stmt.stmtHandle, op_batch_rls)
+	// Same disposition as a statement's reply: a completion read after ctx ended is not
+	// committed, and a read that did not end in a reply flags the wire, so the release
+	// below is skipped (dropping the connection releases the batch).
+	if err = b.stmt.disposeRead(ctx, err); err != nil {
+		if b.fc.checkWire() == nil {
+			_ = b.fc.wp.opBatchRelease(b.stmt.stmtHandle, op_batch_rls)
+		}
 		b.created = false
 		return nil, err
 	}
@@ -318,13 +332,15 @@ func (b *PreparedBatch) Exec(ctx context.Context) (*BatchResult, error) {
 	}
 
 	// Release server batch after exec (fbx high-level always closes wire batch).
-	_ = b.fc.wp.opBatchRelease(b.stmt.stmtHandle, op_batch_rls)
+	if b.fc.checkWire() == nil {
+		_ = b.fc.wp.opBatchRelease(b.stmt.stmtHandle, op_batch_rls)
+	}
 	b.created = false
 
 	if b.fc.tx.isAutocommit {
 		if batchErr != nil {
-			_ = b.fc.tx.Rollback()
-		} else if cerr := b.fc.tx.commitRetainging(); cerr != nil {
+			_ = b.fc.tx.rollback(ctx)
+		} else if cerr := b.fc.tx.commitRetaining(ctx); cerr != nil {
 			return res, cerr
 		}
 	}
@@ -344,6 +360,10 @@ func (b *PreparedBatch) Cancel(ctx context.Context) error {
 	b.pendingBytes = 0
 	if !b.created {
 		return nil
+	}
+	if err := b.fc.checkWire(); err != nil {
+		b.created = false // the server batch goes with the connection
+		return err
 	}
 	err := b.fc.wp.opBatchRelease(b.stmt.stmtHandle, op_batch_rls)
 	b.created = false
@@ -371,6 +391,8 @@ func (b *PreparedBatch) releaseBeforeFree() {
 	if b == nil || !b.created {
 		return
 	}
-	_ = b.fc.wp.opBatchRelease(b.stmt.stmtHandle, op_batch_rls)
+	if b.fc.checkWire() == nil { // a desynced conn is discarded with its server batch
+		_ = b.fc.wp.opBatchRelease(b.stmt.stmtHandle, op_batch_rls)
+	}
 	b.created = false
 }

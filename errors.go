@@ -67,3 +67,14 @@ type FbError struct {
 func (e *FbError) Error() string {
 	return e.Message
 }
+
+// isServerError reports whether err is a status vector the server sent. Such a reply was
+// read in full, so the wire is still in step with the server; any other failure of a read
+// may have left part of the reply on the wire.
+func isServerError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var fbErr *FbError
+	return errors.As(err, &fbErr)
+}

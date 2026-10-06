@@ -26,7 +26,6 @@ package firebirdsql
 import (
 	"context"
 	"database/sql/driver"
-	"errors"
 	"io"
 	"reflect"
 	"strings"
@@ -40,7 +39,8 @@ type firebirdsqlRows struct {
 	moreData         bool
 	result           []driver.Value
 	closeStmtOnClose bool // true for internal stmts that should be dropped on rows.Close()
-	badConn          bool // set when a fetch was abandoned under an expired ctx (wire desynced)
+	badConn          bool // Close returns driver.ErrBadConn: the ctx ended, or a read left the wire desynced
+	closed           bool // Close has run: a second call must not commit again
 }
 
 func newFirebirdsqlRows(ctx context.Context, stmt *firebirdsqlStmt, result []driver.Value) *firebirdsqlRows {
@@ -67,31 +67,60 @@ func (rows *firebirdsqlRows) Columns() []string {
 }
 
 func (rows *firebirdsqlRows) Close() error {
-	var err error
-	if rows.closeStmtOnClose {
-		err = rows.stmt.Close()
-	} else {
-		err = rows.stmt.closeCursor()
+	// A query's autocommit commit happens here: for db.Query / db.QueryRow (INSERT ...
+	// RETURNING, EXECUTE PROCEDURE) and for a prepared statement run with Query, including
+	// one that is not a SELECT (nothing to free then, but its work still needs committing).
+	// The reply is read under the query's context like exec's: live on a normal close,
+	// done when database/sql closes the rows on context expiry (then the bounded teardown
+	// read). After a fetch or blob read that did not end in a reply read in full the wire is
+	// flagged (readFailed), so nothing more is written to it.
+	if rows.closed {
+		return nil
 	}
+	rows.closed = true
+	ctx := rows.ctx
+	if rows.badConn {
+		ctx = teardownCtx
+	}
+	var err error
+	if mode, ok := rows.stmt.closeMode(rows.closeStmtOnClose); ok {
+		err = rows.stmt.freeStatement(mode)
+	}
+	err = closeErr(err, rows.stmt.commitAutocommit(ctx))
 	// database/sql drives connection eviction off *this* return value (Rows.close passes
-	// rowsi.Close()'s result to releaseConn -> putConn), not off Next's error. So when a fetch
-	// was abandoned mid-stream under an expired context the wire is desynced — return
-	// ErrBadConn here so the poisoned conn is evicted, not pooled (otherwise the next query
-	// reads leftover fetch bytes where it expects op_response -> "Error op_response:N").
+	// rowsi.Close()'s result to releaseConn -> putConn), not off Next's error. A pooled
+	// conn is evicted after a context ended or a read left the wire desynced. A Tx ignores
+	// this error; it goes on unless the wire is flagged (then its next call is refused).
 	if rows.badConn {
 		return driver.ErrBadConn
 	}
 	return err
 }
 
+// readFailed disposes of a failed fetch or blob read by the wire rule
+// (markUnlessReplyRead): a server error was read in full and leaves the wire in step, so a
+// Tx can go on; any other failure marks the wire desynced, and Close then returns
+// driver.ErrBadConn.
+func (rows *firebirdsqlRows) readFailed(err error) {
+	wp := rows.stmt.fc.wp
+	if wp.markUnlessReplyRead(err); wp.desynced {
+		rows.badConn = true
+	}
+}
+
 func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 	// contextErrOrDeadlineExceeded folds in the timer-starvation fallback: it returns the
 	// context error, or DeadlineExceeded when the wall clock has passed ctx.Deadline() even
-	// though ctx.Err() is still nil (Go's sysmon delayed by a CPU-bound Firebird query). We
-	// fire op_cancel, so the wire state is then uncertain — mark the conn bad so Close() evicts
-	// it (the eviction lever; see Close). The caller still sees the clean context error.
+	// though ctx.Err() is still nil (Go's sysmon delayed by a CPU-bound Firebird query).
+	// Nothing is in flight here, so the wire stays in step. The op_cancel has no reply, and
+	// Firebird drops one that reaches an idle attachment; badConn makes Close return
+	// driver.ErrBadConn, so a pooled conn is evicted while a Tx goes on. The caller sees
+	// the clean context error.
 	if cerr := contextErrOrDeadlineExceeded(rows.ctx); cerr != nil {
-		rows.stmt.fc.wp.opCancel(fb_cancel_raise)
+		if rows.stmt.fc.checkWire() == nil {
+			rows.stmt.fc.wp.opCancel(fb_cancel_raise)
+		}
+		// Nothing was in flight, so the wire is still in step: a Tx can go on.
 		rows.badConn = true
 		return cerr
 	}
@@ -104,9 +133,7 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 					var blob []byte
 					blob, err = rows.stmt.fc.wp.getBlobSegments(blobId, rows.stmt.fc.tx.transHandle)
 					if err != nil {
-						if errors.Is(err, driver.ErrBadConn) {
-							rows.badConn = true
-						}
+						rows.readFailed(err)
 						return
 					}
 					dest[i] = blob
@@ -142,6 +169,12 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 		// watcher is joined inside withCancelWatcher before control returns, so it
 		// can never overlap a later main-goroutine wire write (e.g. the stray
 		// op_cancel at the top of the next Next() call).
+		// A fetch is new work: on a wire another statement left out of step (same Tx or
+		// sql.Conn) op_fetch would read that statement's reply.
+		if err = rows.stmt.fc.checkWire(); err != nil {
+			rows.badConn = true
+			return
+		}
 		err = rows.stmt.fc.wp.opFetch(rows.stmt.stmtHandle, rows.stmt.blr)
 		if err == nil {
 			err = rows.stmt.withCancelWatcher(rows.ctx, func() error {
@@ -152,22 +185,15 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 		}
 
 		if err != nil {
-			// A ctx-deadline abandon (incl. the OS-deadline fallback firing while
-			// ctx.Err() is still nil) leaves the fetch response bytes pending on the
-			// wire — the conn is desynced. Mark it bad so Close() evicts it rather than
-			// pooling a conn the next query would read misaligned ("Error op_response:N").
-			// A genuine server/wire error keeps the wire synced, so it stays reusable.
+			// The wire rule decides the wire, not the context: a fetch the server
+			// answered with a status vector (isc_cancelled after the watcher's op_cancel,
+			// or any refusal) was read in full, so a Tx survives it. A deadline abandon
+			// (the OS-deadline fallback), EOF or a malformed frame leaves fetch bytes on
+			// the wire, and readFailed flags it so the next request cannot read them.
+			rows.readFailed(err)
 			if cerr := contextErrOrDeadlineExceeded(rows.ctx); cerr != nil {
-				rows.badConn = true // fetch abandoned mid-stream: wire desynced
-				return cerr
-			}
-			// The fetch decode (readRow, opFetchResponse, getBlobSegments) tags a
-			// malformed-length/count error with driver.ErrBadConn because it aborts
-			// mid-stream with bytes left on the wire. Close() evicts off rows.badConn,
-			// not this return value, so propagate the signal here or the desynced conn
-			// gets pooled.
-			if errors.Is(err, driver.ErrBadConn) {
 				rows.badConn = true
+				return cerr
 			}
 			return
 		}
@@ -185,11 +211,7 @@ func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 			var blob []byte
 			blob, err = rows.stmt.fc.wp.getBlobSegments(blobId, rows.stmt.fc.tx.transHandle)
 			if err != nil {
-				// Same as the fetch branch above: getBlobSegments tags its error with
-				// driver.ErrBadConn, and Close() only evicts when rows.badConn is set here.
-				if errors.Is(err, driver.ErrBadConn) {
-					rows.badConn = true
-				}
+				rows.readFailed(err) // same rule as the fetch branch above
 				return
 			}
 			if rows.stmt.resultXsqlda[i].sqlsubtype == 1 {

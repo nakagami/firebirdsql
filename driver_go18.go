@@ -67,7 +67,7 @@ func (fc *firebirdsqlConn) BeginTx(ctx context.Context, opts driver.TxOptions) (
 	if err != nil {
 		return nil, err
 	}
-	tx.(*firebirdsqlTx).ctx = ctx // bounds Commit (see firebirdsqlTx.Commit)
+	tx.(*firebirdsqlTx).ctx = ctx // bounds Commit and Rollback (see firebirdsqlTx.Commit)
 	return tx, nil
 }
 
@@ -114,6 +114,9 @@ func (fc *firebirdsqlConn) Ping(ctx context.Context) (err error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if err := fc.checkWire(); err != nil {
+		return err
+	}
 
 	if ctx.Done() != nil {
 		completed := make(chan struct{})
@@ -138,6 +141,8 @@ func (fc *firebirdsqlConn) Ping(ctx context.Context) (err error) {
 	}
 
 	if _, _, _, err = fc.wp.opResponse(); err != nil {
+		// Close then drops the socket instead of reading the late reply as its acks.
+		fc.wp.markUnlessReplyRead(err)
 		if errors.Is(err, os.ErrDeadlineExceeded) {
 			// ctx is the source of truth. The OS conn deadline can fire a hair
 			// before the ctx timer at the same deadline instant; wait so the

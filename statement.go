@@ -43,12 +43,22 @@ type firebirdsqlStmt struct {
 	activeBatch  *PreparedBatch
 }
 
-func (stmt *firebirdsqlStmt) freeStatement(mode int32) error {
-	if mode == DSQL_drop && stmt.activeBatch != nil {
-		stmt.activeBatch.releaseBeforeFree()
-		stmt.activeBatch = nil
+// freeStatement sends op_free_statement and reads its ack (or leaves it to the lazy
+// drain). It does not commit; see commitAutocommit. DSQL_drop invalidates the handle
+// whatever the outcome. On a desynced wire nothing is sent: the connection is being
+// discarded, and the server frees the statement with it.
+func (stmt *firebirdsqlStmt) freeStatement(mode int32) (err error) {
+	if mode == DSQL_drop {
+		defer func() { stmt.stmtHandle = -1 }()
+		if stmt.activeBatch != nil {
+			stmt.activeBatch.releaseBeforeFree()
+			stmt.activeBatch = nil
+		}
 	}
-	err := stmt.fc.wp.opFreeStatement(stmt.stmtHandle, mode)
+	if err = stmt.fc.checkWire(); err != nil {
+		return err
+	}
+	err = stmt.fc.wp.opFreeStatement(stmt.stmtHandle, mode)
 	if err != nil {
 		return err
 	}
@@ -59,27 +69,60 @@ func (stmt *firebirdsqlStmt) freeStatement(mode int32) error {
 		// (reached automatically by database/sql's awaitDone on a mid-fetch ctx deadline).
 		_, _, _, err = stmt.fc.wp.opResponseTimeout(abandonReadTimeout)
 	}
-	if stmt.fc.tx.isAutocommit {
-		stmt.fc.tx.commitRetainging()
-	}
 	return err
 }
 
-func (stmt *firebirdsqlStmt) Close() error {
-	if stmt.stmtHandle == -1 {
-		return nil
+// closeMode reports how Stmt.Close / rows.Close free this statement: DSQL_drop when
+// dropping, DSQL_close for an open select cursor, ok=false when there is nothing to free.
+func (stmt *firebirdsqlStmt) closeMode(drop bool) (mode int32, ok bool) {
+	switch {
+	case stmt.stmtHandle == -1:
+		return 0, false
+	case drop:
+		return DSQL_drop, true
+	case stmt.stmtType == isc_info_sql_stmt_select,
+		stmt.stmtType == isc_info_sql_stmt_select_for_upd:
+		return DSQL_close, true
 	}
-	defer func() { stmt.stmtHandle = -1 }()
-	return stmt.freeStatement(DSQL_drop)
+	return 0, false
 }
 
-func (stmt *firebirdsqlStmt) closeCursor() error {
-	if stmt.stmtHandle == -1 ||
-		(stmt.stmtType != isc_info_sql_stmt_select &&
-			stmt.stmtType != isc_info_sql_stmt_select_for_upd) {
+// commitAutocommit commits the autocommit transaction, if one is active, reading the reply
+// under ctx (see endResponse). needBegin means no transaction is active (for example
+// database/sql closing a Tx's statements after Tx.Commit), so there is nothing to commit.
+func (stmt *firebirdsqlStmt) commitAutocommit(ctx context.Context) error {
+	if stmt.fc.tx.isAutocommit && !stmt.fc.tx.needBegin {
+		return stmt.fc.tx.commitRetaining(ctx)
+	}
+	return nil
+}
+
+func (stmt *firebirdsqlStmt) Close() error {
+	if _, ok := stmt.closeMode(true); !ok {
 		return nil
 	}
-	return stmt.freeStatement(DSQL_close)
+	err := stmt.freeStatement(DSQL_drop)
+	// No context: the commit takes the bounded teardown read; it runs only for an
+	// autocommit statement. Close's error reaches the caller for statements prepared on
+	// a sql.Conn or in a Tx and for Raw callers; database/sql discards it for db.Prepare
+	// statements, and fc.exec's deferred Close ignores it. A failed read marks the wire
+	// desynced, so the connection is discarded either way.
+	return closeErr(err, stmt.commitAutocommit(teardownCtx))
+}
+
+// closeErr combines the errors of a statement's free and of the autocommit commit that
+// follows it. A lone error is returned as is. A commit refused because the free had
+// already flagged the wire (errConnDesynced) adds nothing to the free's error.
+func closeErr(freeErr, commitErr error) error {
+	switch {
+	case commitErr == nil:
+		return freeErr
+	case freeErr == nil:
+		return commitErr
+	case errors.Is(commitErr, errConnDesynced):
+		return freeErr
+	}
+	return errors.Join(freeErr, commitErr)
 }
 
 func (stmt *firebirdsqlStmt) NumInput() int {
@@ -119,6 +162,81 @@ func (stmt *firebirdsqlStmt) withCancelWatcher(ctx context.Context, fn func() er
 	close(stop)
 	<-watcherDone // join: the watcher (and any in-flight op_cancel) has finished past here
 	return err
+}
+
+// awaitContextDone waits, at most a second, for ctx.Done() once
+// contextErrOrDeadlineExceeded has reported ctx as over. That check can run ahead of the
+// context's timer, and database/sql retries driver.ErrBadConn unless it sees the context
+// done, so an ErrBadConn returned before Done is closed could run the statement again.
+func awaitContextDone(ctx context.Context) {
+	select {
+	case <-ctx.Done():
+		return
+	default:
+	}
+	t := time.NewTimer(time.Second)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+	case <-t.C: // a context whose Done never follows its deadline
+	}
+}
+
+// disposeRead disposes of the read of a statement's reply (run under withCancelWatcher and
+// enforceDeadline), once op_execute or its like went out. It returns nil only when the
+// reply was a success read with ctx still live; the caller then goes on (and may commit).
+//   - The OS-deadline fallback fired: send op_cancel and read the ack (cancelAndDrain).
+//   - ctx ended, before or after the reply: abandon (not committed, ErrBadConn once ctx is
+//     done; the wire is flagged unless the reply was a server error).
+//   - Otherwise a failed read: readFailed (no ErrBadConn, the statement may have run).
+//
+// Failed reads are judged by markUnlessReplyRead. A success reply read after the
+// deadline is flagged too, though the wire is in step: the flag is what keeps that work
+// from being committed (nothing more is written; dropping the connection rolls it back).
+func (stmt *firebirdsqlStmt) disposeRead(ctx context.Context, err error) error {
+	if errors.Is(err, os.ErrDeadlineExceeded) {
+		// The read was interrupted before the server's reply; cancel and read the
+		// server's answer (its cancellation ack, or the reply itself).
+		err = stmt.cancelAndDrain()
+	}
+	if cerr := contextErrOrDeadlineExceeded(ctx); cerr != nil {
+		if err == nil { // a success reply, read after the deadline
+			err = cerr
+		}
+		return stmt.abandon(ctx, err)
+	}
+	if err != nil {
+		return stmt.readFailed(err)
+	}
+	return nil
+}
+
+// abandon disposes of a statement read around which ctx ended: a reply read after the
+// deadline (err is nil or the context error), or a read that failed meanwhile. A server
+// error means the statement did not complete (the server undid its work) and the wire is
+// in step; otherwise the statement may have run, so the wire is marked desynced. The
+// error is tagged driver.ErrBadConn after awaitContextDone, which gives the context's
+// timer up to a second to close Done: database/sql then refuses to retry, and reports
+// the context error.
+func (stmt *firebirdsqlStmt) abandon(ctx context.Context, err error) error {
+	if err == nil { // cancelAndDrain read the statement's own success reply
+		err = contextErrOrDeadlineExceeded(ctx)
+	}
+	stmt.fc.wp.markUnlessReplyRead(err)
+	awaitContextDone(ctx)
+	return fmt.Errorf("%w: %w", err, driver.ErrBadConn)
+}
+
+// readFailed disposes of a statement read that failed while ctx is live, after op_execute
+// went out. Without a server reply the wire is marked desynced: nothing more is written
+// to it, so neither fc.exec's deferred Stmt.Close nor a later Tx.Commit can commit the
+// work, and dropping the connection makes the server roll it back. The statement may have
+// run, so a driver.ErrBadConn from the wire parser is taken out: database/sql would run it
+// again elsewhere, repeating whatever the server does not roll back (generators,
+// autonomous transactions, external calls).
+func (stmt *firebirdsqlStmt) readFailed(err error) error {
+	stmt.fc.wp.markUnlessReplyRead(err)
+	return stripBadConn("statement reply", err)
 }
 
 func contextErrOrDeadlineExceeded(ctx context.Context) error {
@@ -198,6 +316,9 @@ func (stmt *firebirdsqlStmt) prepareExecute(ctx context.Context, args []driver.V
 }
 
 func (stmt *firebirdsqlStmt) exec(ctx context.Context, args []driver.Value) (result driver.Result, err error) {
+	if err = stmt.fc.checkWire(); err != nil {
+		return
+	}
 	if stmt, err = stmt.prepareExecute(ctx, args); err != nil {
 		return
 	}
@@ -215,47 +336,43 @@ func (stmt *firebirdsqlStmt) exec(ctx context.Context, args []driver.Value) (res
 		return e
 	})
 
-	// Deadline-abandon disposition: drain the cancel ack if the OS deadline fired, then evict
-	// (ErrBadConn) if the ctx deadline has passed. This block is repeated verbatim at the other
-	// three blocking-read sites (exec's opInfoSql read; query's exec_procedure and select reads) —
-	// keep all four in sync.
-	if err != nil {
-		if errors.Is(err, os.ErrDeadlineExceeded) {
-			// OS deadline fired (sysmon was starved). The read was cleanly
-			// interrupted before the server sent any data; send op_cancel now
-			// and read the server's cancellation acknowledgement.
-			err = stmt.cancelAndDrain()
-		}
-		if contextErrOrDeadlineExceeded(ctx) != nil {
-			return result, fmt.Errorf("%w: %w", err, driver.ErrBadConn)
-		}
-		return
-	}
-	if cerr := contextErrOrDeadlineExceeded(ctx); cerr != nil {
-		return result, fmt.Errorf("%w: %w", cerr, driver.ErrBadConn)
+	if err = stmt.disposeRead(ctx, err); err != nil {
+		return result, err
 	}
 
 	err = stmt.fc.wp.opInfoSql(stmt.stmtHandle, []byte{isc_info_sql_records})
 	if err != nil {
-		return
+		// op_execute already ran: no ErrBadConn, or database/sql would run it again.
+		return result, stmt.readFailed(err)
 	}
 
 	_, _, buf, err := stmt.fc.wp.opResponse()
+	var countErr error
 	if err != nil {
-		// Mirror the 1st-read defense (above): this opInfoSql records read is bounded by the
-		// still-armed enforceDeadline, so it cannot hang, but on a ctx-deadline abandon the
-		// wire is desynced — cancel/drain and evict rather than pool the poisoned conn.
+		// The statement already ran. The read is bounded by the still-armed enforceDeadline;
+		// if that fired, cancel and read the server's answer first. A server error is count
+		// metadata (RowsAffected's error, the work is committed); otherwise, once ctx is over,
+		// abandon (not committed), else readFailed (wire flagged, not committed, no retry).
 		if errors.Is(err, os.ErrDeadlineExceeded) {
 			err = stmt.cancelAndDrain()
 		}
-		if contextErrOrDeadlineExceeded(ctx) != nil {
-			return result, fmt.Errorf("%w: %w", err, driver.ErrBadConn)
+		switch {
+		case isServerError(err):
+			// The statement already ran and the reply was read in full: a refused records
+			// request is count metadata, like a malformed one below, not Exec's error.
+			countErr, err = err, nil
+		case contextErrOrDeadlineExceeded(ctx) != nil:
+			return result, stmt.abandon(ctx, err)
+		default:
+			return result, stmt.readFailed(err)
 		}
-		return
 	}
 
-	records, countErr := decodeStatementRecords(buf)
+	var records statementRecords
 	var rowcount int64
+	if countErr == nil {
+		records, countErr = decodeStatementRecords(buf)
+	}
 	if countErr == nil {
 		rowcount, countErr = records.rowsAffected(stmt.stmtType)
 	}
@@ -268,7 +385,8 @@ func (stmt *firebirdsqlStmt) exec(ctx context.Context, args []driver.Value) (res
 	}
 
 	if stmt.fc.tx.isAutocommit {
-		if cerr := stmt.fc.tx.commitRetainging(); cerr != nil {
+		// Bounded by ctx alone: the reply carries the commit's server-side work.
+		if cerr := stmt.fc.tx.commitRetaining(ctx); cerr != nil {
 			return result, cerr
 		}
 	}
@@ -284,6 +402,9 @@ func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (dr
 	var err error
 	var result []driver.Value
 
+	if err = stmt.fc.checkWire(); err != nil {
+		return nil, err
+	}
 	if stmt, err = stmt.prepareExecute(ctx, args); err != nil {
 		return nil, err
 	}
@@ -306,17 +427,8 @@ func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (dr
 			_, _, _, e = stmt.fc.wp.opResponse()
 			return e
 		})
-		if err != nil {
-			if errors.Is(err, os.ErrDeadlineExceeded) {
-				err = stmt.cancelAndDrain()
-			}
-			if contextErrOrDeadlineExceeded(ctx) != nil {
-				return nil, fmt.Errorf("%w: %w", err, driver.ErrBadConn)
-			}
+		if err = stmt.disposeRead(ctx, err); err != nil {
 			return nil, err
-		}
-		if cerr := contextErrOrDeadlineExceeded(ctx); cerr != nil {
-			return nil, fmt.Errorf("%w: %w", cerr, driver.ErrBadConn)
 		}
 
 		rows = newFirebirdsqlRows(ctx, stmt, result)
@@ -333,17 +445,8 @@ func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (dr
 			return e
 		})
 
-		if err != nil {
-			if errors.Is(err, os.ErrDeadlineExceeded) {
-				err = stmt.cancelAndDrain()
-			}
-			if contextErrOrDeadlineExceeded(ctx) != nil {
-				return nil, fmt.Errorf("%w: %w", err, driver.ErrBadConn)
-			}
+		if err = stmt.disposeRead(ctx, err); err != nil {
 			return nil, err
-		}
-		if cerr := contextErrOrDeadlineExceeded(ctx); cerr != nil {
-			return nil, fmt.Errorf("%w: %w", cerr, driver.ErrBadConn)
 		}
 
 		rows = newFirebirdsqlRows(ctx, stmt, nil)

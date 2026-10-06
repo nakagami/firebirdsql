@@ -26,8 +26,11 @@ package firebirdsql
 import (
 	"context"
 	"database/sql/driver"
+	"errors"
 	"fmt"
+	"io"
 	"math/big"
+	"net"
 	"time"
 )
 
@@ -62,9 +65,38 @@ func (fc *firebirdsqlConn) ProtocolVersion() int {
 	return int(fc.wp.protocolVersion)
 }
 
+// IsValid implements driver.Validator. database/sql calls it before returning the
+// connection to the pool: a connection whose wire was left mid-exchange (see
+// wireProtocol.desynced) is discarded instead of serving the next query with the
+// previous exchange's reply. Unlike driver.ErrBadConn this never makes database/sql
+// run the statement again, which matters once the statement has executed.
+func (fc *firebirdsqlConn) IsValid() bool {
+	return !fc.wp.desynced
+}
+
+// errConnDesynced is returned, before anything is written, by every call that starts new
+// work on a connection whose wire is desynced. It wraps driver.ErrBadConn: nothing was
+// sent, so database/sql may safely retry on another connection, and a held sql.Conn is
+// closed.
+var errConnDesynced = fmt.Errorf("firebirdsql: connection is out of step with the server: %w", driver.ErrBadConn)
+
+// checkWire refuses new work on a desynced wire. IsValid alone is not enough:
+// database/sql validates a connection before it runs the statement closes queued for it
+// (driverConn.onPut), and a held sql.Conn is never validated, so a connection can still
+// reach a driver call after its wire was flagged.
+func (fc *firebirdsqlConn) checkWire() error {
+	if fc.wp.desynced {
+		return errConnDesynced
+	}
+	return nil
+}
+
 // ============ driver.Conn implementation
 
 func (fc *firebirdsqlConn) begin(isolationLevel int) (driver.Tx, error) {
+	if err := fc.checkWire(); err != nil {
+		return nil, err
+	}
 	tx, err := newFirebirdsqlTx(fc, isolationLevel, false, true)
 	fc.tx = tx
 	return driver.Tx(tx), err
@@ -87,22 +119,23 @@ func (fc *firebirdsqlConn) Begin() (driver.Tx, error) {
 // idle connections, it shouldn't be necessary for drivers to
 // do their own connection caching.
 func (fc *firebirdsqlConn) Close() (err error) {
+	for tx := range fc.transactionSet {
+		// Teardown: a fixed bound, never the transaction's own (possibly live) context.
+		// On a desynced wire rollback sends nothing (checkWire).
+		tx.rollback(teardownCtx)
+	}
+	fc.wp.clearAllInlineBlobCache()
 	if fc.wp.desynced {
-		// Rollback/detach would read the abandoned exchange's response (or wait
-		// out abandonReadTimeout each on a silent wire); database/sql runs this
-		// Close in the caller's goroutine. Dropping the socket makes the server
-		// roll back and release the attachment.
-		fc.wp.clearAllInlineBlobCache()
+		// Detach would read the abandoned exchange's reply (or wait out
+		// abandonReadTimeout on a silent wire); database/sql runs this Close in
+		// the caller's goroutine. Dropping the socket makes the server roll back
+		// and release the attachment.
 		return fc.wp.conn.Close()
 	}
-	for tx := range fc.transactionSet {
-		tx.Rollback()
-	}
-
-	fc.wp.clearAllInlineBlobCache()
 
 	err = fc.wp.opDetach()
 	if err != nil {
+		fc.wp.conn.Close()
 		return
 	}
 	// Teardown read: bounded so pool eviction (database/sql closing a conn flagged
@@ -115,6 +148,9 @@ func (fc *firebirdsqlConn) Close() (err error) {
 func (fc *firebirdsqlConn) prepare(ctx context.Context, query string) (driver.Stmt, error) {
 	if fc.tx == nil {
 		return nil, driver.ErrBadConn
+	}
+	if err := fc.checkWire(); err != nil {
+		return nil, err
 	}
 	var stmt *firebirdsqlStmt
 	err := fc.wp.withContextDeadline(ctx, func() error {
@@ -263,16 +299,36 @@ func createFirebirdsqlConn(ctx context.Context, dsn *firebirdDsn) (*firebirdsqlC
 // answering.
 //
 // If ctx ends while fn is on the wire the exchange is left half done, so the
-// error wraps driver.ErrBadConn and database/sql discards the connection. The
-// watcher is joined before the deadline is cleared, so a late cancellation
-// cannot leave an expired deadline on a pooled connection.
+// error wraps driver.ErrBadConn and database/sql discards the connection; a
+// server error is returned as is, since its reply was read in full (see
+// boundByContext). The watcher is joined before the deadline is cleared, so a
+// late cancellation cannot leave an expired deadline on a pooled connection.
 func (p *wireProtocol) withContextDeadline(ctx context.Context, fn func() error) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	return p.boundByContext(ctx, fn)
+}
+
+// boundByContext is withContextDeadline without its entry check: fn always runs. It is for
+// a read whose request is already on the wire (the reply to a commit or rollback), where
+// returning early would leave that reply unread on a connection that still looks healthy.
+// If ctx has already ended, fn's first blocking read fails as soon as the watcher expires
+// the socket.
+//
+// A server error means the reply was read in full, so it is returned as is even when ctx
+// ended meanwhile. Any other failure after ctx ended marks the wire desynced and wraps
+// driver.ErrBadConn after awaitContextDone, which gives the context's timer up to a
+// second to close Done: database/sql retries ErrBadConn unless it sees the context done.
+// A driver.ErrBadConn from the wire parser marks the wire desynced whatever the context:
+// it means the reply was abandoned partway, and database/sql may retry on this very
+// connection (a statement prepared in a Tx).
+func (p *wireProtocol) boundByContext(ctx context.Context, fn func() error) error {
 	if ctx.Done() == nil {
 		// Context can never be canceled; skip the watcher goroutine entirely.
-		return fn()
+		err := fn()
+		p.markIfReplyAbandoned(err)
+		return err
 	}
 	if dl, ok := ctx.Deadline(); ok {
 		p.conn.SetDeadline(dl)
@@ -291,11 +347,38 @@ func (p *wireProtocol) withContextDeadline(ctx context.Context, fn func() error)
 	close(stop)
 	<-watcherDone
 	p.conn.SetDeadline(time.Time{})
-	if err != nil {
+	p.markIfReplyAbandoned(err)
+	if err != nil && !isServerError(err) {
 		if cerr := contextErrOrDeadlineExceeded(ctx); cerr != nil {
-			p.desynced = true
+			p.markUnlessReplyRead(err)
+			awaitContextDone(ctx)
+			if ctx.Err() != nil {
+				cerr = ctx.Err()
+			}
 			return fmt.Errorf("%w: %w", cerr, driver.ErrBadConn)
 		}
 	}
 	return err
+}
+
+// markIfReplyAbandoned marks the wire desynced when err shows a reply abandoned partway:
+// a driver.ErrBadConn from the wire parser (a mid-stream violation, see the wire-parse
+// bounds convention), an unexpected opcode, EOF, or a network error. None of these can
+// come from a fully consumed buffer. Errors from fully consumed buffers are plain errors
+// and leave the wire alone.
+//
+// It is narrower than markUnlessReplyRead on purpose: boundByContext's fn (connect,
+// begin, prepare) can fail with such a plain error (describe-vars, bind metadata) after
+// every reply was read, and that must not cost the connection, or a Tx, while the context
+// is live.
+func (p *wireProtocol) markIfReplyAbandoned(err error) {
+	if err == nil || isServerError(err) {
+		return
+	}
+	var opErr *ErrOpResponse
+	var netErr net.Error
+	if errors.Is(err, driver.ErrBadConn) || errors.As(err, &opErr) ||
+		errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.As(err, &netErr) {
+		p.desynced = true
+	}
 }

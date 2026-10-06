@@ -55,6 +55,9 @@ type ScrollableStmt struct {
 //	    return e
 //	})
 func (fc *firebirdsqlConn) QueryScrollable(ctx context.Context, query string, args ...driver.Value) (*ScrollableStmt, error) {
+	if err := fc.checkWire(); err != nil {
+		return nil, err
+	}
 	if fc.wp.protocolVersion < PROTOCOL_VERSION18 {
 		return nil, fmt.Errorf("firebirdsql: scrollable cursors require wire protocol 18+, got %d", fc.wp.protocolVersion)
 	}
@@ -85,7 +88,7 @@ func (fc *firebirdsqlConn) QueryScrollable(ctx context.Context, query string, ar
 		return nil, err
 	}
 	_, _, _, err = fc.wp.opResponse()
-	if err != nil {
+	if err = fc.wp.markUnlessReplyRead(err); err != nil {
 		_ = stmt.Close()
 		return nil, err
 	}
@@ -103,11 +106,14 @@ func (s *ScrollableStmt) Fetch(orientation int32, offset int32, count int32) ([]
 		return nil, false, fmt.Errorf("firebirdsql: Fetch count must be > 0")
 	}
 	stmt := s.stmt
+	if err := stmt.fc.checkWire(); err != nil {
+		return nil, false, err
+	}
 	if err := stmt.fc.wp.opFetchScroll(stmt.stmtHandle, stmt.blr, orientation, offset, count); err != nil {
 		return nil, false, err
 	}
 	rows, more, err := stmt.fc.wp.opFetchResponse(stmt.stmtHandle, stmt.fc.tx.transHandle, stmt.resultXsqlda)
-	if err != nil {
+	if err = stmt.fc.wp.markUnlessReplyRead(err); err != nil {
 		return nil, false, err
 	}
 	for i := range rows {

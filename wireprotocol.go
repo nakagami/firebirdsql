@@ -106,9 +106,13 @@ type wireProtocol struct {
 	dbHandle int32
 	addr     string
 
-	// desynced is set when a context abandoned a request/response exchange
-	// halfway (see withContextDeadline): the next bytes on the wire belong to
-	// that exchange, so Close drops the socket instead of talking to the server.
+	// desynced means the connection must not be used again: the wire may hold
+	// part of another exchange's reply (a read that did not end in a reply read
+	// in full, or a failed send; see markUnlessReplyRead), a statement's late
+	// reply must not be committed (abandon), or the server refused to roll a
+	// transaction back (rollback). It is never cleared. IsValid keeps the
+	// connection out of the pool, checkWire refuses new work on it, and Close
+	// drops the socket instead of talking to the server.
 	desynced bool
 
 	protocolVersion    int32
@@ -258,12 +262,18 @@ func (p *wireProtocol) sendPackets() (written int, err error) {
 		n, err = p.conn.Write(p.buf[written:])
 		if err != nil {
 			// error while sending the package....
-			err = driver.ErrBadConn
+			p.desynced = true
+			err = fmt.Errorf("firebirdsql: send: %w: %w", err, driver.ErrBadConn)
 			break
 		}
 		written += n
 	}
-	p.conn.Flush()
+	// Write only fills the buffered writer; the socket write, and so its failure, happens
+	// here. A failed flush may leave a packet half sent.
+	if ferr := p.conn.Flush(); ferr != nil && err == nil {
+		p.desynced = true
+		err = fmt.Errorf("firebirdsql: send: %w: %w", ferr, driver.ErrBadConn)
+	}
 	p.buf = p.buf[:0]
 	return
 }
@@ -1029,11 +1039,19 @@ func (p *wireProtocol) _fetchBindXsqlda(stmtHandle int32) ([]xSQLVAR, error) {
 	return inputXsqlda, nil
 }
 
-func (p *wireProtocol) getBlobSegments(blobId []byte, transHandle int32) ([]byte, error) {
+func (p *wireProtocol) getBlobSegments(blobId []byte, transHandle int32) (_ []byte, err error) {
+	// Every failure below follows a request on the wire: the wire rule applies to all of
+	// them, for every caller (rows, exec_procedure output, scrollable fetch).
+	defer func() { p.markUnlessReplyRead(err) }()
 	if id, err := blobIdToInt64(blobId); err == nil && p.inlineBlobCache != nil {
 		if data, ok := p.inlineBlobCache.getAndRemove(transHandle, id); ok {
 			return data, nil
 		}
+	}
+	// A blob read is new work: on a desynced wire op_open_blob2's reply would be read from
+	// another exchange's leftovers. Checked before suspendBuffer, so no resume is owed.
+	if p.desynced {
+		return nil, errConnDesynced
 	}
 
 	suspendBuf := p.suspendBuffer()
@@ -1822,14 +1840,35 @@ var abandonReadTimeout = 10 * time.Second
 // opResponseTimeout reads an op_response bounded by a fixed OS-level deadline (relative to
 // now, no context). It is used where the connection is effectively being abandoned and a
 // silent wire must not hang the caller: cancelAndDrain's cancel-ack read, and the teardown
-// reads (statement/cursor close, autocommit commit-retaining, rollback, detach) that
-// database/sql's awaitDone goroutine can reach automatically when a QueryContext deadline
-// fires mid-fetch. The deadline is cleared on return regardless; on timeout the caller
-// discards the connection rather than reusing it.
+// reads (statement close ack; commits and rollbacks whose context is already done, i.e.
+// Stmt.Close, connection.Close and database/sql's Tx rollback on context expiry; detach)
+// that database/sql's awaitDone goroutine can reach automatically when a QueryContext
+// deadline fires mid-fetch. The deadline is cleared on return regardless.
+//
+// Any failure other than a server error leaves the reply unread (or half read), so the
+// wire is marked desynced and the connection is discarded rather than reused. That covers
+// more than the deadline: opResponse drops read errors inside its op_dummy and lazy-drain
+// loops, so a timeout there surfaces as an unexpected-opcode error.
 func (p *wireProtocol) opResponseTimeout(d time.Duration) (int32, []byte, []byte, error) {
 	p.conn.SetDeadline(time.Now().Add(d))
 	defer p.conn.SetDeadline(time.Time{})
-	return p.opResponse()
+	h, oid, buf, err := p.opResponse()
+	return h, oid, buf, p.markUnlessReplyRead(err)
+}
+
+// markUnlessReplyRead marks the wire desynced after a read whose request is on the wire,
+// unless the reply was read in full: success, or a status vector the server sent
+// (*FbError). Any other failure (a timeout, EOF, a parser driver.ErrBadConn, an
+// unexpected opcode) may leave part of the reply unread, so nothing more is written to
+// the wire and the connection is discarded. A context that ended does not change this
+// rule; it decides what the caller is told. The one place the flag is set on a reply read
+// in full is a statement whose success reply arrived after the deadline (disposeRead,
+// abandon): there the flag is what keeps that work from being committed. Returns err.
+func (p *wireProtocol) markUnlessReplyRead(err error) error {
+	if err != nil && !isServerError(err) {
+		p.desynced = true
+	}
+	return err
 }
 
 func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) ([]driver.Value, error) {

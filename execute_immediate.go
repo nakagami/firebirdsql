@@ -34,6 +34,9 @@ func (fc *firebirdsqlConn) ExecImmediate(ctx context.Context, sql string) error 
 	if fc == nil || fc.wp == nil || fc.tx == nil {
 		return driver.ErrBadConn
 	}
+	if err := fc.checkWire(); err != nil {
+		return err
+	}
 	if fc.tx.needBegin {
 		if err := fc.tx.begin(); err != nil {
 			return err
@@ -50,11 +53,13 @@ func (fc *firebirdsqlConn) ExecImmediate(ctx context.Context, sql string) error 
 		_, _, _, e := fc.wp.opResponse()
 		return e
 	})
-	if err != nil {
+	// Same disposition as a statement's reply: a reply read after ctx ended is not
+	// committed, and a read that did not end in a reply flags the wire.
+	if err = tmp.disposeRead(ctx, err); err != nil {
 		return err
 	}
 	if fc.tx.isAutocommit {
-		if cerr := fc.tx.commitRetainging(); cerr != nil {
+		if cerr := fc.tx.commitRetaining(ctx); cerr != nil {
 			return cerr
 		}
 	}
