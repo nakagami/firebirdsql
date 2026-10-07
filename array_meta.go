@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/big"
 	"strconv"
 	"strings"
 )
@@ -395,6 +396,8 @@ func (p *wireProtocol) encodeArrayElement(meta *ArrayMeta, e any) ([]byte, error
 		}
 		_, v := _timestampToBlrNoTZ(t)
 		return v, nil
+	case SQL_TYPE_INT128:
+		return toInt128Bytes(e, meta.Scale)
 	case SQL_TYPE_TIME_TZ, SQL_TYPE_TIMESTAMP_TZ:
 		// TIME/TIMESTAMP WITH TIME ZONE elements need their own wire form
 		// (time/timestamp + 4-byte zone word, different from the row layout).
@@ -412,7 +415,9 @@ func (p *wireProtocol) encodeArrayElement(meta *ArrayMeta, e any) ([]byte, error
 // data + alignment.
 func sliceWireElementSize(meta *ArrayMeta) (int, bool) {
 	switch meta.TypeID {
-	case SQL_TYPE_INT64, SQL_TYPE_DOUBLE, SQL_TYPE_TIMESTAMP:
+	case SQL_TYPE_INT128, SQL_TYPE_DEC128, SQL_TYPE_DEC_FIXED:
+		return 16, false
+	case SQL_TYPE_DEC64, SQL_TYPE_INT64, SQL_TYPE_DOUBLE, SQL_TYPE_TIMESTAMP:
 		return 8, false
 	case SQL_TYPE_VARYING:
 		return int(meta.FieldBytes), true
@@ -552,5 +557,130 @@ func sliceElementCount(meta *ArrayMeta, data []byte) (int, error) {
 	return len(data) / elemLen, nil
 }
 
+// int128Bytes encodes n as a 16-byte big-endian two's-complement value, the
+// on-wire representation Firebird sends for SQL_TYPE_INT128.
+func int128Bytes(n *big.Int) []byte {
+	out := make([]byte, 16)
+	if n.Sign() >= 0 {
+		b := n.Bytes()
+		copy(out[16-len(b):], b)
+		return out
+	}
+	bias := new(big.Int).Lsh(big.NewInt(1), 128)
+	b := new(big.Int).Add(n, bias).Bytes()
+	copy(out[16-len(b):], b)
+	return out
+}
+
+var (
+	minInt128 = new(big.Int).Neg(new(big.Int).Lsh(big.NewInt(1), 127))
+	maxInt128 = new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 127), big.NewInt(1))
+)
+
+func toInt128Bytes(e any, scale int32) ([]byte, error) {
+	var n *big.Int
+	switch v := e.(type) {
+	case *big.Int:
+		if v == nil {
+			return nil, fmt.Errorf("cannot encode nil *big.Int")
+		}
+		n = new(big.Int).Set(v)
+	case big.Int:
+		n = new(big.Int).Set(&v)
+	case int:
+		n = big.NewInt(int64(v))
+	case int8:
+		n = big.NewInt(int64(v))
+	case int16:
+		n = big.NewInt(int64(v))
+	case int32:
+		n = big.NewInt(int64(v))
+	case int64:
+		n = big.NewInt(v)
+	case uint:
+		n = new(big.Int).SetUint64(uint64(v))
+	case uint8:
+		n = big.NewInt(int64(v))
+	case uint16:
+		n = big.NewInt(int64(v))
+	case uint32:
+		n = big.NewInt(int64(v))
+	case uint64:
+		n = new(big.Int).SetUint64(v)
+	case string:
+		s := strings.TrimSpace(v)
+		if scale != 0 {
+			parts := strings.Split(s, ".")
+			if len(parts) == 1 {
+				var ok bool
+				n, ok = new(big.Int).SetString(parts[0], 10)
+				if !ok {
+					return nil, fmt.Errorf("cannot parse %q as INT128", s)
+				}
+				if scale < 0 {
+					mul := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(-scale)), nil)
+					n.Mul(n, mul)
+				} else if scale > 0 {
+					div := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(scale)), nil)
+					n.Div(n, div)
+				}
+			} else if len(parts) == 2 {
+				neg := strings.HasPrefix(parts[0], "-")
+				intPart := strings.TrimPrefix(parts[0], "-")
+				fracPart := parts[1]
+				targetFracDigits := int(-scale)
+				if targetFracDigits < 0 {
+					targetFracDigits = 0
+				}
+				if len(fracPart) < targetFracDigits {
+					fracPart += strings.Repeat("0", targetFracDigits-len(fracPart))
+				} else if len(fracPart) > targetFracDigits {
+					fracPart = fracPart[:targetFracDigits]
+				}
+				combined := intPart + fracPart
+				var ok bool
+				n, ok = new(big.Int).SetString(combined, 10)
+				if !ok {
+					return nil, fmt.Errorf("cannot parse %q as INT128", s)
+				}
+				if neg {
+					n.Neg(n)
+				}
+			} else {
+				return nil, fmt.Errorf("cannot parse %q as INT128", s)
+			}
+		} else {
+			var ok bool
+			n, ok = new(big.Int).SetString(s, 10)
+			if !ok {
+				return nil, fmt.Errorf("cannot parse %q as INT128", s)
+			}
+		}
+	default:
+		return nil, fmt.Errorf("cannot encode %T as INT128", e)
+	}
+
+	if scale != 0 {
+		switch e.(type) {
+		case string:
+			// string input already handled scale above
+		default:
+			if scale < 0 {
+				mul := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(-scale)), nil)
+				n.Mul(n, mul)
+			} else if scale > 0 {
+				div := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(scale)), nil)
+				n.Div(n, div)
+			}
+		}
+	}
+
+	if n.Cmp(minInt128) < 0 || n.Cmp(maxInt128) > 0 {
+		return nil, fmt.Errorf("value %s out of INT128 range", n.String())
+	}
+	return int128Bytes(n), nil
+}
+
 // (batch_encode.go provides the shared toInt64/toFloat64/toString/toTime/toBool
 // element value converters used above.)
+

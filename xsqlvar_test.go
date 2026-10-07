@@ -213,21 +213,6 @@ func TestValueInt128(t *testing.T) {
 	}
 }
 
-// int128Bytes encodes n as a 16-byte big-endian two's-complement value, the
-// on-wire representation Firebird sends for SQL_TYPE_INT128.
-func int128Bytes(n *big.Int) []byte {
-	out := make([]byte, 16)
-	if n.Sign() >= 0 {
-		b := n.Bytes()
-		copy(out[16-len(b):], b)
-		return out
-	}
-	bias := new(big.Int).Lsh(big.NewInt(1), 128)
-	b := new(big.Int).Add(n, bias).Bytes()
-	copy(out[16-len(b):], b)
-	return out
-}
-
 func TestValueInt128WithScale(t *testing.T) {
 	maxPos := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 127), big.NewInt(1))
 	minNeg := new(big.Int).Neg(new(big.Int).Lsh(big.NewInt(1), 127))
