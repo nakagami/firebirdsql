@@ -24,9 +24,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"database/sql/driver"
 	"encoding/binary"
+	"errors"
 	"testing"
 )
 
@@ -194,4 +197,239 @@ func TestOpBatchCreateMsgPacketShapes(t *testing.T) {
 	if binary.BigEndian.Uint32(raw2[0:4]) != uint32(op_batch_msg) {
 		t.Fatalf("msg opcode")
 	}
+}
+
+// packetLog records each write that reaches it as one packet: sendPackets flushes once per
+// request, so the first four bytes of each packet are its opcode.
+type packetLog struct{ packets [][]byte }
+
+func (l *packetLog) Write(b []byte) (int, error) {
+	l.packets = append(l.packets, append([]byte(nil), b...))
+	return len(b), nil
+}
+
+func (l *packetLog) sent(op int32) bool {
+	for _, p := range l.packets {
+		if firstOpcode(p) == op {
+			return true
+		}
+	}
+	return false
+}
+
+func firstOpcode(b []byte) int32 {
+	if len(b) < 4 {
+		return -1
+	}
+	return int32(binary.BigEndian.Uint32(b[:4]))
+}
+
+// batchTestConn builds a connection over canned replies, with the written packets logged.
+func batchTestConn(replies []byte) (*firebirdsqlConn, *packetLog) {
+	wp := testProtocol(replies)
+	wp.conn.conn = recordDeadlineConn{}
+	var log packetLog
+	wp.conn.writer = bufio.NewWriter(&log)
+	fc := &firebirdsqlConn{wp: wp, isAutocommit: true, transactionSet: map[*firebirdsqlTx]struct{}{}}
+	fc.tx = &firebirdsqlTx{fc: fc, isAutocommit: true, transHandle: 1}
+	fc.transactionSet[fc.tx] = struct{}{}
+	return fc, &log
+}
+
+// Each batch request is followed by an op_ping / op_batch_sync, and the server answers both.
+// Both replies are read whichever of them is a refusal, or the next request on the
+// connection reads the one left behind. A reply cut short leaves the wire at an unknown
+// position, so the connection is marked desynced.
+func TestBatchTwoRepliesAlwaysRead(t *testing.T) {
+	requests := []struct {
+		name    string
+		version int32
+		send    func(p *wireProtocol) error
+	}{
+		{"create", PROTOCOL_VERSION16, func(p *wireProtocol) error {
+			return p.opBatchCreate(2, []byte{1}, 8, []byte{batchVersion1})
+		}},
+		{"msg/op_ping", PROTOCOL_VERSION16, func(p *wireProtocol) error {
+			return p.opBatchMsg(2, [][]byte{{0, 0, 0, 1}})
+		}},
+		{"msg/op_batch_sync", PROTOCOL_VERSION17, func(p *wireProtocol) error {
+			return p.opBatchMsg(2, [][]byte{{0, 0, 0, 1}})
+		}},
+		{"release", PROTOCOL_VERSION16, func(p *wireProtocol) error {
+			return p.opBatchRelease(2, op_batch_rls)
+		}},
+	}
+	refused := func(f *acceptFrame) { f.opResponseFrame(0, nil, isc_arg_gds, ISCCancelled) }
+	ok := func(f *acceptFrame) { f.opResponseFrame(0, nil) }
+
+	inStep := []struct {
+		name    string
+		first   func(f *acceptFrame)
+		second  func(f *acceptFrame)
+		wantNil bool
+	}{
+		{"refused,ok", refused, ok, false},
+		{"ok,refused", ok, refused, false},
+		{"refused,refused", refused, refused, false},
+		{"ok,ok", ok, ok, true},
+	}
+	cutShort := []struct {
+		name  string
+		build func(f *acceptFrame)
+	}{
+		{"refused,nothing", func(f *acceptFrame) { refused(f) }},
+		{"refused,opcode only", func(f *acceptFrame) { refused(f); f.int32(op_response) }},
+		{"nothing", func(f *acceptFrame) {}},
+		{"opcode only", func(f *acceptFrame) { f.int32(op_response) }},
+	}
+
+	for _, rq := range requests {
+		for _, c := range inStep {
+			t.Run(rq.name+"/"+c.name, func(t *testing.T) {
+				var f acceptFrame
+				c.first(&f)
+				c.second(&f)
+				f.opResponseFrame(7, nil) // marker: the next reply on the wire
+				p := testProtocol(f.bytes())
+				p.protocolVersion = rq.version
+
+				err := rq.send(p)
+				if c.wantNil {
+					if err != nil {
+						t.Fatalf("err = %#v, want nil", err)
+					}
+				} else {
+					var fbErr *FbError
+					if !errors.As(err, &fbErr) {
+						t.Fatalf("err = %v, want the server's refusal", err)
+					}
+				}
+				if p.desynced {
+					t.Fatal("desynced after two replies read in full")
+				}
+				handle, _, _, err := p.opResponse()
+				if err != nil || handle != 7 {
+					t.Fatalf("next reply = handle %d, err %v; want the marker (handle 7)", handle, err)
+				}
+				if n := p.conn.reader.Buffered(); n != 0 {
+					t.Fatalf("%d bytes left on the wire", n)
+				}
+			})
+		}
+		for _, c := range cutShort {
+			t.Run(rq.name+"/"+c.name, func(t *testing.T) {
+				var f acceptFrame
+				c.build(&f)
+				p := testProtocol(f.bytes())
+				p.protocolVersion = rq.version
+
+				err := rq.send(p)
+				var fbErr *FbError
+				if err == nil || errors.As(err, &fbErr) {
+					t.Fatalf("err = %v, want a read error", err)
+				}
+				if !p.desynced {
+					t.Fatal("not desynced after a reply cut short")
+				}
+			})
+		}
+	}
+}
+
+// A batch release the server refuses after a successful batch: its ping reply must still be
+// read, or the commit takes that reply as its own, reports success, and leaves the real
+// commit reply on a connection that looks healthy. Both replies read, the batch commits.
+func TestBatchRefusedReleaseKeepsWire(t *testing.T) {
+	completion := func(f *acceptFrame) {
+		for _, v := range []int32{op_batch_cs, 2, 1, 1, 0, 0, 1} { // completion: 1 row updated
+			f.int32(v)
+		}
+	}
+
+	t.Run("refused release", func(t *testing.T) {
+		var f acceptFrame
+		completion(&f)
+		f.opResponseFrame(0, nil, isc_arg_gds, ISCCancelled) // op_batch_rls refused
+		f.opResponseFrame(0, nil)                            // its op_ping
+		f.opResponseFrame(0, nil)                            // op_commit_retaining
+		fc, log := batchTestConn(f.bytes())
+		b := &PreparedBatch{fc: fc, stmt: &firebirdsqlStmt{fc: fc, stmtHandle: 2}, created: true}
+
+		res, err := b.Exec(context.Background())
+		if err != nil {
+			t.Fatalf("Exec err = %v, want the batch committed", err)
+		}
+		if res.Affected != 1 {
+			t.Fatalf("Affected = %d, want 1", res.Affected)
+		}
+		if !fc.IsValid() {
+			t.Fatal("IsValid() = false after a refused release read in full")
+		}
+		fc.wp.conn.writer.Flush()
+		if !log.sent(op_commit_retaining) {
+			t.Fatal("no op_commit_retaining sent")
+		}
+		if n := fc.wp.conn.reader.Buffered(); n != 0 {
+			t.Fatalf("%d reply bytes left unread; the commit read the ping reply as its own", n)
+		}
+	})
+
+	// The release succeeds but the reply to its ping never arrives in full: nothing may be
+	// committed into a wire whose position is unknown.
+	t.Run("ping reply cut short", func(t *testing.T) {
+		var f acceptFrame
+		completion(&f)
+		f.opResponseFrame(0, nil) // op_batch_rls
+		fc, log := batchTestConn(f.bytes())
+		b := &PreparedBatch{fc: fc, stmt: &firebirdsqlStmt{fc: fc, stmtHandle: 2}, created: true}
+
+		_, err := b.Exec(context.Background())
+		if !errors.Is(err, driver.ErrBadConn) {
+			t.Fatalf("Exec err = %v, want driver.ErrBadConn", err)
+		}
+		if fc.IsValid() {
+			t.Fatal("IsValid() = true after a reply cut short")
+		}
+		fc.wp.conn.writer.Flush()
+		if log.sent(op_commit_retaining) {
+			t.Fatal("op_commit_retaining sent into a desynced wire")
+		}
+	})
+}
+
+// Once the wire is desynced nothing more is written for the server batch: it goes with the
+// connection.
+func TestBatchReleaseSkippedOnDesyncedWire(t *testing.T) {
+	newBatch := func() (*PreparedBatch, *firebirdsqlConn, *packetLog) {
+		fc, log := batchTestConn(nil)
+		fc.wp.desynced = true
+		return &PreparedBatch{fc: fc, stmt: &firebirdsqlStmt{fc: fc, stmtHandle: 2}, created: true}, fc, log
+	}
+
+	t.Run("Cancel", func(t *testing.T) {
+		b, fc, log := newBatch()
+		err := b.Cancel(context.Background())
+		if !errors.Is(err, driver.ErrBadConn) {
+			t.Fatalf("Cancel err = %v, want driver.ErrBadConn", err)
+		}
+		if b.created {
+			t.Fatal("created still set")
+		}
+		fc.wp.conn.writer.Flush()
+		if len(log.packets) != 0 {
+			t.Fatalf("%d packets written to a desynced wire", len(log.packets))
+		}
+	})
+
+	t.Run("releaseBeforeFree", func(t *testing.T) {
+		b, fc, log := newBatch()
+		b.releaseBeforeFree()
+		if b.created {
+			t.Fatal("created still set")
+		}
+		fc.wp.conn.writer.Flush()
+		if len(log.packets) != 0 {
+			t.Fatalf("%d packets written to a desynced wire", len(log.packets))
+		}
+	})
 }

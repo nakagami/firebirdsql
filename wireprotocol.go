@@ -107,8 +107,9 @@ type wireProtocol struct {
 	addr     string
 
 	// desynced is set when a context abandoned a request/response exchange
-	// halfway (see withContextDeadline): the next bytes on the wire belong to
-	// that exchange, so Close drops the socket instead of talking to the server.
+	// halfway (see withContextDeadline), or when a batch request's replies could
+	// not be read in full (receiveTwoResponses): the next bytes on the wire belong
+	// to that exchange, so Close drops the socket instead of talking to the server.
 	desynced bool
 
 	protocolVersion    int32
