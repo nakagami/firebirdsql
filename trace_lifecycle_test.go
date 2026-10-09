@@ -348,6 +348,53 @@ func TestServiceLifecycleIdleStatus(t *testing.T) {
 	}
 }
 
+// scriptedService returns a serviceAttach connection builder whose server replies are
+// the frames in f, followed by the reply to op_service_detach.
+func scriptedService(t *testing.T, f *acceptFrame) (*ServiceManager, func() (*ServiceManager, error)) {
+	t.Helper()
+	f.opResponseFrame(0, nil) // reply to op_service_detach
+	client, server := net.Pipe()
+	t.Cleanup(func() { _ = client.Close(); _ = server.Close() })
+	svc := &ServiceManager{wp: testProtocol(f.bytes())}
+	svc.wp.conn.conn = client // closed by the deferred Close
+	return svc, func() (*ServiceManager, error) { return svc, nil }
+}
+
+func TestServiceLifecycleDiscardOutput(t *testing.T) {
+	var f acceptFrame
+	f.opResponseFrame(0, nil) // reply to op_service_start
+	for _, status := range []byte{isc_info_svc_timeout, isc_info_data_not_ready} {
+		f.opResponseFrame(0, []byte{isc_info_svc_line, 0, 0, status, isc_info_end})
+	}
+	f.opResponseFrame(0, []byte{isc_info_svc_line, 1, 0, 'x', isc_info_end})
+	f.opResponseFrame(0, []byte{isc_info_svc_line, 0, 0, isc_info_end})
+	svc, conn := scriptedService(t, &f)
+	if err := serviceAttach(conn, nil, nil); err != nil {
+		t.Fatalf("err=%v", err)
+	}
+	if _, err := svc.wp.recvPackets(4); err == nil {
+		t.Fatal("frames left unread after detach")
+	}
+}
+
+func TestServiceLifecycleDiscardOutputError(t *testing.T) {
+	var f acceptFrame
+	f.opResponseFrame(0, nil) // reply to op_service_start
+	f.opResponseFrame(0, []byte{isc_info_svc_line, 0, 0, isc_info_svc_timeout, isc_info_end})
+	text := "failed to reconnect to a transaction in database\n"
+	data := append([]byte{isc_info_svc_line, byte(len(text)), 0}, text...)
+	f.opResponseFrame(0, append(data, isc_info_end), isc_arg_gds, ISCNoRecon)
+	_, conn := scriptedService(t, &f)
+	requireGDSError(t, serviceAttach(conn, nil, nil), ISCNoRecon)
+}
+
+func TestServiceLifecycleDiscardOutputStartError(t *testing.T) {
+	var f acceptFrame
+	f.opResponseFrame(0, nil, isc_arg_gds, ISCSvcStartFailed) // no output query may follow
+	_, conn := scriptedService(t, &f)
+	requireGDSError(t, serviceAttach(conn, nil, nil), ISCSvcStartFailed)
+}
+
 func TestServiceLifecycleEmptyRequest(t *testing.T) {
 	svc := &ServiceManager{wp: testProtocol(nil)}
 	if _, err := svc.GetServiceInfo(nil, nil, 1024); err == nil {
