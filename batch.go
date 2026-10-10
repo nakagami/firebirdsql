@@ -320,6 +320,11 @@ func (b *PreparedBatch) Exec(ctx context.Context) (*BatchResult, error) {
 	// Release server batch after exec (fbx high-level always closes wire batch).
 	_ = b.fc.wp.opBatchRelease(b.stmt.stmtHandle, op_batch_rls)
 	b.created = false
+	// A release reply cut short marks the wire: committing now would read a reply that may
+	// be leftover bytes. The dropped connection rolls the batch back.
+	if err := b.fc.checkWire(); err != nil {
+		return nil, err
+	}
 
 	if b.fc.tx.isAutocommit {
 		if batchErr != nil {
@@ -344,6 +349,10 @@ func (b *PreparedBatch) Cancel(ctx context.Context) error {
 	b.pendingBytes = 0
 	if !b.created {
 		return nil
+	}
+	if err := b.fc.checkWire(); err != nil {
+		b.created = false // the server batch goes with the connection
+		return err
 	}
 	err := b.fc.wp.opBatchRelease(b.stmt.stmtHandle, op_batch_rls)
 	b.created = false
@@ -371,6 +380,8 @@ func (b *PreparedBatch) releaseBeforeFree() {
 	if b == nil || !b.created {
 		return
 	}
-	_ = b.fc.wp.opBatchRelease(b.stmt.stmtHandle, op_batch_rls)
+	if b.fc.checkWire() == nil {
+		_ = b.fc.wp.opBatchRelease(b.stmt.stmtHandle, op_batch_rls)
+	}
 	b.created = false
 }
