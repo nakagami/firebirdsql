@@ -118,11 +118,24 @@ func (fc *firebirdsqlConn) ProtocolVersion() int {
 
 // IsValid implements driver.Validator. database/sql calls it before returning
 // the connection to the pool: a connection whose wire was left mid-exchange (a
-// bounded read gave up, or a context ended during a round-trip) is discarded
-// instead of serving the next query with the previous exchange's late response.
+// bounded read gave up, a context ended during a round-trip, or a batch request's
+// replies could not be read in full) is discarded instead of serving the next query
+// with the previous exchange's late response.
 // Unlike driver.ErrBadConn this does not make database/sql retry the statement.
 func (fc *firebirdsqlConn) IsValid() bool {
 	return !fc.wp.desynced
+}
+
+// errConnDesynced is returned instead of writing to a connection whose wire is desynced.
+// It wraps driver.ErrBadConn so a held sql.Conn is closed.
+var errConnDesynced = fmt.Errorf("firebirdsql: connection is out of step with the server: %w", driver.ErrBadConn)
+
+// checkWire returns errConnDesynced when the wire is desynced.
+func (fc *firebirdsqlConn) checkWire() error {
+	if fc.wp.desynced {
+		return errConnDesynced
+	}
+	return nil
 }
 
 // ============ driver.Conn implementation

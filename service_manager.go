@@ -405,6 +405,20 @@ func (svc *ServiceManager) ServiceAttachBuffer(spb []byte, verbose chan []byte) 
 	return svc.WaitBuffer(verbose)
 }
 
+// startDiscardingOutput starts the service and reads its output to the end, discarding
+// it, rather than polling isc_info_svc_running with Wait. Firebird 2.5's gfix sets the
+// error of a failed limbo commit or rollback only briefly; a pending line read is answered
+// while it is usually still set, a 10 ms poll almost never is.
+func (svc *ServiceManager) startDiscardingOutput(spb []byte) error {
+	if err := svc.ServiceStart(spb); err != nil {
+		return err
+	}
+	ctx := context.Background()
+	return svc.withContext(ctx, func() error {
+		return svc.stream(ctx, isc_info_svc_line, func([]byte) error { return nil })
+	})
+}
+
 func (svc *ServiceManager) IsRunning() (bool, error) {
 	res, err := svc.GetServiceInfoInt(isc_info_svc_running)
 	return res > 0, err
@@ -804,7 +818,10 @@ func serviceAttach(connBuilder func() (*ServiceManager, error), spb []byte, verb
 		return err
 	}
 	defer func() { _ = conn.Close() }()
-	return conn.ServiceAttach(spb, verbose)
+	if verbose != nil {
+		return conn.ServiceAttach(spb, verbose)
+	}
+	return conn.startDiscardingOutput(spb)
 }
 
 func serviceAttachBuffer(connBuilder func() (*ServiceManager, error), spb []byte, verbose chan []byte) error {

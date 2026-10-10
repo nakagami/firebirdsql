@@ -5,6 +5,7 @@ import (
 	"database/sql/driver"
 	"encoding/binary"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 )
@@ -370,6 +371,40 @@ func TestParseConnectResponse_TruncatedAcceptFields(t *testing.T) {
 	// instead of being dropped.
 	if err := parseConnectResponse(t, f.bytes()); err == nil {
 		t.Fatal("expected error for truncated accept frame, got nil")
+	}
+}
+
+// The connection closes before the server's answer is complete: a server
+// that accepted the socket and died, or a proxy in front of a server that is
+// down. The read error must reach the caller as it is, so that a dropped
+// connection (io.EOF, a net.Error) can be told from a protocol violation.
+func TestParseConnectResponse_ConnectionClosed(t *testing.T) {
+	truncatedAccept := func() []byte {
+		var f acceptFrame
+		f.int32(op_accept)
+		f.int32(PROTOCOL_VERSION13) // 4 of the 12 header bytes
+		return f.bytes()
+	}()
+	afterDummy := func() []byte {
+		var f acceptFrame
+		f.int32(op_dummy)
+		return f.bytes()
+	}()
+	cases := []struct {
+		name  string
+		frame []byte
+	}{
+		{"no answer", nil},
+		{"after op_dummy", afterDummy},
+		{"truncated op_accept header", truncatedAccept},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			err := parseConnectResponse(t, tt.frame)
+			if !errors.Is(err, io.EOF) {
+				t.Fatalf("want io.EOF, got %v", err)
+			}
+		})
 	}
 }
 

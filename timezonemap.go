@@ -30,7 +30,7 @@ package firebirdsql
 
 // getTimezoneVersion returns the IANA timezone database version bundled with Firebird.
 func getTimezoneVersion() string {
-	return "2026a"
+	return "2026e"
 }
 
 // getTimezoneIDByName returns the Firebird timezone ID for a given IANA timezone name.
