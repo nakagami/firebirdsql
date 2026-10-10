@@ -1,0 +1,54 @@
+name: Go (Firebird 4)
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+
+  test:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        go: ['1.22', '1.23']
+
+    services:
+      firebird:
+        image: firebirdsql/firebird:4.0.5
+        env:
+          ISC_USER: sysdba
+          ISC_PASSWORD: masterkey
+        ports:
+          - 3050:3050
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Wait for Firebird
+      run: |
+        for i in $(seq 1 30); do
+          if (exec 3<>/dev/tcp/localhost/3050) 2>/dev/null; then
+            exec 3>&- 2>/dev/null
+            echo "Firebird is up"
+            break
+          fi
+          sleep 2
+        done
+
+    - name: Set up Go ${{ matrix.go }}
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.go }}
+
+    - name: Build
+      run: go build -v ./...
+
+    # Phase 10 of JAYBIRD_TEST_PORT_PLAN.md: FB4 runs the tests that gate on
+    # Firebird 4 features (BOOLEAN, DECFLOAT, INT128, WITH TIME ZONE, batch)
+    # while FB2.5-era tests skip themselves.
+    - name: Test
+      run: |
+        export ISC_PASSWORD=masterkey
+        go test -race -v ./...
