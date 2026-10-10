@@ -114,7 +114,7 @@ func (fc *firebirdsqlConn) Ping(ctx context.Context) error {
 	}
 	err := fc.wp.withContextDeadline(ctx, func() error {
 		if err := fc.wp.opInfoDatabase(pingInfoItems); err != nil {
-			return fmt.Errorf("ping info_database failed: %w", err)
+			return fmt.Errorf("op_info_database failed: %w", err)
 		}
 		_, _, _, err := fc.wp.opResponse()
 		return err
@@ -126,7 +126,7 @@ func (fc *firebirdsqlConn) Ping(ctx context.Context) error {
 	// the socket instead of waiting out rollback and detach on a dead wire.
 	fc.wp.desynced = true
 	if errors.Is(err, driver.ErrBadConn) {
-		return err
+		return fmt.Errorf("ping failed: %w", err)
 	}
 	return fmt.Errorf("ping failed: %w: %w", err, driver.ErrBadConn)
 }
