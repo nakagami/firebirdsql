@@ -1,0 +1,66 @@
+name: Run tests
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ['1.22', '1.23']
+        firebird-version: ['2.5-sc', '2.5-ss', '3', '4', '5']
+        include:
+          - firebird-version: '2.5-sc'
+            firebird-image: 'jacobalberty/firebird:2.5-sc'
+          - firebird-version: '2.5-ss'
+            firebird-image: 'jacobalberty/firebird:2.5-ss'
+          - firebird-version: '3'
+            firebird-image: 'firebirdsql/firebird:3'
+          - firebird-version: '4'
+            firebird-image: 'firebirdsql/firebird:4'
+          - firebird-version: '5'
+            firebird-image: 'firebirdsql/firebird:5'
+
+    services:
+      firebird:
+        image: ${{ matrix.firebird-image }}
+        volumes:
+          - /tmp:/tmp
+        env:
+          ISC_PASSWORD: masterkey
+          FIREBIRD_ROOT_PASSWORD: masterkey
+          # Same settings as _attic/firebird.conf
+          FIREBIRD_CONF_AuthServer: Srp256, Srp, Legacy_Auth
+          FIREBIRD_CONF_WireCrypt: Enabled
+          FIREBIRD_CONF_DefaultTimeZone: GMT
+        ports:
+          - 3050:3050
+        # The job waits until the server accepts connections inside the container
+        options: >-
+          --health-cmd "bash -c 'echo > /dev/tcp/localhost/3050'"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go ${{ matrix.go }}
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.go }}
+    - name: Build
+      run: go build -v ./...
+    - name: Test
+      env:
+        ISC_USER: SYSDBA
+        ISC_PASSWORD: masterkey
+        FIREBIRDSQL_TRACE_TEST: "1"
+      run: |
+        go test -v ./...
