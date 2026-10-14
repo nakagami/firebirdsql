@@ -243,10 +243,25 @@ func (x *xSQLVAR) _parseTime(raw_value []byte) (int, int, int, int) {
 	return h, m, s, (n % 10000) * 100000
 }
 
+// locationByName resolves a session timezone name to a Go location, accepting
+// fixed UTC offsets ("+05:30", "-08:00", "+0530", "+05") that IANA
+// LoadLocation rejects. Unresolvable names behave like before: the caller's
+// default (time.Local) stays in place when the name is empty, and an
+// unparseable name yields nil (which time.Date treats as UTC).
+func locationByName(name string) *time.Location {
+	if tz, err := time.LoadLocation(name); err == nil {
+		return tz
+	}
+	if secs, ok := parseUTCOffset(name); ok {
+		return time.FixedZone(name, secs)
+	}
+	return nil
+}
+
 func (x *xSQLVAR) parseDate(raw_value []byte, timezone string) time.Time {
 	tz := time.Local
 	if timezone != "" {
-		tz, _ = time.LoadLocation(timezone)
+		tz = locationByName(timezone)
 	}
 	year, month, day := x._parseDate(raw_value)
 	return time.Date(year, time.Month(month), day, 0, 0, 0, 0, tz)
@@ -255,7 +270,7 @@ func (x *xSQLVAR) parseDate(raw_value []byte, timezone string) time.Time {
 func (x *xSQLVAR) parseTime(raw_value []byte, timezone string) time.Time {
 	tz := time.Local
 	if timezone != "" {
-		tz, _ = time.LoadLocation(timezone)
+		tz = locationByName(timezone)
 	}
 	h, m, s, n := x._parseTime(raw_value)
 	now := time.Now()
@@ -266,7 +281,7 @@ func (x *xSQLVAR) parseTime(raw_value []byte, timezone string) time.Time {
 func (x *xSQLVAR) parseTimestamp(raw_value []byte, timezone string) time.Time {
 	tz := time.Local
 	if timezone != "" {
-		tz, _ = time.LoadLocation(timezone)
+		tz = locationByName(timezone)
 	}
 
 	year, month, day := x._parseDate(raw_value[:4])
@@ -275,9 +290,15 @@ func (x *xSQLVAR) parseTimestamp(raw_value []byte, timezone string) time.Time {
 }
 
 // _parseTimezoneID resolves the 2-byte Firebird timezone id carried in a
-// WITH TIME ZONE wire value. Unresolvable ids fall back to UTC.
+// WITH TIME ZONE wire value. Ids in the GMT-displacement range become fixed
+// zones carrying the offset (Firebird names them "+05:30", "-08:00", ...);
+// named ids resolve through the zone map. Unresolvable ids fall back to UTC.
 func _parseTimezoneID(idRaw []byte) *time.Location {
-	name := getTimezoneNameByID(int(bytes_to_buint16(idRaw)))
+	id := int(bytes_to_buint16(idRaw))
+	if id <= maxDisplacementOffsetMinutes*2 {
+		return offsetTimezoneLocation(id)
+	}
+	name := getTimezoneNameByID(id)
 	if name != "" {
 		if tz, err := time.LoadLocation(name); err == nil {
 			return tz
