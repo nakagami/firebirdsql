@@ -130,7 +130,7 @@ param1, param2... are
 | auth_plugin_list | Ordered, comma-separated allow-list of acceptable authentication plugins (a subset of the supported `Srp256,Srp,Legacy_Auth`). The plugin the server selects must be a member, otherwise the connection is refused before any credentials are sent. Omit a plugin to refuse it (e.g. `Srp256,Srp` to refuse a server-forced downgrade to `Legacy_Auth`, which would otherwise put a brute-forceable DES `crypt(password)` hash on the wire). | Srp256,Srp,Legacy_Auth | `Legacy_Auth` is kept in the default for backward compatibility but is weak; set `Srp256,Srp` to harden. |
 | column_name_to_lower | Force column name to lower | false | For "github.com/jmoiron/sqlx" |
 | role | Role name | | |
-| timezone | IANA time zone name (e.g. `UTC`, `Europe/Berlin`) | | Controls client-side decoding of naive DATE/TIME/TIMESTAMP and server session time zone (FB 4+). See "Time and timestamp handling" below. |
+| timezone | IANA time zone name (e.g. `UTC`, `Europe/Berlin`), or a fixed UTC offset (e.g. `%2B05:30`) | | Controls client-side decoding of naive DATE/TIME/TIMESTAMP and server session time zone (FB 4+). Write a fixed offset percent-encoded: a raw `+` in a URL query becomes a space. See "Time and timestamp handling" below. |
 | wire_crypt | Wire-encryption policy, mirroring the server's `WireCrypt` setting. Tri-state `disabled`/`enabled`/`required`, with boolean aliases `false`=`disabled` and `true`=`enabled`. `enabled` encrypts when the server offers a cipher but tolerates plaintext; `required` fails the connection closed on every non-encrypting handshake outcome (including a legacy plain `op_accept` for protocol versions ≤ 12 and an `op_accept_data` with no negotiated cipher), refusing before any credentials are sent. Note: `enabled` tolerates an active-MITM downgrade to plaintext; on untrusted networks use `required`. | true (=`enabled`) | For Firebird 3.0+. Against pre-3.0 / non-encrypting servers, `required` is refused (use `enabled` to allow plaintext). |
 | wire_crypt_plugin | Ordered, comma-separated allow-list of acceptable wire ciphers, mirroring the server's `WireCryptPlugin`. Order is client preference; omit a cipher to refuse it (e.g. `ChaCha64,ChaCha` to refuse the deprecated RC4/`Arc4`). | ChaCha64,ChaCha,Arc4 | For Firebird 3.0+. `Arc4` (RC4) is kept for FB 3.0 compatibility but is cryptographically weak. |
 | wire_compress | Enable wire protocol compression. | false | For Firebird 3.0+ (protocol version 13+) |
@@ -205,7 +205,7 @@ Element types: `int16`, `int32`, `int64`, `float32`, `float64`, `string`, `time.
 
 Firebird's `DATE`, `TIME`, and `TIMESTAMP` types store wall-clock components without zone information - by design. When the driver decodes such a column into a Go `time.Time`, it must attach some `*time.Location`. Resolution order:
 
-1. If `?timezone=<IANA>` is set on the DSN, that location is used.
+1. If `?timezone=<IANA>` is set on the DSN, that location is used; a fixed offset is also accepted (write it percent-encoded, `?timezone=%2B05:30`; a raw `+` in a URL query becomes a space).
 2. Otherwise `time.Local` is used (matching Firebird's Java driver Jaybird, which uses the JVM default).
 
 For cross-host determinism (e.g. app servers in different time zones all reading the same rows), set `?timezone=UTC` on the DSN:

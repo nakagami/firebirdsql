@@ -277,7 +277,7 @@ func _timestampToBlrNoTZ(t time.Time) ([]byte, []byte) {
 
 func _timeToBlr(t time.Time, protocolVersion int32, sessionTimezone string) ([]byte, []byte) {
 	if protocolVersion >= PROTOCOL_VERSION16 {
-		tzID := resolveTimezone(t.Location().String(), sessionTimezone)
+		tzID := resolveTimezoneFor(t, sessionTimezone)
 		return []byte{28}, _convert_time_tz(t, tzID)
 	}
 	return _timeToBlrNoTZ(t)
@@ -285,7 +285,7 @@ func _timeToBlr(t time.Time, protocolVersion int32, sessionTimezone string) ([]b
 
 func _timestampToBlr(t time.Time, protocolVersion int32, sessionTimezone string) ([]byte, []byte) {
 	if protocolVersion >= PROTOCOL_VERSION16 {
-		tzID := resolveTimezone(t.Location().String(), sessionTimezone)
+		tzID := resolveTimezoneFor(t, sessionTimezone)
 		return []byte{29}, _convert_timestamp_tz(t, tzID)
 	}
 	return _timestampToBlrNoTZ(t)
