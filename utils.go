@@ -240,13 +240,15 @@ func _timezoneToBytes(tzID int32) []byte {
 }
 
 func _convert_time_tz(t time.Time, tzID int32) []byte {
-	// TIME WITH TIME ZONE is a date-less type. Go applies historical LMT
-	// offsets to time.Date with year=0 (e.g., Asia/Seoul = +08:27:52 LMT
-	// instead of +09:00 KST), which would corrupt the UTC conversion.
-	// Re-anchor to today's date so the location's offset reflects current
-	// rules — symmetric with parseTimeTz which uses time.Now() on read.
-	now := time.Now()
-	adjusted := time.Date(now.Year(), now.Month(), now.Day(),
+	// TIME WITH TIME ZONE is a date-less type, so the UTC offset of the
+	// location must be resolved on a fixed date: Go's time.Date with year=0
+	// would apply historical LMT offsets (Asia/Seoul +08:27:52 instead of
+	// +09:00 KST). Firebird, Jaybird and fbx resolve it on 2020-01-01, and
+	// parseTimeTz on read does the same — anchor to that base date. Anchoring
+	// to "today" instead made a DST-zone time encode one hour off whenever
+	// today is inside a DST season (12:00 America/New_York in July went to the
+	// wire as 16:00 UTC where the server convention says 17:00).
+	adjusted := time.Date(timeTzBaseDate.Year(), timeTzBaseDate.Month(), timeTzBaseDate.Day(),
 		t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), t.Location())
 	return bytes.Join([][]byte{
 		_convert_time(adjusted.UTC()),
