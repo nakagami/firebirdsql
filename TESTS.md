@@ -61,6 +61,7 @@ Legend: ✅ pass · ⏭️ skip (version/capability gate or server configuration
 |---|---|:-:|:-:|:-:|:-:|
 | `TestBlobSegmentBoundaries` | Blob sizes 1 → 100 000 bytes across the 32 K segment boundary | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestBlobEdgeCases` | NULL vs empty (both subtypes), cross-connection visibility, rollback, parameter reuse | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestEmptyBinaryBlobNotNil` | Empty binary BLOB reads as empty, not nil, on `[]byte`/`sql.Null`/`any`, cross-checked with `IS NULL`/`OCTET_LENGTH` (`inline` subtest needs protocol 19; skips otherwise) | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestClobLargeText` | Multi-segment unicode CLOB round trip | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestInlineBlobTempDB` | Inline-blob DSN options: enabled/disabled/oversized (needs protocol 19; skips otherwise) | ⏭️ skip | ⏭️ skip | ⏭️ skip | ⏭️ skip |
 
