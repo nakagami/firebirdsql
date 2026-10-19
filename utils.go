@@ -239,15 +239,34 @@ func _timezoneToBytes(tzID int32) []byte {
 	return []byte{0, 0, byte(int32(tzID) >> 8), byte(tzID)}
 }
 
+// _convert_time_tz encodes a date-less TIME WITH TIME ZONE value. The wire
+// payload is the UTC time-of-day ticks and the zone id. The ticks come from
+// the wall clock in the zone that the id names. The label then always agrees
+// with the ticks. This includes the case in which the session timezone is
+// different from the zone of the value. The offset of the label zone is its
+// offset on timeTzBaseDate. The server uses 2020-01-01 as the base date for
+// a date-less time. Go time.Date with year 0 would apply the historical LMT
+// offset instead.
 func _convert_time_tz(t time.Time, tzID int32) []byte {
-	// TIME WITH TIME ZONE is a date-less type. Go applies historical LMT
-	// offsets to time.Date with year=0 (e.g., Asia/Seoul = +08:27:52 LMT
-	// instead of +09:00 KST), which would corrupt the UTC conversion.
-	// Re-anchor to today's date so the location's offset reflects current
-	// rules — symmetric with parseTimeTz which uses time.Now() on read.
-	now := time.Now()
-	adjusted := time.Date(now.Year(), now.Month(), now.Day(),
-		t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), t.Location())
+	labelLoc := time.UTC
+	if labelName := getTimezoneNameByID(int(tzID)); labelName != "" {
+		if labelName == t.Location().String() {
+			labelLoc = t.Location()
+		} else if l, err := time.LoadLocation(labelName); err == nil {
+			labelLoc = l
+		}
+	}
+	src := t
+	if t.Year() == 0 {
+		// Input without a date (time.Parse gives year 0): put the value on
+		// the base date first. src.In() would otherwise apply the LMT offset
+		// of the location.
+		src = time.Date(timeTzBaseDate.Year(), timeTzBaseDate.Month(), timeTzBaseDate.Day(),
+			t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), t.Location())
+	}
+	w := src.In(labelLoc)
+	adjusted := time.Date(timeTzBaseDate.Year(), timeTzBaseDate.Month(), timeTzBaseDate.Day(),
+		w.Hour(), w.Minute(), w.Second(), w.Nanosecond(), labelLoc)
 	return bytes.Join([][]byte{
 		_convert_time(adjusted.UTC()),
 		_timezoneToBytes(tzID),
