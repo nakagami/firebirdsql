@@ -90,6 +90,23 @@ Legend: ✅ pass · ⏭️ skip (version/capability gate or server configuration
 | `TestNegotiatedProtocolVersion` | Negotiated protocol within the advertised 10–17 range | ⏭️ skip | ⏭️ skip | ⏭️ skip | ⏭️ skip |
 | `TestCancelOperationParity` | Context cancellation aborts a long statement; pool stays usable | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 
+### CHARACTER SET NONE columns — charset_none_test.go, charset_none_live_test.go
+
+Text columns the server does not convert to the connection charset. Firebird 6 sizes their row buffer in connection-charset characters; see "Character sets" in the README. Before the fix the live tests failed on the Firebird 6.0 snapshot (6.0.0.2401) for every multi-byte connection charset, and so did the existing `TestGoIssue172`.
+
+| Test | What it verifies | FB 2.5 | FB 3.0 | FB 4.0 | FB 5.0 | FB 6.0 snapshot |
+|---|---|:-:|:-:|:-:|:-:|:-:|
+| `TestWidenUntransliteratedText` | Buffer sizing rules: NONE/ASCII widened by the connection charset width, transliterated and OCTETS columns untouched, collation byte ignored, 16-bit cap | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestWidenUntransliteratedTextLeavesOtherTypes` | Non-text columns are never widened | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCalcBlrUsesMessageLength` | Exact output BLR bytes for widened VARCHAR/CHAR items; CHAR read length follows the buffer | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCharsetBytesPerChar` | Bytes per character for every charset id 0–255 (RDB$CHARACTER_SETS) | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestConnectionCharsetByteLen` | Bytes per character of connection charset names (KOI8R/KOI8U single-byte; GBK, CP943C, GB18030 added) | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCharsetNoneColumnsFetch` | NONE VARCHAR/CHAR values at, below and above a quarter of the column length over UTF8, UNICODE_FSS, SJIS_0208 and WIN1252 connections; the next columns of the row stay aligned; NONE parameters | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCharsetNoneColumnMetadata` | `ColumnTypes().Length()` still reports the described length | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCharsetNoneSystemTables` | `RDB$CONSTRAINT_TYPE` (CHAR(11) NONE) for PRIMARY KEY / FOREIGN KEY rows | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCharsetNoneLongColumn` | VARCHAR(20000) NONE: buffer capped at the 16-bit BLR length, 15000-byte value intact | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCharsetNoneWideRow` | Six widened VARCHAR(8000) NONE columns (192 KB message) in one row | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+
 ### Additions to existing files
 
 | Test | What it verifies | FB 2.5 | FB 3.0 | FB 4.0 | FB 5.0 |
