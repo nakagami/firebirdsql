@@ -422,12 +422,7 @@ func newFirebirdsqlStmt(fc *firebirdsqlConn, query string) (stmt *firebirdsqlStm
 		return nil, err
 	}
 
-	// Firebird 2.5 (protocol < 13) needs no widening and limits the message
-	// size more strictly, so its buffers are left as described.
-	if fc.wp.protocolVersion >= PROTOCOL_VERSION13 {
-		widenUntransliteratedText(stmt.resultXsqlda, fc.wp.charsetByteLen)
-	}
-	stmt.blr = calcBlr(stmt.resultXsqlda)
+	stmt.blr = calcOutputBlr(stmt.resultXsqlda)
 
 	// Resolve array column metadata (element type, dimensions) for any
 	// array-typed output columns; failures fail the prepare, mirroring fbx.

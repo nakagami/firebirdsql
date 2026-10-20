@@ -175,9 +175,7 @@ func newWireProtocolContext(ctx context.Context, addr string, timezone string, c
 }
 
 // charsetLen sets charsetByteLen, the maximum bytes per character of the
-// connection charset (RDB$CHARACTER_SETS.RDB$BYTES_PER_CHARACTER). It sizes
-// the output buffer of untransliterated text columns, see
-// widenUntransliteratedText.
+// connection charset (RDB$CHARACTER_SETS.RDB$BYTES_PER_CHARACTER).
 func (p *wireProtocol) charsetLen() {
 	// all ISO8859_X, WIN125X, DOSxxx and KOI8x are 1 byte per character,
 	// so only charsets with more than 1 byte per character are listed

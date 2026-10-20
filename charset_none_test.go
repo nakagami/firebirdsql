@@ -29,100 +29,74 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Unit tests (no server) for widenUntransliteratedText. The live counterpart
+// Unit tests (no server) for calcOutputBlr and blrCharset. The live counterpart
 // is charset_none_live_test.go.
 
-func TestWidenUntransliteratedText(t *testing.T) {
-	const (
-		none    = 0
-		octets  = 1
-		ascii   = 2
-		fss     = 3
-		utf8    = 4
-		sjis    = 5
-		win1252 = 53
-	)
+func TestBlrCharset(t *testing.T) {
 	cases := []struct {
-		name      string
-		sqltype   int
-		subtype   int // charset id, collation id in the high byte
-		sqllen    int
-		connWidth int
-		want      int // message length
+		name    string
+		subtype int
+		wantCS  byte
+		wantOK  bool
 	}{
-		{"NONE varchar under UTF8", SQL_TYPE_VARYING, none, 40, 4, 160},
-		{"NONE char under UTF8", SQL_TYPE_TEXT, none, 11, 4, 44},
-		{"NONE varchar under UNICODE_FSS", SQL_TYPE_VARYING, none, 40, 3, 120},
-		{"NONE varchar under SJIS_0208", SQL_TYPE_VARYING, none, 40, 2, 80},
-		{"NONE varchar under WIN1252", SQL_TYPE_VARYING, none, 40, 1, 40},
-		{"ASCII is untransliterated too", SQL_TYPE_VARYING, ascii, 10, 4, 40},
-		{"collation in the high byte is ignored", SQL_TYPE_VARYING, none | 3<<8, 10, 4, 40},
-		{"transliterated column: described as UTF8", SQL_TYPE_VARYING, utf8, 160, 4, 160},
-		{"UTF8 column under SJIS: already wider", SQL_TYPE_VARYING, utf8, 160, 2, 160},
-		{"UNICODE_FSS column under UTF8", SQL_TYPE_VARYING, fss, 30, 4, 40},
-		{"SJIS column under UTF8", SQL_TYPE_TEXT, sjis, 20, 4, 40},
-		{"single-byte column under UTF8 (not transliterated)", SQL_TYPE_VARYING, win1252, 10, 4, 40},
-		{"OCTETS is binary: never widened", SQL_TYPE_VARYING, octets, 16, 4, 16},
-		{"OCTETS char", SQL_TYPE_TEXT, octets, 16, 4, 16},
-		{"empty column", SQL_TYPE_VARYING, none, 0, 4, 0},
-		{"capped to the 16-bit BLR length", SQL_TYPE_VARYING, none, 20000, 4, 65532},
-		{"cap is a multiple of the char width", SQL_TYPE_VARYING, none, 30000, 3, 65535},
-		{"cap never shrinks a column", SQL_TYPE_VARYING, none, 32765, 4, 65532},
+		{"NONE (0)", 0, 0, true},
+		{"OCTETS (1)", 1, 1, true},
+		{"ASCII (2)", 2, 2, true},
+		{"UNICODE_FSS (3)", 3, 3, true},
+		{"UTF8 (4)", 4, 4, true},
+		{"WIN1252 (53)", 53, 53, true},
+		{"collation in high byte is ignored", 4 | 3<<8, 4, true},
+		{"CS_dynamic (127) uses plain form", charsetDynamic, 0, false},
+		{"CS_dynamic with collation uses plain form", charsetDynamic | 2<<8, 0, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			x := []xSQLVAR{{sqltype: c.sqltype, sqlsubtype: c.subtype, sqllen: c.sqllen}}
-			widenUntransliteratedText(x, c.connWidth)
-			require.Equal(t, c.want, x[0].messageLength())
-			require.Equal(t, c.sqllen, x[0].sqllen, "the described length is kept")
-			require.Equal(t, c.sqllen, x[0].displayLength(), "metadata reports the described length")
+			x := xSQLVAR{sqltype: SQL_TYPE_VARYING, sqlsubtype: c.subtype, sqllen: 40}
+			cs, ok := x.blrCharset()
+			require.Equal(t, c.wantOK, ok)
+			require.Equal(t, c.wantCS, cs)
 		})
 	}
 }
 
-func TestWidenUntransliteratedTextLeavesOtherTypes(t *testing.T) {
+// TestCalcOutputBlrDeclaresCharset checks that calcOutputBlr emits
+// blr_text2/blr_varying2 with the low-byte charset id and collation 0, while
+// keeping plain blr_text/blr_varying for CS_dynamic (127), SQL_TYPE_NULL, and
+// input-side calcBlr.
+func TestCalcOutputBlrDeclaresCharset(t *testing.T) {
 	x := []xSQLVAR{
-		{sqltype: SQL_TYPE_LONG, sqllen: 4},
-		{sqltype: SQL_TYPE_BLOB, sqlsubtype: 1, sqllen: 8},
-		{sqltype: SQL_TYPE_TIMESTAMP, sqllen: 8},
+		{sqltype: SQL_TYPE_VARYING, sqlsubtype: 0, sqllen: 40},              // NONE
+		{sqltype: SQL_TYPE_TEXT, sqlsubtype: 0 | 3<<8, sqllen: 11},          // NONE with collation in high byte
+		{sqltype: SQL_TYPE_VARYING, sqlsubtype: 4, sqllen: 80},              // UTF8
+		{sqltype: SQL_TYPE_TEXT, sqlsubtype: 1, sqllen: 16},                 // OCTETS
+		{sqltype: SQL_TYPE_VARYING, sqlsubtype: charsetDynamic, sqllen: 32}, // CS_dynamic -> plain blr_varying
+		{sqltype: SQL_TYPE_NULL},                                            // untyped NULL -> plain blr_text(0)
 	}
-	widenUntransliteratedText(x, 4)
-	for _, v := range x {
-		require.Zero(t, v.msglen)
-	}
-}
-
-// TestCalcBlrUsesMessageLength checks the bytes sent to the server: the BLR
-// item of a widened column and the number of bytes read back for CHAR.
-func TestCalcBlrUsesMessageLength(t *testing.T) {
-	x := []xSQLVAR{
-		{sqltype: SQL_TYPE_VARYING, sqlsubtype: 0, sqllen: 40}, // NONE
-		{sqltype: SQL_TYPE_TEXT, sqlsubtype: 0, sqllen: 11},    // NONE
-		{sqltype: SQL_TYPE_VARYING, sqlsubtype: 4, sqllen: 80}, // UTF8
-	}
-	widenUntransliteratedText(x, 4)
-	blr := calcBlr(x)
+	outBlr := calcOutputBlr(x)
 	require.Equal(t, []byte{
-		5, 2, 4, 0, 6, 0, // blr_version5, blr_begin, blr_message 0, 6 items
-		37, 160, 0, 7, 0, // blr_varying(160), blr_short 0 (null indicator)
-		14, 44, 0, 7, 0, // blr_text(44), blr_short 0
-		37, 80, 0, 7, 0, // blr_varying(80), blr_short 0
+		5, 2, 4, 0, 12, 0, // blr_version5, blr_begin, blr_message 0, 12 items
+		38, 0, 0, 40, 0, 7, 0, // blr_varying2(cs=0, coll=0, len=40), blr_short 0
+		15, 0, 0, 11, 0, 7, 0, // blr_text2(cs=0, coll=0, len=11), blr_short 0
+		38, 4, 0, 80, 0, 7, 0, // blr_varying2(cs=4, coll=0, len=80), blr_short 0
+		15, 1, 0, 16, 0, 7, 0, // blr_text2(cs=1, coll=0, len=16), blr_short 0
+		37, 32, 0, 7, 0, // blr_varying(len=32), blr_short 0
+		14, 0, 0, 7, 0, // blr_text(len=0), blr_short 0
 		255, 76, // blr_end, blr_eoc
-	}, blr)
-	require.Equal(t, 44, x[1].ioLength(), "CHAR is read with its message length")
-	require.Equal(t, -1, x[0].ioLength(), "VARCHAR is read with its wire length prefix")
-}
+	}, outBlr)
 
-func TestCharsetBytesPerChar(t *testing.T) {
-	// RDB$CHARACTER_SETS rows with RDB$BYTES_PER_CHARACTER > 1 (Firebird 2.5-6.0)
-	want := map[int]int{3: 3, 4: 4, 5: 2, 6: 2, 44: 2, 56: 2, 57: 2, 67: 2, 68: 2, 69: 4}
-	for id := 0; id < 256; id++ {
-		w, ok := want[id]
-		if !ok {
-			w = 1
-		}
-		require.Equal(t, w, charsetBytesPerChar(id), "charset id %d", id)
-	}
+	// Input-side calcBlr keeps plain blr_text/blr_varying for all items.
+	inBlr := calcBlr(x[:3])
+	require.Equal(t, []byte{
+		5, 2, 4, 0, 6, 0,
+		37, 40, 0, 7, 0,
+		14, 11, 0, 7, 0,
+		37, 80, 0, 7, 0,
+		255, 76,
+	}, inBlr)
+
+	// sqllen and ioLength are unchanged.
+	require.Equal(t, 11, x[1].ioLength())
+	require.Equal(t, -1, x[0].ioLength())
 }
 
 func TestConnectionCharsetByteLen(t *testing.T) {

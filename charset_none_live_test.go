@@ -34,19 +34,21 @@ import (
 
 // Live tests for text columns the server does not transliterate to the
 // connection charset (CHARACTER SET NONE, the default in a database created
-// without DEFAULT CHARACTER SET).
+// without DEFAULT CHARACTER SET, and OCTETS).
 //
-// Firebird 6 sizes the output message of such a column in characters of the
-// connection charset: a VARCHAR(40) CHARACTER SET NONE described with
-// sqllen 40 and declared as blr_varying(40) holds only 40/4 = 10 characters
+// Firebird 6 sizes and validates a charset-less blr_text/blr_varying output
+// item in the connection charset: a VARCHAR(40) CHARACTER SET NONE described
+// with sqllen 40 and declared as blr_varying(40) held only 40/4 = 10 characters
 // under a UTF8 connection, so a longer value failed with
 //
 //	arithmetic exception, numeric overflow, or string truncation
 //	string right truncation
 //	expected length 10, actual 15
 //
-// Firebird 2.5–5.0 treat the same buffer as 40 bytes. These tests pass on all
-// versions; before the fix the UTF8 cases failed on Firebird 6.
+// Declaring the described charset with blr_text2/blr_varying2 (as fbclient
+// does) tells the server not to size or validate the item in the connection
+// charset. These tests pass on all versions; before the fix the UTF8 cases
+// failed on Firebird 6.
 
 // TestCharsetNoneColumnsFetch fetches NONE columns at and below their declared
 // length over every kind of connection charset.
@@ -92,7 +94,7 @@ func TestCharsetNoneColumnsFetch(t *testing.T) {
 				require.Equal(t, want.id, id)
 				require.Equal(t, want.v40, v40)
 				require.Equal(t, want.c11, c11, "CHAR is returned with trailing blanks trimmed")
-				// columns after a widened one must still be read from the right offset
+				// columns after a NONE column must still be read from the right offset
 				require.Equal(t, "tail", u20)
 				require.Equal(t, want.id*10, n)
 				i++
@@ -109,8 +111,7 @@ func TestCharsetNoneColumnsFetch(t *testing.T) {
 	}
 }
 
-// TestCharsetNoneColumnMetadata checks that the widened message buffer does not
-// leak into column metadata: ColumnTypes still reports the described length.
+// TestCharsetNoneColumnMetadata checks that ColumnTypes reports the described length.
 func TestCharsetNoneColumnMetadata(t *testing.T) {
 	_, dsn, _ := createTestDatabaseWithDDL(t, "cs_none_meta_",
 		`CREATE TABLE CS_NONE_META (V40 VARCHAR(40) CHARACTER SET NONE, C11 CHAR(11) CHARACTER SET NONE)`)
@@ -161,26 +162,26 @@ func TestCharsetNoneSystemTables(t *testing.T) {
 	}, got)
 }
 
-// TestCharsetNoneLongColumn covers a column whose widened buffer would not fit
-// the 16-bit BLR length: VARCHAR(20000) NONE × 4 > 65535. The buffer is capped
-// and a value that fits the cap is still returned intact.
+// TestCharsetNoneLongColumn covers long NONE columns (including VARCHAR(30000)
+// over UNICODE_FSS and full 20000-byte values over UTF8).
 func TestCharsetNoneLongColumn(t *testing.T) {
 	_, dsn, _ := createTestDatabaseWithDDL(t, "cs_none_long_",
-		`CREATE TABLE CS_NONE_LONG (V VARCHAR(20000) CHARACTER SET NONE)`)
+		`CREATE TABLE CS_NONE_LONG (V20K VARCHAR(20000) CHARACTER SET NONE, V30K VARCHAR(30000) CHARACTER SET NONE)`)
 	db := openTestDatabase(t, dsn+"?charset=UTF8")
 	ctx := context.Background()
 
-	value := strings.Repeat("0123456789", 1500) // 15000 bytes: fits 65532/4
-	mustExec(t, ctx, db, "INSERT INTO CS_NONE_LONG (V) VALUES (?)", value)
+	value := strings.Repeat("0123456789", 2000) // full 20000 bytes
+	mustExec(t, ctx, db, "INSERT INTO CS_NONE_LONG (V20K, V30K) VALUES (?, 'abc')", value)
 	var got string
-	require.NoError(t, db.QueryRowContext(ctx, "SELECT V FROM CS_NONE_LONG").Scan(&got))
+	require.NoError(t, db.QueryRowContext(ctx, "SELECT V20K FROM CS_NONE_LONG").Scan(&got))
 	require.Equal(t, value, got)
+
+	dbFSS := openTestDatabase(t, dsn+"?charset=UNICODE_FSS")
+	require.NoError(t, dbFSS.QueryRowContext(ctx, "SELECT V30K FROM CS_NONE_LONG").Scan(&got))
+	require.Equal(t, "abc", got)
 }
 
-// TestCharsetNoneWideRow fetches a row of six VARCHAR(8000) NONE columns: their
-// widened buffers add up to a 192 KB message under UTF8, which Firebird 3+
-// accepts. (Firebird 2.5 would reject it with "SQLDA error", so widening is
-// applied on protocol 13+ only.)
+// TestCharsetNoneWideRow fetches a row of six VARCHAR(8000) NONE columns in one row.
 func TestCharsetNoneWideRow(t *testing.T) {
 	cols := make([]string, 6)
 	for i := range cols {
@@ -202,4 +203,28 @@ func TestCharsetNoneWideRow(t *testing.T) {
 	for i := range got {
 		require.Equal(t, v, got[i], "column %d", i)
 	}
+}
+
+// TestCharsetOctetsAndNonUTF8None verifies that OCTETS columns (including binary
+// UUIDs and values longer than sqllen/4) and NONE columns holding non-UTF8 bytes
+// (such as Latin-1 x'E9') are fetched intact over a UTF8 connection.
+func TestCharsetOctetsAndNonUTF8None(t *testing.T) {
+	_, dsn, _ := createTestDatabaseWithDDL(t, "cs_octets_none_",
+		`CREATE TABLE CS_OCTETS_NONE (
+			V_OCT VARCHAR(40) CHARACTER SET OCTETS,
+			C_OCT CHAR(16) CHARACTER SET OCTETS,
+			V_NONE VARCHAR(10) CHARACTER SET NONE)`)
+	db := openTestDatabase(t, dsn+"?charset=UTF8")
+	ctx := context.Background()
+
+	mustExec(t, ctx, db,
+		"INSERT INTO CS_OCTETS_NONE (V_OCT, C_OCT, V_NONE) VALUES ('science-fiction', x'0102030405060708090A0B0C0D0E0F10', x'636166E9')")
+
+	var vOct, cOct []byte
+	var vNone string
+	require.NoError(t, db.QueryRowContext(ctx,
+		"SELECT V_OCT, C_OCT, V_NONE FROM CS_OCTETS_NONE").Scan(&vOct, &cOct, &vNone))
+	require.Equal(t, []byte("science-fiction"), vOct)
+	require.Equal(t, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}, cOct)
+	require.Equal(t, "caf\xe9", vNone)
 }

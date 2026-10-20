@@ -33,25 +33,6 @@ import (
 	"golang.org/x/text/encoding/traditionalchinese"
 )
 
-// charsetIDOctets is the id of OCTETS in RDB$CHARACTER_SETS.
-const charsetIDOctets = 1
-
-// charsetBytesPerChar returns RDB$CHARACTER_SETS.RDB$BYTES_PER_CHARACTER for a
-// charset id. Every charset not listed here is single-byte; the table is the
-// same in Firebird 2.5 to 6.0.
-func charsetBytesPerChar(id int) int {
-	switch id {
-	case 3: // UNICODE_FSS
-		return 3
-	case 4, 69: // UTF8, GB18030
-		return 4
-	case 5, 6, 44, 56, 57, 67, 68: // SJIS_0208, EUCJ_0208, KSC_5601, BIG_5, GB_2312, GBK, CP943C
-		return 2
-	default:
-		return 1
-	}
-}
-
 func charsetEncoding(charset string) encoding.Encoding {
 	switch charset {
 	case "SJIS_0208":

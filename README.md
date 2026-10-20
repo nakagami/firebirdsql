@@ -151,10 +151,10 @@ several system columns use it (e.g. `RDB$RELATION_CONSTRAINTS.RDB$CONSTRAINT_TYP
 
 ### `NONE` columns and Firebird 6
 
-Firebird 6 sizes the row buffer of an unconverted text column in characters of
-the connection character set instead of bytes. With a buffer of the column's
-byte length, a `VARCHAR(40) CHARACTER SET NONE` would hold only 10 characters
-under UTF8, and longer values would fail with:
+Firebird 6 sizes and validates a charset-less output text item (`blr_text`/`blr_varying`)
+in the connection character set instead of bytes. Without declaring the column's
+character set in the output BLR, a `VARCHAR(40) CHARACTER SET NONE` would hold
+only 10 characters under UTF8, and longer values would fail with:
 
 ```text
 arithmetic exception, numeric overflow, or string truncation
@@ -162,11 +162,10 @@ string right truncation
 expected length 10, actual 15
 ```
 
-The driver therefore declares the buffer of such columns as
-*length × bytes per character of the connection charset* (up to the 64 KB
-limit of a single column), on Firebird 3.0 and later. Values and column
-metadata (`ColumnTypes`) are unchanged; Firebird 2.5 is not affected and keeps
-the exact buffer sizes.
+The driver therefore declares the described character set of output text columns
+using `blr_text2`/`blr_varying2` (matching `fbclient` and Jaybird), so the server
+does not size or validate unconverted columns (`NONE`, `OCTETS`) in the connection
+character set.
 
 ## Wire protocols 16–19
 
