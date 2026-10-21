@@ -613,7 +613,7 @@ Added: `TestStatementLifecycle` (transactional DDL commit/rollback, prepared-sta
 
 ### Phase 5 — BLOB/CLOB lifecycle (live, `blob_test.go`) — **DONE** ✅
 
-Added: `TestBlobSegmentBoundaries` (sizes 1 → 100 000 across the 32 K segment boundary — FBBlobStreamTest), `TestBlobEdgeCases` (NULL vs empty for both subtypes, cross-connection visibility, rolled-back tx, param reuse — FBBlobTest/FBBlobAutocommitTest), `TestClobLargeText` (multi-segment unicode text — FBClobTest), `TestInlineBlobTempDB` (inline-blob DSN options generalized from EMPLOYEE to throwaway DBs, threshold on/off + oversized blob — V19StatementTest/InlineBlobTest). Documented current contract: an empty `[]byte` parameter is stored as SQL NULL (Jaybird round-trips an empty binary blob — candidate future improvement).
+Added: `TestBlobSegmentBoundaries` (sizes 1 → 100 000 across the 32 K segment boundary — FBBlobStreamTest), `TestBlobEdgeCases` (NULL vs empty for both subtypes, cross-connection visibility, rolled-back tx, param reuse — FBBlobTest/FBBlobAutocommitTest), `TestClobLargeText` (multi-segment unicode text — FBClobTest), `TestInlineBlobTempDB` (inline-blob DSN options generalized from EMPLOYEE to throwaway DBs, threshold on/off + oversized blob — V19StatementTest/InlineBlobTest). An empty `[]byte` parameter round-trips as an empty binary BLOB, as in Jaybird.
 
 ### Phase 6 — Events parity (live, `event_parity_test.go`) — **DONE** ✅
 

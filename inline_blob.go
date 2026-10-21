@@ -194,7 +194,9 @@ func (p *wireProtocol) parseInlineBlobPayload() (txHandle int32, blobId int64, d
 		return 0, 0, nil, fmt.Errorf("firebirdsql: inline blob data length %d out of range: %w", dataLen, driver.ErrBadConn)
 	}
 	if dataLen == 0 {
-		return txHandle, blobId, nil, nil
+		// An empty BLOB is not NULL: match the segment path in getBlobSegments,
+		// which returns []byte{}; database/sql keeps nil and empty apart.
+		return txHandle, blobId, []byte{}, nil
 	}
 	raw, err := p.recvPacketsAlignment(dataLen)
 	if err != nil {
