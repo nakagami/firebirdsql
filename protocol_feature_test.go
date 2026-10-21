@@ -177,6 +177,65 @@ func TestConsumeInlineBlobBeforeSqlResponse(t *testing.T) {
 	}
 }
 
+// TestInlineBlobEmptyPayloadIsNotNil: a zero-length inline BLOB is an empty
+// value, not NULL; database/sql keeps nil and []byte{} apart.
+func TestInlineBlobEmptyPayloadIsNotNil(t *testing.T) {
+	var f acceptFrame
+	f.int32(op_inline_blob)
+	f.int32(9) // tx
+	_ = binary.Write(&f.buf, binary.BigEndian, int64(0x0102030405060708))
+	f.blob(nil) // info
+	f.blob(nil) // data: zero length
+	f.int32(op_fetch_response)
+	f.int32(100)
+	f.int32(0)
+
+	p := testProtocol(f.bytes())
+	p.inlineBlobCache = newInlineBlobCache(1024)
+	if _, _, err := p.opFetchResponse(1, 9, nil); err != nil {
+		t.Fatal(err)
+	}
+	data, err := p.getBlobSegments(bint64_to_bytes(0x0102030405060708), 9)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data == nil {
+		t.Fatal("data == nil, want empty non-nil slice")
+	}
+	if len(data) != 0 {
+		t.Fatalf("len(data)=%d, want 0", len(data))
+	}
+}
+
+// TestInlineBlobEmptyPayloadIsNotNilSqlResponse is the same check on the
+// op_sql_response path used by EXECUTE PROCEDURE.
+func TestInlineBlobEmptyPayloadIsNotNilSqlResponse(t *testing.T) {
+	var f acceptFrame
+	f.int32(op_inline_blob)
+	f.int32(3)
+	_ = binary.Write(&f.buf, binary.BigEndian, int64(99))
+	f.blob(nil)
+	f.blob(nil)
+	f.int32(op_sql_response)
+	f.int32(0) // count 0
+
+	p := testProtocol(f.bytes())
+	p.inlineBlobCache = newInlineBlobCache(1024)
+	if _, err := p.opSqlResponse(nil); err != nil {
+		t.Fatal(err)
+	}
+	data, err := p.getBlobSegments(bint64_to_bytes(99), 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data == nil {
+		t.Fatal("data == nil, want empty non-nil slice")
+	}
+	if len(data) != 0 {
+		t.Fatalf("len(data)=%d, want 0", len(data))
+	}
+}
+
 func TestGetBlobSegmentsUsesInlineCache(t *testing.T) {
 	p := testProtocol(nil)
 	p.inlineBlobCache = newInlineBlobCache(1024)
