@@ -10,7 +10,7 @@ Legend: ✅ pass · ⏭️ skip (version/capability gate or server configuration
 | `TestTestUtilCreateDatabaseWithDDL` | Throwaway database creation + DDL execution + file cleanup | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestTestUtilMustExecRowsAffected` | mustExec helper and RowsAffected reporting | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestTestUtilErrorMatchers` | requireGDSError / requireSQLCode / requireSQLState matchers on a real constraint violation | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
-| `TestTestUtilProtocolGate` | negotiatedProtocol + requireProtocol gates pass or skip, never fail | ⏭️ skip | ⏭️ skip | ⏭️ skip | ⏭️ skip |
+| `TestTestUtilProtocolGate` | negotiatedProtocol + requireProtocol gates pass or skip, never fail | ⏭️ skip | ⏭️ skip | ⏭️ skip | ✅ pass |
 | `TestTestUtilVersionGates` | Firebird version gates (pass on new servers, skip on old) | ⏭️ skip | ⏭️ skip | ⏭️ skip | ⏭️ skip |
 | `TestTestUtilUserFixture` | Services-API user fixture: create → authenticate → grant → auto-drop | ⏭️ skip | ✅ pass | ✅ pass | ✅ pass |
 
@@ -88,7 +88,9 @@ Legend: ✅ pass · ⏭️ skip (version/capability gate or server configuration
 
 | Test | What it verifies | FB 2.5 | FB 3.0 | FB 4.0 | FB 5.0 |
 |---|---|:-:|:-:|:-:|:-:|
-| `TestNegotiatedProtocolVersion` | Negotiated protocol within the advertised 10–17 range | ⏭️ skip | ⏭️ skip | ⏭️ skip | ⏭️ skip |
+| `TestNegotiatedProtocolVersion` | Negotiated protocol within the advertised 10–19 range | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestFeatureProtocolGating/batch_(protocol_16+)` | PrepareBatch insert behind the protocol-16 gate | ⏭️ skip | ⏭️ skip | ✅ pass | ✅ pass |
+| `TestFeatureProtocolGating/scrollable_cursors_(protocol_18+)` | First/Absolute/Relative/Last/Prior/Next return the expected rows; Next past the end returns io.EOF | ⏭️ skip | ⏭️ skip | ⏭️ skip | ✅ pass |
 | `TestCancelOperationParity` | Context cancellation aborts a long statement; pool stays usable | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 
 ### Additions to existing files
@@ -105,7 +107,7 @@ Legend: ✅ pass · ⏭️ skip (version/capability gate or server configuration
 | `TestDSNOptionsFailFast` | Invalid wire_crypt / auth plugin config fails at parse time | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestTimezoneLegacyAliases` | GMT/ACT/AET/AGT/ART/AST legacy zone aliases round-trip | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestTimezoneMapInvalidEntries` | Unknown zone names/ids yield zero values, never a wrong zone | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
-| `TestAdvertisedProtocolRange` | Connect packet offers protocols 10–17, weights ascending, pflag only with compression | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestAdvertisedProtocolRange` | Connect packet offers protocols 10–19, weights ascending, pflag only with compression | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `FuzzParseDSN` | DSN parser never panics on hostile input (seed corpus) | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestLegacyAuthWireCrypt` | Legacy auth + wire-crypt policy combinations (skips plaintext case when the server requires encryption) | ✅ pass | ⏭️ skip | ✅ pass | ✅ pass |
 
