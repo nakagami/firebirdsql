@@ -210,6 +210,13 @@ func _bytesToBlr(v []byte) ([]byte, []byte) {
 	return blr, v
 }
 
+// _octetsToBlr is _bytesToBlr with the item declared as CHARACTER SET OCTETS
+// (blr_text2), so the server copies the bytes without charset validation.
+func _octetsToBlr(v []byte) ([]byte, []byte) {
+	blr, v := _bytesToBlr(v)
+	return []byte{15, 1, 0, blr[1], blr[2]}, v
+}
+
 func _convert_date(t time.Time) []byte {
 	i := int(t.Month()) + 9
 	jy := t.Year() + (i / 12) - 1

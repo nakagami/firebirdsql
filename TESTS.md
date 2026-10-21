@@ -107,6 +107,17 @@ Text columns the server does not convert to the connection charset. Firebird 6 s
 | `TestCharsetNoneLongColumn` | VARCHAR(20000) NONE: buffer capped at the 16-bit BLR length, 15000-byte value intact | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestCharsetNoneWideRow` | Six widened VARCHAR(8000) NONE columns (192 KB message) in one row | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 
+### Binary data: OCTETS columns and []byte parameters — charset_octets_test.go, charset_octets_live_test.go
+
+Firebird 6 validates charset-less text items as connection-charset text, so OCTETS columns and []byte parameters with bytes that aren't valid UTF8 failed with `Malformed string`. They are now declared with CHARACTER SET OCTETS (blr_text2/blr_varying2); see "Binary data" in the README. Before the fix `TestOctetsColumns` and `TestBytesParameterToBlob` failed on the Firebird 6.0 snapshot.
+
+| Test | What it verifies | FB 2.5 | FB 3.0 | FB 4.0 | FB 5.0 | FB 6.0 snapshot |
+|---|---|:-:|:-:|:-:|:-:|:-:|
+| `TestCalcBlrDeclaresOctets` | Exact output BLR bytes: OCTETS items as blr_varying2/blr_text2 with charset 1, other text items unchanged, collation bits ignored | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestOctetsToBlr` | []byte parameter item: blr_text2, charset OCTETS, length, 4-byte padding | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestOctetsColumns` | VARCHAR/CHAR OCTETS values with NUL and 0xFF bytes read over UTF8 and WIN1252 connections; CHAR NUL padding kept; following columns aligned; []byte as filter, insert and update parameters | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestBytesParameterToBlob` | []byte parameters of 1 byte to 40 KB to a BLOB SUB_TYPE BINARY (in-message and BLOB paths); []byte to a text column | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+
 ### Additions to existing files
 
 | Test | What it verifies | FB 2.5 | FB 3.0 | FB 4.0 | FB 5.0 |

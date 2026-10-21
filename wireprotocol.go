@@ -2188,7 +2188,7 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 			blr = []byte{14, 0, 0}
 		case []byte:
 			if len(f) < MAX_CHAR_LENGTH {
-				blr, v = _bytesToBlr(f)
+				blr, v = _octetsToBlr(f)
 			} else {
 				v, _ = p.createBlob(f, transHandle)
 				blr = []byte{9, 0}

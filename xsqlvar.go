@@ -502,7 +502,7 @@ func widenUntransliteratedText(xsqlda []xSQLVAR, connBytesPerChar int) {
 func calcBlr(xsqlda []xSQLVAR) []byte {
 	// Calculate  BLR from XSQLVAR array.
 	ln := len(xsqlda) * 2
-	blr := make([]byte, (ln*4)+8)
+	blr := make([]byte, (ln*6)+8)
 	blr[0] = 5
 	blr[1] = 2
 	blr[2] = 4
@@ -517,13 +517,29 @@ func calcBlr(xsqlda []xSQLVAR) []byte {
 			sqlscale += 256
 		}
 		switch x.sqltype {
-		case SQL_TYPE_VARYING:
-			blr[n] = 37
-			blr[n+1] = byte(x.messageLength() & 255)
-			blr[n+2] = byte(x.messageLength() >> 8)
-			n += 3
-		case SQL_TYPE_TEXT:
-			blr[n] = 14
+		case SQL_TYPE_VARYING, SQL_TYPE_TEXT:
+			if x.sqlsubtype&0xFF == charsetIDOctets {
+				// blr_varying2 / blr_text2 with CHARACTER SET OCTETS: the item
+				// is binary, so the server copies the bytes without treating
+				// them as text in the connection charset (Firebird 6 validates
+				// charset-less items as such and rejects invalid UTF8)
+				if x.sqltype == SQL_TYPE_VARYING {
+					blr[n] = 38
+				} else {
+					blr[n] = 15
+				}
+				blr[n+1] = charsetIDOctets
+				blr[n+2] = 0
+				blr[n+3] = byte(x.sqllen & 255)
+				blr[n+4] = byte(x.sqllen >> 8)
+				n += 5
+				break
+			}
+			if x.sqltype == SQL_TYPE_VARYING {
+				blr[n] = 37
+			} else {
+				blr[n] = 14
+			}
 			blr[n+1] = byte(x.messageLength() & 255)
 			blr[n+2] = byte(x.messageLength() >> 8)
 			n += 3

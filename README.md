@@ -168,6 +168,17 @@ limit of a single column), on Firebird 3.0 and later. Values and column
 metadata (`ColumnTypes`) are unchanged; Firebird 2.5 is not affected and keeps
 the exact buffer sizes.
 
+### Binary data (`OCTETS`) and Firebird 6
+
+Firebird 6 also treats a row-buffer or parameter item declared without a
+character set as text in the connection character set, and validates it. An
+`OCTETS` column, or a `[]byte` parameter, holding bytes that aren't valid UTF8
+then fails with `Malformed string`; before Firebird 6 the bytes were copied as
+they are. The driver declares `CHAR`/`VARCHAR CHARACTER SET OCTETS` columns
+and `[]byte` parameters with `CHARACTER SET OCTETS` (`blr_text2` /
+`blr_varying2`), as Jaybird does, which every supported server accepts. A
+`[]byte` of 32 KB or more is sent as a BLOB, as before.
+
 ## Wire protocols 16–19
 
 The driver advertises Firebird wire protocols 10–19. The server chooses the highest mutually supported version.
