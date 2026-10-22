@@ -24,7 +24,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
+	"bufio"
 	"bytes"
+	"context"
+	"database/sql/driver"
 	"encoding/binary"
 	"testing"
 )
@@ -74,21 +77,40 @@ func TestAppendExecuteTrailers(t *testing.T) {
 }
 
 func TestOpFetchScrollPacket(t *testing.T) {
-	p := &wireProtocol{}
-	p.packInt(op_fetch_scroll)
-	p.packInt(7)
-	p.packBytes(nil)
-	p.packInt(0)
-	p.packInt(1)
-	p.packInt(ScrollLast)
-	p.packInt(0)
-	if binary.BigEndian.Uint32(p.buf[0:4]) != op_fetch_scroll {
-		t.Fatalf("opcode=%d", binary.BigEndian.Uint32(p.buf[0:4]))
+	p := testProtocol(nil)
+	var out bytes.Buffer
+	p.conn.writer = bufio.NewWriter(&out)
+	// Every field differs from the others, so that any swap changes the bytes.
+	if err := p.opFetchScroll(7, []byte{1, 2, 3}, ScrollAbsolute, -5, 9); err != nil {
+		t.Fatal(err)
 	}
-	if binary.BigEndian.Uint32(p.buf[4:8]) != 7 {
-		t.Fatalf("stmt handle=%d", binary.BigEndian.Uint32(p.buf[4:8]))
+	want := words(
+		op_fetch_scroll,
+		7,          // statement handle
+		3,          // BLR length
+		0x01020300, // BLR plus one XDR pad byte
+		0,          // message number
+		9,          // count
+		ScrollAbsolute,
+		-5, // offset
+	)
+	if !bytes.Equal(out.Bytes(), want) {
+		t.Fatalf("op_fetch_scroll packet=%x, want %x", out.Bytes(), want)
+	}
+	if len(p.buf) != 0 {
+		t.Fatalf("send buffer not reset: %x", p.buf)
 	}
 }
+
+// The Raw-extension signatures documented for sql.Conn.Raw callers, who can
+// only reach them through an anonymous interface. A change must break the build.
+var _ interface {
+	QueryScrollable(context.Context, string, ...driver.Value) (*ScrollableStmt, error)
+	PrepareBatch(context.Context, string, BatchOptions) (*PreparedBatch, error)
+	ExecImmediate(context.Context, string) error
+	WireCipher() string
+	ProtocolVersion() int
+} = (*firebirdsqlConn)(nil)
 
 func TestDecodeInlineSegmentBuffer(t *testing.T) {
 	raw := []byte{3, 0, 'a', 'b', 'c', 2, 0, 'd', 'e'}
