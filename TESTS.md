@@ -93,6 +93,22 @@ Legend: ✅ pass · ⏭️ skip (version/capability gate or server configuration
 | `TestFeatureProtocolGating/scrollable_cursors_(protocol_18+)` | First/Absolute/Relative/Last/Prior/Next return the expected rows; Next past the end returns io.EOF | ⏭️ skip | ⏭️ skip | ⏭️ skip | ✅ pass |
 | `TestCancelOperationParity` | Context cancellation aborts a long statement; pool stays usable | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 
+### CHARACTER SET NONE columns — charset_none_test.go, charset_none_live_test.go
+
+Text columns the server does not convert to the connection charset (`NONE`, `OCTETS`). Output BLR declares the described charset via `blr_text2`/`blr_varying2` (as `fbclient` does) so Firebird 6 does not size or validate them in the connection charset; see "Character sets" in the README. Before the fix the live tests failed on the Firebird 6.0 snapshot (6.0.0.2401) for every multi-byte connection charset, and so did the existing `TestGoIssue172`.
+
+| Test | What it verifies | FB 2.5 | FB 3.0 | FB 4.0 | FB 5.0 | FB 6.0 snapshot |
+|---|---|:-:|:-:|:-:|:-:|:-:|
+| `TestBlrCharset` | Charset id extraction from `sqlsubtype` low byte; collation in high byte ignored; `CS_dynamic` (127) uses plain form | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCalcOutputBlrDeclaresCharset` | `calcOutputBlr` emits `blr_text2`/`blr_varying2` with charset id and collation 0; plain `blr_text`/`blr_varying` kept for `CS_dynamic`, `SQL_TYPE_NULL`, and input-side `calcBlr` | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestConnectionCharsetByteLen` | Bytes per character of connection charset names (KOI8R/KOI8U single-byte; GBK, CP943C, GB18030 added) | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCharsetNoneColumnsFetch` | NONE VARCHAR/CHAR values at, below and above a quarter of the column length over UTF8, UNICODE_FSS, SJIS_0208 and WIN1252 connections; the next columns of the row stay aligned; NONE parameters | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCharsetNoneColumnMetadata` | `ColumnTypes().Length()` reports the described length | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCharsetNoneSystemTables` | `RDB$CONSTRAINT_TYPE` (CHAR(11) NONE) for PRIMARY KEY / FOREIGN KEY rows | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCharsetNoneLongColumn` | Long NONE columns: 20000-byte value in VARCHAR(20000) NONE over UTF8 and VARCHAR(30000) NONE over UNICODE_FSS | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCharsetNoneWideRow` | Six VARCHAR(8000) NONE columns in one row | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCharsetOctetsAndNonUTF8None` | OCTETS columns (including binary UUIDs) and non-UTF8 bytes in NONE columns over UTF8 | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+
 ### Additions to existing files
 
 | Test | What it verifies | FB 2.5 | FB 3.0 | FB 4.0 | FB 5.0 |

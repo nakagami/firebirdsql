@@ -422,7 +422,7 @@ func newFirebirdsqlStmt(fc *firebirdsqlConn, query string) (stmt *firebirdsqlStm
 		return nil, err
 	}
 
-	stmt.blr = calcBlr(stmt.resultXsqlda)
+	stmt.blr = calcOutputBlr(stmt.resultXsqlda)
 
 	// Resolve array column metadata (element type, dimensions) for any
 	// array-typed output columns; failures fail the prepare, mirroring fbx.

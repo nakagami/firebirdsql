@@ -174,14 +174,17 @@ func newWireProtocolContext(ctx context.Context, addr string, timezone string, c
 	return p, err
 }
 
-// charsetLen sets the length of character depending the charset to get the correct size of column
+// charsetLen sets charsetByteLen, the maximum bytes per character of the
+// connection charset (RDB$CHARACTER_SETS.RDB$BYTES_PER_CHARACTER).
 func (p *wireProtocol) charsetLen() {
-	// all ISO8859_X and WIN125X are 1 byte character length, so omit here
-	// only add charset that character length is > 1
+	// all ISO8859_X, WIN125X, DOSxxx and KOI8x are 1 byte per character,
+	// so only charsets with more than 1 byte per character are listed
 	switch p.charset {
-	case "UNICODE_FSS", "UTF8":
+	case "UTF8", "GB18030":
 		p.charsetByteLen = 4
-	case "BIG_5", "SJIS_0208", "KSC_5601", "EUCJ_0208", "GB_2312", "KOI8R", "KOI8U":
+	case "UNICODE_FSS":
+		p.charsetByteLen = 3
+	case "BIG_5", "SJIS_0208", "KSC_5601", "EUCJ_0208", "GB_2312", "GBK", "CP943C":
 		p.charsetByteLen = 2
 	default:
 		p.charsetByteLen = 1
