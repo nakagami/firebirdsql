@@ -93,6 +93,34 @@ Legend: ✅ pass · ⏭️ skip (version/capability gate or server configuration
 | `TestFeatureProtocolGating/scrollable_cursors_(protocol_18+)` | First/Absolute/Relative/Last/Prior/Next return the expected rows; Next past the end returns io.EOF | ⏭️ skip | ⏭️ skip | ⏭️ skip | ✅ pass |
 | `TestCancelOperationParity` | Context cancellation aborts a long statement; pool stays usable | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 
+### CHARACTER SET NONE columns — charset_none_test.go, charset_none_live_test.go
+
+Text columns the server does not convert to the connection charset. Firebird 6 sizes their row buffer in connection-charset characters; see "Character sets" in the README. Before the fix the live tests failed on the Firebird 6.0 snapshot (6.0.0.2401) for every multi-byte connection charset, and so did the existing `TestGoIssue172`.
+
+| Test | What it verifies | FB 2.5 | FB 3.0 | FB 4.0 | FB 5.0 | FB 6.0 snapshot |
+|---|---|:-:|:-:|:-:|:-:|:-:|
+| `TestWidenUntransliteratedText` | Buffer sizing rules: NONE/ASCII widened by the connection charset width, transliterated and OCTETS columns untouched, collation byte ignored, 16-bit cap | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestWidenUntransliteratedTextLeavesOtherTypes` | Non-text columns are never widened | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCalcBlrUsesMessageLength` | Exact output BLR bytes for widened VARCHAR/CHAR items; CHAR read length follows the buffer | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCharsetBytesPerChar` | Bytes per character for every charset id 0–255 (RDB$CHARACTER_SETS) | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestConnectionCharsetByteLen` | Bytes per character of connection charset names (KOI8R/KOI8U single-byte; GBK, CP943C, GB18030 added) | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCharsetNoneColumnsFetch` | NONE VARCHAR/CHAR values at, below and above a quarter of the column length over UTF8, UNICODE_FSS, SJIS_0208 and WIN1252 connections; the next columns of the row stay aligned; NONE parameters | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCharsetNoneColumnMetadata` | `ColumnTypes().Length()` still reports the described length | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCharsetNoneSystemTables` | `RDB$CONSTRAINT_TYPE` (CHAR(11) NONE) for PRIMARY KEY / FOREIGN KEY rows | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCharsetNoneLongColumn` | VARCHAR(20000) NONE: buffer capped at the 16-bit BLR length, 15000-byte value intact | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCharsetNoneWideRow` | Six widened VARCHAR(8000) NONE columns (192 KB message) in one row | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+
+### Binary data: OCTETS columns and []byte parameters — charset_octets_test.go, charset_octets_live_test.go
+
+Firebird 6 validates charset-less text items as connection-charset text, so OCTETS columns and []byte parameters with bytes that aren't valid UTF8 failed with `Malformed string`. They are now declared with CHARACTER SET OCTETS (blr_text2/blr_varying2); see "Binary data" in the README. Before the fix `TestOctetsColumns` and `TestBytesParameterToBlob` failed on the Firebird 6.0 snapshot.
+
+| Test | What it verifies | FB 2.5 | FB 3.0 | FB 4.0 | FB 5.0 | FB 6.0 snapshot |
+|---|---|:-:|:-:|:-:|:-:|:-:|
+| `TestCalcBlrDeclaresOctets` | Exact output BLR bytes: OCTETS items as blr_varying2/blr_text2 with charset 1, other text items unchanged, collation bits ignored | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestOctetsToBlr` | []byte parameter item: blr_text2, charset OCTETS, length, 4-byte padding | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestOctetsColumns` | VARCHAR/CHAR OCTETS values with NUL and 0xFF bytes read over UTF8 and WIN1252 connections; CHAR NUL padding kept; following columns aligned; []byte as filter, insert and update parameters | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestBytesParameterToBlob` | []byte parameters of 1 byte to 40 KB to a BLOB SUB_TYPE BINARY (in-message and BLOB paths); []byte to a text column | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+
 ### Additions to existing files
 
 | Test | What it verifies | FB 2.5 | FB 3.0 | FB 4.0 | FB 5.0 |
