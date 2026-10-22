@@ -81,3 +81,27 @@ func TestParseDSNEmptyPathNoPanic(t *testing.T) {
 		}()
 	}
 }
+
+// A raw '+' in a query value becomes a space after the URL decode. The DSN
+// value timezone=+05:30 never reaches the driver as an offset. Write the
+// offset as %2B05:30. The test keeps this rule visible.
+func TestParseDSNTimezoneOffsetEscaping(t *testing.T) {
+	dsn, err := parseDSN("sysdba:masterkey@host/db.fdb?timezone=%2B05:30")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := dsn.options["timezone"]; got != "+05:30" {
+		t.Errorf("percent-encoded timezone = %q, want %q", got, "+05:30")
+	}
+
+	dsn, err = parseDSN("sysdba:masterkey@host/db.fdb?timezone=+05:30")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := dsn.options["timezone"]; got != " 05:30" {
+		t.Errorf("raw timezone=+05:30 arrives as %q, want %q (a leading space: '+' is not query-safe)", got, " 05:30")
+	}
+	if _, ok := parseUTCOffset(dsn.options["timezone"]); ok {
+		t.Errorf("%q must not parse as a UTC offset", dsn.options["timezone"])
+	}
+}
