@@ -37,7 +37,7 @@ import (
 // deadline so the query also completes cleanly, exercising the watcher's no-cancel exit.
 //
 // The test asserts nothing beyond "no data race / no panic". Its value is running under
-// `go test -race` (wired into the FB 3.0 CI job), where it guards against regressions of
+// `go test -race`, where it guards against regressions of
 // the op_cancel send-buffer data race: before withCancelWatcher joined the watcher
 // goroutine, the watcher's op_cancel could run concurrently with a main-goroutine wire
 // write (cancelAndDrain's op_cancel, the stray op_cancel at the top of rows.Next, or the
