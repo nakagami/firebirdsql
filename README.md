@@ -233,6 +233,18 @@ tx, err := db.BeginTx(ctx, &sql.TxOptions{
 
 This maps to a transaction TPB containing `READ COMMITTED`, `RECORD VERSION`, and `NOWAIT`.
 
+## Row scanning on Go 1.27
+
+When built with Go 1.27 or later, the driver implements
+`database/sql/driver.RowsColumnScanner`. Existing `Rows.Next` and `Rows.Scan`
+calls automatically use this path, avoiding the intermediate row copy and
+reflection for exact `int64`, `float64`, and `bool` destinations. Other
+conversions use `database/sql.ConvertAssign` to preserve standard scan behavior.
+BLOBs and arrays are still fetched during `Rows.Next`, including their errors.
+
+The minimum supported Go version remains 1.22. Earlier Go versions keep using
+`driver.Rows.Next`; no application changes are required.
+
 ## GORM for Firebird
 
 See https://github.com/flylink888/gorm-firebird
