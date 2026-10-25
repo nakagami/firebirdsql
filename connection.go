@@ -290,6 +290,7 @@ func handshakeFirebirdsqlConn(wp *wireProtocol, dsn *firebirdDsn, dbOp func(*wir
 	wp.inlineBlobCache = newInlineBlobCache(int(wp.maxBlobCacheSize))
 	wp.cancelHardDrop = convertToBool(dsn.options["cancel_hard_drop"], false)
 	wp.cancelHardDropGrace = time.Duration(parseOptionInt(dsn.options["cancel_hard_drop_grace"], 3000)) * time.Millisecond
+	wp.pageSize = int32(parseOptionInt(dsn.options["page_size"], 4096))
 
 	if err = wp.opConnect(dsn.dbName, dsn.user, dsn.passwd, dsn.options, clientPublic); err != nil {
 		return nil, err
@@ -329,11 +330,7 @@ func attachFirebirdsqlConn(ctx context.Context, dsn *firebirdDsn) (*firebirdsqlC
 
 func createFirebirdsqlConn(ctx context.Context, dsn *firebirdDsn) (*firebirdsqlConn, error) {
 	return openFirebirdsqlConn(ctx, dsn, func(wp *wireProtocol) error {
-		pageSize, err := parsePageSize(dsn.options["page_size"])
-		if err != nil {
-			return err
-		}
-		return wp.opCreate(dsn.dbName, dsn.user, dsn.passwd, dsn.options["role"], pageSize)
+		return wp.opCreate(dsn.dbName, dsn.user, dsn.passwd, dsn.options["role"])
 	})
 }
 

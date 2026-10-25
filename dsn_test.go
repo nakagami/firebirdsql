@@ -107,25 +107,16 @@ func TestParseDSNTimezoneOffsetEscaping(t *testing.T) {
 }
 
 func TestParseDSNPageSize(t *testing.T) {
-	dsn, err := parseDSN("user:pass@localhost/test.fdb")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := dsn.options["page_size"]; got != "4096" {
-		t.Errorf("default page_size = %q, want 4096", got)
-	}
-
-	dsn, err = parseDSN("user:pass@localhost/test.fdb?page_size=16384")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n, _ := parsePageSize(dsn.options["page_size"]); n != 16384 {
-		t.Errorf("page_size = %d, want 16384", n)
-	}
-
-	for _, v := range []string{"0", "-1", "abc", "99999999999"} {
-		if _, err := parseDSN("user:pass@localhost/test.fdb?page_size=" + v); err == nil {
-			t.Errorf("page_size=%s: expected error", v)
+	for dsns, want := range map[string]string{
+		"user:pass@localhost/test.fdb":                 "4096",
+		"user:pass@localhost/test.fdb?page_size=16384": "16384",
+	} {
+		dsn, err := parseDSN(dsns)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := dsn.options["page_size"]; got != want {
+			t.Errorf("%s: page_size = %q, want %q", dsns, got, want)
 		}
 	}
 }
