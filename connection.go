@@ -329,7 +329,11 @@ func attachFirebirdsqlConn(ctx context.Context, dsn *firebirdDsn) (*firebirdsqlC
 
 func createFirebirdsqlConn(ctx context.Context, dsn *firebirdDsn) (*firebirdsqlConn, error) {
 	return openFirebirdsqlConn(ctx, dsn, func(wp *wireProtocol) error {
-		return wp.opCreate(dsn.dbName, dsn.user, dsn.passwd, dsn.options["role"])
+		pageSize, err := parsePageSize(dsn.options["page_size"])
+		if err != nil {
+			return err
+		}
+		return wp.opCreate(dsn.dbName, dsn.user, dsn.passwd, dsn.options["role"], pageSize)
 	})
 }
 
