@@ -40,11 +40,9 @@ type firebirdsqlRows struct {
 	currentChunkIdx  int              // index of the current row within currentChunk
 	moreData         bool
 	result           []driver.Value
-	scanRow          []driver.Value // current materialized row for Go 1.27 column scanning
-	scanBuffer       []driver.Value // one reusable row for BLOB/array materialization
-	scanInitialized  bool
-	closeStmtOnClose bool // true for internal stmts that should be dropped on rows.Close()
-	badConn          bool // set when a fetch was abandoned under an expired ctx (wire desynced)
+	scanRow          []driver.Value // reusable destination for Go 1.27 column scanning
+	closeStmtOnClose bool           // true for internal stmts that should be dropped on rows.Close()
+	badConn          bool           // set when a fetch was abandoned under an expired ctx (wire desynced)
 }
 
 func newFirebirdsqlRows(ctx context.Context, stmt *firebirdsqlStmt, result []driver.Value) *firebirdsqlRows {
@@ -115,14 +113,7 @@ func (rows *firebirdsqlRows) materializeArray(x xSQLVAR, v driver.Value) (driver
 	return ArrayValue{Meta: x.arrayMeta, Elements: elements}, nil
 }
 
-func (rows *firebirdsqlRows) Next(dest []driver.Value) error {
-	return rows.next(dest)
-}
-
-// next shares fetching, cancellation and materialization between both scan paths.
-// A nil destination uses the fetched row itself, avoiding a row-wide copy.
-func (rows *firebirdsqlRows) next(dest []driver.Value) (err error) {
-	direct := dest == nil
+func (rows *firebirdsqlRows) Next(dest []driver.Value) (err error) {
 	// contextErrOrDeadlineExceeded folds in the timer-starvation fallback: it returns the
 	// context error, or DeadlineExceeded when the wall clock has passed ctx.Deadline() even
 	// though ctx.Err() is still nil (Go's sysmon delayed by a CPU-bound Firebird query). We
@@ -136,10 +127,6 @@ func (rows *firebirdsqlRows) next(dest []driver.Value) (err error) {
 
 	if rows.stmt.stmtType == isc_info_sql_stmt_exec_procedure {
 		if rows.result != nil {
-			if dest == nil {
-				dest = rows.result
-				rows.scanRow = dest
-			}
 			for i, v := range rows.result {
 				if rows.stmt.resultXsqlda[i].sqltype == SQL_TYPE_ARRAY && v != nil {
 					dest[i], err = rows.materializeArray(rows.stmt.resultXsqlda[i], v)
@@ -160,7 +147,7 @@ func (rows *firebirdsqlRows) next(dest []driver.Value) (err error) {
 						return
 					}
 					dest[i] = blob
-				} else if !direct {
+				} else {
 					dest[i] = v
 				}
 			}
@@ -229,10 +216,6 @@ func (rows *firebirdsqlRows) next(dest []driver.Value) (err error) {
 		return
 	}
 	row := rows.currentChunk[rows.currentChunkIdx]
-	if dest == nil {
-		dest = row
-		rows.scanRow = dest
-	}
 	for i, v := range row {
 		x := rows.stmt.resultXsqlda[i]
 		if x.sqltype == SQL_TYPE_ARRAY && v != nil {
@@ -268,7 +251,7 @@ func (rows *firebirdsqlRows) next(dest []driver.Value) (err error) {
 				dest[i] = blob
 			}
 
-		} else if !direct {
+		} else {
 			dest[i] = v
 		}
 	}

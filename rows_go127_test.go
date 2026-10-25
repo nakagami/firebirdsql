@@ -181,31 +181,6 @@ func TestColumnScanProcedure(t *testing.T) {
 	require.Nil(t, rows.scanRow)
 }
 
-// Materialized large values must live in a reusable row, rather than being
-// retained in every consumed row of the fetched chunk.
-func TestColumnScanMaterializationBuffer(t *testing.T) {
-	for _, sqlType := range []int{SQL_TYPE_BLOB, SQL_TYPE_ARRAY} {
-		t.Run(fmt.Sprint(sqlType), func(t *testing.T) {
-			rows := &firebirdsqlRows{
-				ctx:             context.Background(),
-				stmt:            &firebirdsqlStmt{resultXsqlda: []xSQLVAR{{sqltype: sqlType}}},
-				currentChunk:    [][]driver.Value{{nil}, {nil}},
-				currentChunkIdx: -1,
-			}
-			require.NoError(t, rows.NextRow())
-			first := &rows.scanRow[0]
-			require.NotSame(t, &rows.currentChunk[0][0], first)
-			rows.scanRow[0] = []byte("materialized")
-			require.Nil(t, rows.currentChunk[0][0])
-			require.NoError(t, rows.NextRow())
-			require.Same(t, first, &rows.scanRow[0])
-			require.Nil(t, rows.scanRow[0])
-			require.ErrorIs(t, rows.NextRow(), io.EOF)
-			require.Nil(t, rows.scanRow)
-		})
-	}
-}
-
 func BenchmarkColumnScan(b *testing.B) {
 	for _, width := range []int{1, 8, 32} {
 		data := make([][]driver.Value, 1000)

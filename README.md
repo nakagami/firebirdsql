@@ -237,13 +237,20 @@ This maps to a transaction TPB containing `READ COMMITTED`, `RECORD VERSION`, an
 
 When built with Go 1.27 or later, the driver implements
 `database/sql/driver.RowsColumnScanner`. Existing `Rows.Next` and `Rows.Scan`
-calls automatically use this path, avoiding the intermediate row copy and
-reflection for exact `int64`, `float64`, and `bool` destinations. Other
-conversions use `database/sql.ConvertAssign` to preserve standard scan behavior.
-BLOBs and arrays are still fetched during `Rows.Next`, including their errors.
+calls automatically use this path. A reusable row buffer calls the same
+`driver.Rows.Next` implementation as earlier Go versions, including BLOB and
+array fetching and errors. Exact `int`, `int32`, `int64`, `float64`, and `bool`
+destinations avoid reflection; out-of-range integers and other conversions use
+`database/sql.ConvertAssign` to preserve standard scan behavior and errors.
 
 The minimum supported Go version remains 1.22. Earlier Go versions keep using
-`driver.Rows.Next`; no application changes are required.
+`driver.Rows.Next` through `database/sql`.
+
+On Go 1.27+, `database/sql` holds the connection lock while calling
+`ScanColumn`, including any custom `sql.Scanner`. A custom `Scanner.Scan` must
+not execute a query using the same `*sql.Conn` or `*sql.Tx`: this can deadlock,
+even if it worked with the earlier scanning path. Scan the values first, then
+run dependent queries after `Rows.Scan` returns.
 
 ## GORM for Firebird
 

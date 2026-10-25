@@ -5,38 +5,40 @@ package firebirdsql
 import (
 	"database/sql"
 	"database/sql/driver"
+	"fmt"
 )
 
 var _ driver.RowsColumnScanner = (*firebirdsqlRows)(nil)
 
 func (rows *firebirdsqlRows) NextRow() error {
-	rows.scanRow = nil
-	if !rows.scanInitialized {
-		rows.scanInitialized = true
-		for _, x := range rows.stmt.resultXsqlda {
-			if x.sqltype == SQL_TYPE_BLOB || x.sqltype == SQL_TYPE_ARRAY {
-				// Keep large values out of currentChunk: retaining materialized
-				// BLOBs/arrays for every consumed row would grow memory usage.
-				rows.scanBuffer = make([]driver.Value, len(rows.stmt.resultXsqlda))
-				break
-			}
-		}
+	if rows.scanRow == nil {
+		rows.scanRow = make([]driver.Value, len(rows.stmt.resultXsqlda))
 	}
-	if err := rows.next(rows.scanBuffer); err != nil {
+	if err := rows.Next(rows.scanRow); err != nil {
 		rows.scanRow = nil
 		return err
-	}
-	if rows.scanBuffer != nil {
-		rows.scanRow = rows.scanBuffer
 	}
 	return nil
 }
 
 func (rows *firebirdsqlRows) ScanColumn(scanCtx driver.ScanContext, index int, dest any) error {
+	if index < 0 || index >= len(rows.scanRow) {
+		return fmt.Errorf("firebirdsql: column index %d out of range [0, %d)", index, len(rows.scanRow))
+	}
 	value := rows.scanRow[index]
 	// Exact scalar matches avoid reflection. Leave conversions, NULLs, typed nil
 	// destinations, byte ownership and custom Scanners to database/sql.
 	switch d := dest.(type) {
+	case *int:
+		if v, ok := value.(int64); ok && d != nil && int64(int(v)) == v {
+			*d = int(v)
+			return nil
+		}
+	case *int32:
+		if v, ok := value.(int64); ok && d != nil && int64(int32(v)) == v {
+			*d = int32(v)
+			return nil
+		}
 	case *int64:
 		if v, ok := value.(int64); ok && d != nil {
 			*d = v
