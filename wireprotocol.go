@@ -1219,7 +1219,7 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 	userBytes := []byte(strings.ToUpper(user))
 	passwordBytes := []byte(password)
 	roleBytes := []byte(role)
-	var overwrite int32
+	overwrite := int32(0)
 	if p.overwrite {
 		overwrite = 1
 	}
