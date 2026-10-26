@@ -71,8 +71,9 @@ func (fc *firebirdsqlConn) BeginTx(ctx context.Context, opts driver.TxOptions) (
 
 func txIsolationLevel(opts driver.TxOptions) (int, error) {
 	if opts.ReadOnly {
-		// Preserve existing behaviour: readonly always uses READ COMMITTED RO.
-		// The only extra knob we currently support here is NOWAIT.
+		if sql.IsolationLevel(opts.Isolation) == sql.LevelRepeatableRead {
+			return ISOLATION_LEVEL_REPEATABLE_READ_RO, nil
+		}
 		if (sql.IsolationLevel)(opts.Isolation) == LevelReadCommittedNoWait {
 			return ISOLATION_LEVEL_READ_COMMITED_RO_NOWAIT, nil
 		}

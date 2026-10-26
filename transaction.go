@@ -71,6 +71,13 @@ func tpbForIsolationLevel(isolationLevel int) ([]byte, error) {
 			byte(isc_tpb_wait),
 			byte(isc_tpb_concurrency),
 		}, nil
+	case ISOLATION_LEVEL_REPEATABLE_READ_RO:
+		return []byte{
+			byte(isc_tpb_version3),
+			byte(isc_tpb_read),
+			byte(isc_tpb_wait),
+			byte(isc_tpb_concurrency),
+		}, nil
 	case ISOLATION_LEVEL_SERIALIZABLE:
 		return []byte{
 			byte(isc_tpb_version3),

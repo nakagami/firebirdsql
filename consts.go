@@ -640,6 +640,7 @@ const (
 	// NOWAIT variants (lock conflicts return immediately instead of waiting)
 	ISOLATION_LEVEL_READ_COMMITED_NOWAIT
 	ISOLATION_LEVEL_READ_COMMITED_RO_NOWAIT
+	ISOLATION_LEVEL_REPEATABLE_READ_RO
 )
 
 // Driver-specific transaction isolation levels for database/sql.
