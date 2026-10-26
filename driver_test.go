@@ -2095,7 +2095,9 @@ func TestWireCryptRequiredPolicy(t *testing.T) {
 }
 
 func TestCreateDatabasePageSize(t *testing.T) {
-	conn, err := sql.Open("firebirdsql_createdb", GetTestDSN("test_page_size_")+"?page_size=16384")
+	path := GetTestDatabase("test_page_size_")
+	t.Cleanup(func() { os.Remove(path) })
+	conn, err := sql.Open("firebirdsql_createdb", GetTestDSNFromDatabase(path)+"?page_size=16384")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
@@ -2108,4 +2110,61 @@ func TestCreateDatabasePageSize(t *testing.T) {
 	if pageSize != 16384 {
 		t.Errorf("page size = %d, want 16384", pageSize)
 	}
+}
+
+func TestCreateDatabaseOverwrite(t *testing.T) {
+	path := GetTestDatabase("test_overwrite_")
+	t.Cleanup(func() { os.Remove(path) })
+	dsn := GetTestDSNFromDatabase(path)
+
+	conn, err := sql.Open("firebirdsql_createdb", dsn)
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	if _, err := conn.Exec("CREATE TABLE keep_me (id INTEGER)"); err != nil {
+		t.Fatalf("Error Exec: %v", err)
+	}
+	conn.Close()
+
+	// Default overwrite=false: creating an existing database fails.
+	conn, err = sql.Open("firebirdsql_createdb", dsn)
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	err = conn.Ping()
+	conn.Close()
+	if err == nil {
+		t.Fatal("creating an existing database succeeded, want error")
+	}
+	t.Logf("create over existing database: %v", err)
+
+	assertTable := func(want int) {
+		t.Helper()
+		conn, err := sql.Open("firebirdsql", dsn)
+		if err != nil {
+			t.Fatalf("Error connecting: %v", err)
+		}
+		defer conn.Close()
+		var n int
+		if err := conn.QueryRow("SELECT COUNT(*) FROM rdb$relations WHERE rdb$relation_name = 'KEEP_ME'").Scan(&n); err != nil {
+			t.Fatalf("Error QueryRow: %v", err)
+		}
+		if n != want {
+			t.Errorf("KEEP_ME tables = %d, want %d", n, want)
+		}
+	}
+	assertTable(1)
+
+	// overwrite=true replaces the database. Firebird 2.5 hangs when recreating
+	// an existing database, so this half needs 3.0+.
+	requireServerVersion(t, 3, 0)
+	conn, err = sql.Open("firebirdsql_createdb", dsn+"?overwrite=true")
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	if err := conn.Ping(); err != nil {
+		t.Fatalf("Error Ping with overwrite=true: %v", err)
+	}
+	conn.Close()
+	assertTable(0)
 }

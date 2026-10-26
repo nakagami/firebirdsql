@@ -8,7 +8,10 @@ wire protocol — no C dependencies or cgo required.
 Two driver names are registered:
 
   - "firebirdsql" — attach to an existing database.
-  - "firebirdsql_createdb" — create the database if it does not exist, then attach.
+  - "firebirdsql_createdb" — create a new database, then attach. Creating a
+    database that already exists fails unless overwrite=true. Every new pooled
+    connection runs the create again, so close that *sql.DB once the database
+    exists and use "firebirdsql" from then on.
 
 # Connection String (DSN)
 
@@ -57,7 +60,8 @@ Windows database path:
 
 See the README for the full list of optional query parameters (auth_plugin_name,
 auth_plugin_list, charset, role, timezone, wire_crypt, wire_crypt_plugin,
-wire_compress, column_name_to_lower, max_inline_blob_size, max_blob_cache_size).
+wire_compress, column_name_to_lower, max_inline_blob_size, max_blob_cache_size,
+page_size, overwrite).
 
 The timezone parameter takes an IANA name ("Europe/Berlin") or a fixed UTC
 offset. Write a fixed offset percent-encoded on the DSN: a raw '+' in a URL

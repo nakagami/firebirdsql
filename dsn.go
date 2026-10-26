@@ -93,6 +93,7 @@ func parseDSN(dsns string) (*firebirdDsn, error) {
 		"column_name_to_lower": "false",
 		"host_name":            "",
 		"os_user":              "",
+		"overwrite":            "false",
 		"page_size":            "4096",
 		"role":                 "",
 		"timezone":             "",
@@ -130,6 +131,11 @@ func parseDSN(dsns string) (*firebirdDsn, error) {
 		return nil, err
 	}
 
+	// Fail fast on an invalid overwrite flag before dialing.
+	if _, err := parseOverwrite(dsn.options["overwrite"]); err != nil {
+		return nil, err
+	}
+
 	// Fail fast on an invalid wire_crypt policy before dialing.
 	if _, err := parseWireCryptMode(dsn.options["wire_crypt"]); err != nil {
 		return nil, err
@@ -158,4 +164,13 @@ func parsePageSize(s string) (int32, error) {
 		return 4096, fmt.Errorf("firebirdsql: invalid page_size value %q (want one of %v)", s, validPageSizes)
 	}
 	return int32(n), nil
+}
+
+// parseOverwrite parses the overwrite option used by firebirdsql_createdb.
+func parseOverwrite(s string) (bool, error) {
+	v, err := strconv.ParseBool(s)
+	if err != nil {
+		return false, fmt.Errorf("firebirdsql: invalid overwrite value %q (want true or false)", s)
+	}
+	return v, nil
 }

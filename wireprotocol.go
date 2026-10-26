@@ -142,6 +142,8 @@ type wireProtocol struct {
 
 	// Page size for op_create (DSN page_size).
 	pageSize int32
+	// Replace an existing database on op_create (DSN overwrite).
+	overwrite bool
 
 	// Hard-drop on cancel (opt-in, DSN cancel_hard_drop=true): after a
 	// ctx cancel fired op_cancel and the wrapped read still has not
@@ -1217,6 +1219,10 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 	userBytes := []byte(strings.ToUpper(user))
 	passwordBytes := []byte(password)
 	roleBytes := []byte(role)
+	var overwrite int32
+	if p.overwrite {
+		overwrite = 1
+	}
 	dpb := bytes.Join([][]byte{
 		[]byte{isc_dpb_version1},
 		[]byte{isc_dpb_set_db_charset, byte(len(encode))}, encode,
@@ -1226,7 +1232,7 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 		[]byte{isc_dpb_sql_role_name, byte(len(roleBytes))}, roleBytes,
 		[]byte{isc_dpb_sql_dialect, 4}, int32_to_bytes(3),
 		[]byte{isc_dpb_force_write, 4}, bint32_to_bytes(1),
-		[]byte{isc_dpb_overwrite, 4}, bint32_to_bytes(1),
+		[]byte{isc_dpb_overwrite, 4}, bint32_to_bytes(overwrite),
 		[]byte{isc_dpb_page_size, 4}, int32_to_bytes(p.pageSize),
 		[]byte{isc_dpb_utf8_filename, 1, 1},
 	}, nil)

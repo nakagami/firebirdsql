@@ -157,6 +157,8 @@ func TestDSNOptionsDefaults(t *testing.T) {
 		"auth_plugin_list":     defaultAuthPlugins,
 		"charset":              "UTF8",
 		"column_name_to_lower": "false",
+		"overwrite":            "false",
+		"page_size":            "4096",
 		"role":                 "",
 		"timezone":             "",
 		"wire_crypt":           "true",
@@ -174,7 +176,7 @@ func TestDSNOptionsDefaults(t *testing.T) {
 // defaults.
 func TestDSNOptionsOverridesAndAliases(t *testing.T) {
 	dsn, err := parseDSN("user:password@localhost/db.fdb?charset=WIN1251&column_name_to_lower=true" +
-		"&role=MYROLE&timezone=Asia/Tokyo&wire_compress=true")
+		"&role=MYROLE&timezone=Asia/Tokyo&wire_compress=true&overwrite=true")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,6 +186,7 @@ func TestDSNOptionsOverridesAndAliases(t *testing.T) {
 		"role":                 "MYROLE",
 		"timezone":             "Asia/Tokyo",
 		"wire_compress":        "true",
+		"overwrite":            "true",
 	}
 	for k, v := range want {
 		if dsn.options[k] != v {
@@ -198,6 +201,8 @@ func TestDSNOptionsOverridesAndAliases(t *testing.T) {
 func TestDSNOptionsFailFast(t *testing.T) {
 	for _, dsn := range []string{
 		"user:password@localhost/db.fdb?wire_crypt=bogus",
+		"user:password@localhost/db.fdb?page_size=4097",
+		"user:password@localhost/db.fdb?overwrite=maybe",
 		"user:password@localhost/db.fdb?auth_plugin_name=Srp256&auth_plugin_list=NoSuchPlugin",
 		"user:password@localhost/db.fdb?auth_plugin_name=Unknown_Plugin",
 	} {
