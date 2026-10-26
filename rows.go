@@ -40,8 +40,9 @@ type firebirdsqlRows struct {
 	currentChunkIdx  int              // index of the current row within currentChunk
 	moreData         bool
 	result           []driver.Value
-	closeStmtOnClose bool // true for internal stmts that should be dropped on rows.Close()
-	badConn          bool // set when a fetch was abandoned under an expired ctx (wire desynced)
+	scanRow          []driver.Value // reusable destination for Go 1.27 column scanning
+	closeStmtOnClose bool           // true for internal stmts that should be dropped on rows.Close()
+	badConn          bool           // set when a fetch was abandoned under an expired ctx (wire desynced)
 }
 
 func newFirebirdsqlRows(ctx context.Context, stmt *firebirdsqlStmt, result []driver.Value) *firebirdsqlRows {
