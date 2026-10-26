@@ -135,9 +135,50 @@ param1, param2... are
 | wire_crypt | Wire-encryption policy, mirroring the server's `WireCrypt` setting. Tri-state `disabled`/`enabled`/`required`, with boolean aliases `false`=`disabled` and `true`=`enabled`. `enabled` encrypts when the server offers a cipher but tolerates plaintext; `required` fails the connection closed on every non-encrypting handshake outcome (including a legacy plain `op_accept` for protocol versions ≤ 12 and an `op_accept_data` with no negotiated cipher), refusing before any credentials are sent. Note: `enabled` tolerates an active-MITM downgrade to plaintext; on untrusted networks use `required`. | true (=`enabled`) | For Firebird 3.0+. Against pre-3.0 / non-encrypting servers, `required` is refused (use `enabled` to allow plaintext). |
 | wire_crypt_plugin | Ordered, comma-separated allow-list of acceptable wire ciphers, mirroring the server's `WireCryptPlugin`. Order is client preference; omit a cipher to refuse it (e.g. `ChaCha64,ChaCha` to refuse the deprecated RC4/`Arc4`). | ChaCha64,ChaCha,Arc4 | For Firebird 3.0+. `Arc4` (RC4) is kept for FB 3.0 compatibility but is cryptographically weak. |
 | wire_compress | Enable wire protocol compression. | false | For Firebird 3.0+ (protocol version 13+) |
-| charset | Firebird Charecter Set | | |
+| charset | Connection character set (`lc_ctype`), e.g. `UTF8`, `WIN1252`, `NONE` | UTF8 | See "Character sets" below. |
 | max_inline_blob_size | Max size of BLOBs the server may send inline with fetch/execute2 responses (protocol 19 / Firebird 5.0.3+). `0` disables. Alias: `inline_blob_size`. | 65536 | Negotiated only when the server picks protocol ≥ 19 |
 | max_blob_cache_size | Client cache budget for inline BLOBs (bytes). Alias: `blob_cache_size`. | 10485760 | Also sent as DPB on attach when protocol ≥ 19 |
+
+## Character sets
+
+`charset` sets the connection character set. The server converts text columns
+from their own character set to it, so a `WIN1252` column is returned as UTF8
+under the default `charset=UTF8`.
+
+Columns in `CHARACTER SET NONE` are not converted: their bytes are returned as
+stored, and decoded with the connection character set. `NONE` is the default
+for text columns in a database created without `DEFAULT CHARACTER SET`, and
+several system columns use it (e.g. `RDB$RELATION_CONSTRAINTS.RDB$CONSTRAINT_TYPE`).
+
+### `NONE` columns and Firebird 6
+
+Firebird 6 sizes the row buffer of an unconverted text column in characters of
+the connection character set instead of bytes. With a buffer of the column's
+byte length, a `VARCHAR(40) CHARACTER SET NONE` would hold only 10 characters
+under UTF8, and longer values would fail with:
+
+```text
+arithmetic exception, numeric overflow, or string truncation
+string right truncation
+expected length 10, actual 15
+```
+
+The driver therefore declares the buffer of such columns as
+*length × bytes per character of the connection charset* (up to the 64 KB
+limit of a single column), on Firebird 3.0 and later. Values and column
+metadata (`ColumnTypes`) are unchanged; Firebird 2.5 is not affected and keeps
+the exact buffer sizes.
+
+### Binary data (`OCTETS`) and Firebird 6
+
+Firebird 6 also treats a row-buffer or parameter item declared without a
+character set as text in the connection character set, and validates it. An
+`OCTETS` column, or a `[]byte` parameter, holding bytes that aren't valid UTF8
+then fails with `Malformed string`; before Firebird 6 the bytes were copied as
+they are. The driver declares `CHAR`/`VARCHAR CHARACTER SET OCTETS` columns
+and `[]byte` parameters with `CHARACTER SET OCTETS` (`blr_text2` /
+`blr_varying2`), as Jaybird does, which every supported server accepts. A
+`[]byte` of 32 KB or more is sent as a BLOB, as before.
 
 ## Wire protocols 16–19
 

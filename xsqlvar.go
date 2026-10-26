@@ -133,11 +133,16 @@ type xSQLVAR struct {
 	sqlscale   int
 	sqlsubtype int
 	sqllen     int
-	null_ok    bool
-	fieldname  string
-	relname    string
-	ownname    string
-	aliasname  string
+	// msglen is the byte length declared for a text column in the output
+	// message BLR, when it differs from sqllen (see widenUntransliteratedText).
+	// Zero means sqllen. Metadata (displayLength, ColumnTypeLength) keeps
+	// using sqllen.
+	msglen    int
+	null_ok   bool
+	fieldname string
+	relname   string
+	ownname   string
+	aliasname string
 
 	// arrayMeta carries the resolved system-table metadata for array-typed
 	// vars (SQL_TYPE_ARRAY); nil when the column is not an array or the
@@ -145,9 +150,17 @@ type xSQLVAR struct {
 	arrayMeta *ArrayMeta
 }
 
+// messageLength is the byte length of a text column in the message buffer.
+func (x *xSQLVAR) messageLength() int {
+	if x.msglen > 0 {
+		return x.msglen
+	}
+	return x.sqllen
+}
+
 func (x *xSQLVAR) ioLength() int {
 	if x.sqltype == SQL_TYPE_TEXT {
-		return x.sqllen
+		return x.messageLength()
 	}
 	return xsqlvarTypeLength[x.sqltype]
 }
@@ -449,10 +462,68 @@ func (x *xSQLVAR) value(raw_value []byte, timezone string, charset string) (v in
 	return
 }
 
+// widenUntransliteratedText sizes the output message buffer of text columns
+// that the server returns in their own charset instead of the connection
+// charset.
+//
+// Under a multi-byte connection charset (UTF8, UNICODE_FSS, SJIS_0208, ...)
+// the server transliterates text columns and describes them in the
+// connection charset: a WIN1252 VARCHAR(40) is described as sqllen 160 under
+// UTF8. Columns in CHARACTER SET NONE (and OCTETS) are not transliterated and
+// are described with their byte length: a NONE VARCHAR(40) is described as
+// sqllen 40.
+//
+// The output message declares text items as blr_text/blr_varying, which carry
+// no charset. Firebird 2.5 to 5.0 treat such an item's length as bytes.
+// Firebird 6 treats it as characters of the connection charset, so a 40-byte
+// item holds only 40/4 = 10 UTF8 characters and fetching a longer NONE value
+// fails with "string right truncation, expected length 10, actual 15". The
+// same happens to system columns such as RDB$CONSTRAINT_TYPE (CHAR(11)
+// CHARACTER SET NONE): "expected length 2, actual 11".
+//
+// Declaring charLength * connBytesPerChar bytes satisfies Firebird 6, and is
+// harmless on Firebird 3 to 5: VARYING values carry their own length, and the
+// blank padding of a wider CHAR buffer is trimmed like any CHAR padding.
+// The widened length is capped to fit the 16-bit BLR length. It is applied on
+// protocol 13+ only (Firebird 3+): Firebird 2.5 is not affected, and rejects
+// messages over 64 KB with "SQLDA error", which widening can produce.
+// node-firebird applies the same widening (its issue #422).
+//
+// OCTETS columns are binary, so they are left alone: they are never
+// transliterated and their byte length is exact.
+func widenUntransliteratedText(xsqlda []xSQLVAR, connBytesPerChar int) {
+	if connBytesPerChar <= 1 {
+		return
+	}
+	maxLen := 0xFFFF / connBytesPerChar * connBytesPerChar
+	for i := range xsqlda {
+		x := &xsqlda[i]
+		if x.sqltype != SQL_TYPE_TEXT && x.sqltype != SQL_TYPE_VARYING {
+			continue
+		}
+		charsetID := x.sqlsubtype & 0xFF
+		if charsetID == charsetIDOctets {
+			continue
+		}
+		colBytesPerChar := charsetBytesPerChar(charsetID)
+		if colBytesPerChar >= connBytesPerChar {
+			continue // transliterated, or already as wide as the connection charset
+		}
+		chars := x.sqllen / colBytesPerChar
+		widened := chars * connBytesPerChar
+		if widened > maxLen {
+			widened = maxLen
+		}
+		if widened > x.sqllen {
+			x.msglen = widened
+		}
+	}
+}
+
 func calcBlr(xsqlda []xSQLVAR) []byte {
 	// Calculate  BLR from XSQLVAR array.
 	ln := len(xsqlda) * 2
-	blr := make([]byte, (ln*4)+8)
+	blr := make([]byte, (ln*6)+8)
 	blr[0] = 5
 	blr[1] = 2
 	blr[2] = 4
@@ -467,15 +538,31 @@ func calcBlr(xsqlda []xSQLVAR) []byte {
 			sqlscale += 256
 		}
 		switch x.sqltype {
-		case SQL_TYPE_VARYING:
-			blr[n] = 37
-			blr[n+1] = byte(x.sqllen & 255)
-			blr[n+2] = byte(x.sqllen >> 8)
-			n += 3
-		case SQL_TYPE_TEXT:
-			blr[n] = 14
-			blr[n+1] = byte(x.sqllen & 255)
-			blr[n+2] = byte(x.sqllen >> 8)
+		case SQL_TYPE_VARYING, SQL_TYPE_TEXT:
+			if x.sqlsubtype&0xFF == charsetIDOctets {
+				// blr_varying2 / blr_text2 with CHARACTER SET OCTETS: the item
+				// is binary, so the server copies the bytes without treating
+				// them as text in the connection charset (Firebird 6 validates
+				// charset-less items as such and rejects invalid UTF8)
+				if x.sqltype == SQL_TYPE_VARYING {
+					blr[n] = 38
+				} else {
+					blr[n] = 15
+				}
+				blr[n+1] = charsetIDOctets
+				blr[n+2] = 0
+				blr[n+3] = byte(x.sqllen & 255)
+				blr[n+4] = byte(x.sqllen >> 8)
+				n += 5
+				break
+			}
+			if x.sqltype == SQL_TYPE_VARYING {
+				blr[n] = 37
+			} else {
+				blr[n] = 14
+			}
+			blr[n+1] = byte(x.messageLength() & 255)
+			blr[n+2] = byte(x.messageLength() >> 8)
 			n += 3
 		case SQL_TYPE_LONG:
 			blr[n] = 8
