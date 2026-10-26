@@ -290,6 +290,7 @@ func handshakeFirebirdsqlConn(wp *wireProtocol, dsn *firebirdDsn, dbOp func(*wir
 	wp.inlineBlobCache = newInlineBlobCache(int(wp.maxBlobCacheSize))
 	wp.cancelHardDrop = convertToBool(dsn.options["cancel_hard_drop"], false)
 	wp.cancelHardDropGrace = time.Duration(parseOptionInt(dsn.options["cancel_hard_drop_grace"], 3000)) * time.Millisecond
+	wp.pageSize, _ = parsePageSize(dsn.options["page_size"]) // validated in parseDSN
 
 	if err = wp.opConnect(dsn.dbName, dsn.user, dsn.passwd, dsn.options, clientPublic); err != nil {
 		return nil, err

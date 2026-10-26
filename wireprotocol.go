@@ -140,6 +140,9 @@ type wireProtocol struct {
 	maxBlobCacheSize  int32
 	inlineBlobCache   *inlineBlobCache
 
+	// Page size for op_create (DSN page_size).
+	pageSize int32
+
 	// Hard-drop on cancel (opt-in, DSN cancel_hard_drop=true): after a
 	// ctx cancel fired op_cancel and the wrapped read still has not
 	// returned within cancelHardDropGrace, close the socket. FB does not
@@ -1209,8 +1212,6 @@ func (p *wireProtocol) appendExecuteTrailers() {
 
 func (p *wireProtocol) opCreate(dbName string, user string, password string, role string) error {
 	p.debugPrint("opCreate")
-	var page_size int32
-	page_size = 4096
 
 	encode := []byte(p.charset)
 	userBytes := []byte(strings.ToUpper(user))
@@ -1226,7 +1227,7 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 		[]byte{isc_dpb_sql_dialect, 4}, int32_to_bytes(3),
 		[]byte{isc_dpb_force_write, 4}, bint32_to_bytes(1),
 		[]byte{isc_dpb_overwrite, 4}, bint32_to_bytes(1),
-		[]byte{isc_dpb_page_size, 4}, int32_to_bytes(page_size),
+		[]byte{isc_dpb_page_size, 4}, int32_to_bytes(p.pageSize),
 		[]byte{isc_dpb_utf8_filename, 1, 1},
 	}, nil)
 

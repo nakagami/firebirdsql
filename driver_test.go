@@ -2093,3 +2093,19 @@ func TestWireCryptRequiredPolicy(t *testing.T) {
 	require.Error(t, err, "wire_crypt=required with no acceptable cipher must fail closed")
 	require.Contains(t, err.Error(), "wire_crypt=required but no wire encryption was established")
 }
+
+func TestCreateDatabasePageSize(t *testing.T) {
+	conn, err := sql.Open("firebirdsql_createdb", GetTestDSN("test_page_size_")+"?page_size=16384")
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	defer conn.Close()
+
+	var pageSize int
+	if err := conn.QueryRow("SELECT mon$page_size FROM mon$database").Scan(&pageSize); err != nil {
+		t.Fatalf("Error QueryRow: %v", err)
+	}
+	if pageSize != 16384 {
+		t.Errorf("page size = %d, want 16384", pageSize)
+	}
+}

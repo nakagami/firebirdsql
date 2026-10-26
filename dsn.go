@@ -25,8 +25,11 @@ package firebirdsql
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"net/url"
+	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -90,6 +93,7 @@ func parseDSN(dsns string) (*firebirdDsn, error) {
 		"column_name_to_lower": "false",
 		"host_name":            "",
 		"os_user":              "",
+		"page_size":            "4096",
 		"role":                 "",
 		"timezone":             "",
 		"wire_crypt":           "true",
@@ -121,6 +125,11 @@ func parseDSN(dsns string) (*firebirdDsn, error) {
 		dsn.options["max_blob_cache_size"] = values[0]
 	}
 
+	// Fail fast on an invalid page_size before dialing.
+	if _, err := parsePageSize(dsn.options["page_size"]); err != nil {
+		return nil, err
+	}
+
 	// Fail fast on an invalid wire_crypt policy before dialing.
 	if _, err := parseWireCryptMode(dsn.options["wire_crypt"]); err != nil {
 		return nil, err
@@ -134,4 +143,19 @@ func parseDSN(dsns string) (*firebirdDsn, error) {
 	}
 
 	return dsn, nil
+}
+
+// validPageSizes are the page sizes some supported Firebird version accepts:
+// 4096-16384 on 2.5/3.0, 4096-32768 on 4.0/5.0 and 8192-32768 on 6.0. A size
+// outside the server's own range is adjusted by the server (e.g. 4096 becomes
+// 8192 on 6.0).
+var validPageSizes = []int{4096, 8192, 16384, 32768}
+
+// parsePageSize parses the page_size option used by firebirdsql_createdb.
+func parsePageSize(s string) (int32, error) {
+	n, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil || !slices.Contains(validPageSizes, n) {
+		return 4096, fmt.Errorf("firebirdsql: invalid page_size value %q (want one of %v)", s, validPageSizes)
+	}
+	return int32(n), nil
 }
