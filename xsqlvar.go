@@ -449,7 +449,32 @@ func (x *xSQLVAR) value(raw_value []byte, timezone string, charset string) (v in
 	return
 }
 
+// charsetDynamic is CS_dynamic, the "connection charset" placeholder id.
+const charsetDynamic = 127
+
+// blrCharset returns the charset id to declare for a text item with
+// blr_text2/blr_varying2, or false when the item should keep the plain
+// charset-less form.
+func (x *xSQLVAR) blrCharset() (byte, bool) {
+	cs := x.sqlsubtype & 0xFF
+	if cs == charsetDynamic {
+		return 0, false
+	}
+	return byte(cs), true
+}
+
 func calcBlr(xsqlda []xSQLVAR) []byte {
+	return calcBlrCharset(xsqlda, false)
+}
+
+// calcOutputBlr is calcBlr for an output message: text items declare the
+// described charset (blr_text2/blr_varying2), as fbclient does, so the server
+// does not size and validate them in the connection charset.
+func calcOutputBlr(xsqlda []xSQLVAR) []byte {
+	return calcBlrCharset(xsqlda, true)
+}
+
+func calcBlrCharset(xsqlda []xSQLVAR, withCharset bool) []byte {
 	// Calculate  BLR from XSQLVAR array.
 	ln := len(xsqlda) * 2
 	blr := make([]byte, (ln*4)+8)
@@ -467,16 +492,23 @@ func calcBlr(xsqlda []xSQLVAR) []byte {
 			sqlscale += 256
 		}
 		switch x.sqltype {
-		case SQL_TYPE_VARYING:
-			blr[n] = 37
-			blr[n+1] = byte(x.sqllen & 255)
-			blr[n+2] = byte(x.sqllen >> 8)
-			n += 3
-		case SQL_TYPE_TEXT:
-			blr[n] = 14
-			blr[n+1] = byte(x.sqllen & 255)
-			blr[n+2] = byte(x.sqllen >> 8)
-			n += 3
+		case SQL_TYPE_VARYING, SQL_TYPE_TEXT:
+			op, op2 := byte(37), byte(38) // blr_varying, blr_varying2
+			if x.sqltype == SQL_TYPE_TEXT {
+				op, op2 = 14, 15 // blr_text, blr_text2
+			}
+			if cs, ok := x.blrCharset(); withCharset && ok {
+				blr[n] = op2
+				blr[n+1] = cs
+				blr[n+2] = 0
+				n += 3
+			} else {
+				blr[n] = op
+				n++
+			}
+			blr[n] = byte(x.sqllen & 255)
+			blr[n+1] = byte(x.sqllen >> 8)
+			n += 2
 		case SQL_TYPE_LONG:
 			blr[n] = 8
 			blr[n+1] = byte(sqlscale)
