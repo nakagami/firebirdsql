@@ -104,7 +104,10 @@ Legend: ✅ pass · ⏭️ skip (version/capability gate or server configuration
 | `TestDSNIPv6Formats` | Bracketed IPv6 hosts keep/append the default port | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestDSNOptionsDefaults` | Every documented DSN option resolves to its default | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestDSNOptionsOverridesAndAliases` | Explicit options win over defaults | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
-| `TestDSNOptionsFailFast` | Invalid wire_crypt / auth plugin config fails at parse time | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestDSNOptionsFailFast` | Invalid wire_crypt / auth plugin / page_size config fails at parse time | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestParseDSNPageSize` | page_size defaults to 4096; an explicit value is passed through | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestParseDSNInvalidPageSize` | Sizes outside 4096/8192/16384/32768, empty and non-numeric values fail at parse time | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCreateDatabasePageSize` | `firebirdsql_createdb` honors `page_size=16384` (checked via `mon$page_size`) | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestTimezoneLegacyAliases` | GMT/ACT/AET/AGT/ART/AST legacy zone aliases round-trip | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestTimezoneMapInvalidEntries` | Unknown zone names/ids yield zero values, never a wrong zone | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestAdvertisedProtocolRange` | Connect packet offers protocols 10–19, weights ascending, pflag only with compression | ✅ pass | ✅ pass | ✅ pass | ✅ pass |

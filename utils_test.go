@@ -157,6 +157,7 @@ func TestDSNOptionsDefaults(t *testing.T) {
 		"auth_plugin_list":     defaultAuthPlugins,
 		"charset":              "UTF8",
 		"column_name_to_lower": "false",
+		"page_size":            "4096",
 		"role":                 "",
 		"timezone":             "",
 		"wire_crypt":           "true",
@@ -193,11 +194,13 @@ func TestDSNOptionsOverridesAndAliases(t *testing.T) {
 }
 
 // TestDSNOptionsFailFast mirrors Jaybird's invalid-property behavior: a bogus
-// wire_crypt policy or an auth plugin outside the supported set must fail at
-// parse time, before any network activity.
+// wire_crypt policy, a page_size Firebird does not support or an auth plugin
+// outside the supported set must fail at parse time, before any network
+// activity.
 func TestDSNOptionsFailFast(t *testing.T) {
 	for _, dsn := range []string{
 		"user:password@localhost/db.fdb?wire_crypt=bogus",
+		"user:password@localhost/db.fdb?page_size=4097",
 		"user:password@localhost/db.fdb?auth_plugin_name=Srp256&auth_plugin_list=NoSuchPlugin",
 		"user:password@localhost/db.fdb?auth_plugin_name=Unknown_Plugin",
 	} {

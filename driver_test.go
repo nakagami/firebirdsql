@@ -2095,7 +2095,10 @@ func TestWireCryptRequiredPolicy(t *testing.T) {
 }
 
 func TestCreateDatabasePageSize(t *testing.T) {
-	conn, err := sql.Open("firebirdsql_createdb", GetTestDSN("test_page_size_")+"?page_size=16384")
+	dbPath := GetTestDatabase("test_page_size_")
+	t.Cleanup(func() { _ = removeDatabaseFile(dbPath) })
+
+	conn, err := sql.Open("firebirdsql_createdb", GetTestDSNFromDatabase(dbPath)+"?page_size=16384")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
