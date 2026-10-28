@@ -93,6 +93,14 @@ Legend: ✅ pass · ⏭️ skip (version/capability gate or server configuration
 | `TestFeatureProtocolGating/scrollable_cursors_(protocol_18+)` | First/Absolute/Relative/Last/Prior/Next return the expected rows; Next past the end returns io.EOF | ⏭️ skip | ⏭️ skip | ⏭️ skip | ✅ pass |
 | `TestCancelOperationParity` | Context cancellation aborts a long statement; pool stays usable | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 
+### Deferred cursor close — deferred_close_live_test.go
+
+| Test | What it verifies | FB 2.5 | FB 3.0 | FB 4.0 | FB 5.0 | FB 6.0 |
+|---|---|:-:|:-:|:-:|:-:|:-:|
+| `TestDeferredCursorClosePacketCount` | A query on a prepared statement writes exactly 2 packets in a transaction and 3 in autocommit mode: the cursor close rides with the next request (counted under the driver's write buffer; skips on a non-lazy port type) | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestDeferredCursorCloseFollowedBy` | Every request that can follow a queued close on one connection (query, blob read, statement error, insert + commit, rollback, drop, prepare, ping, connection close) gets its own response, never a skipped one | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestDeferredCursorCloseConcurrent` | Queries and updates from 8 goroutines over a 4-connection pool, deferred closes interleaving with other requests | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+
 ### Additions to existing files
 
 | Test | What it verifies | FB 2.5 | FB 3.0 | FB 4.0 | FB 5.0 |

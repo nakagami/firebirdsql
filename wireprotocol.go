@@ -115,7 +115,17 @@ type wireProtocol struct {
 	protocolVersion    int32
 	acceptArchitecture int32
 	acceptType         int32
-	lazyResponseCount  int
+	// lazyResponseCount is the number of op_response packets the server
+	// still owes for requests whose response was not waited for (deferred
+	// packets, see deferFreeStatement); the readers skip that many before
+	// the response they expect.
+	lazyResponseCount int
+	// pendingFree holds op_free_statement packets built but not yet
+	// written: a cursor close (DSQL_close) goes out in front of the next
+	// request instead of in a packet of its own. pendingFreeCount is how
+	// many packets it holds.
+	pendingFree      []byte
+	pendingFreeCount int
 
 	pluginName string
 	user       string
@@ -268,6 +278,14 @@ func (p *wireProtocol) uid(user string, password string, authPluginName string, 
 
 func (p *wireProtocol) sendPackets() (written int, err error) {
 	p.debugPrint("\tsendPackets():%v", p.buf)
+	if len(p.pendingFree) > 0 {
+		// the deferred frees travel in the same write, ahead of the request;
+		// the server answers them first, so their responses are skipped
+		p.buf = append(p.pendingFree, p.buf...)
+		p.lazyResponseCount += p.pendingFreeCount
+		p.pendingFree = nil
+		p.pendingFreeCount = 0
+	}
 	n := 0
 	for written < len(p.buf) {
 		n, err = p.conn.Write(p.buf[written:])
@@ -1463,6 +1481,48 @@ func (p *wireProtocol) opFreeStatement(stmtHandle int32, mode int32) error {
 	return err
 }
 
+// deferFreeStatement queues an op_free_statement to be written in front of
+// the next request (see sendPackets), the way fbclient and Jaybird send a
+// cursor close: the server's response to it is skipped when the next
+// response is read. Only for connections on a lazy-send port type.
+func (p *wireProtocol) deferFreeStatement(stmtHandle int32, mode int32) {
+	p.debugPrint("deferFreeStatement:<%v>", stmtHandle)
+	var pkt [12]byte
+	for i, v := range []int32{op_free_statement, stmtHandle, mode} {
+		pkt[i*4] = byte(v >> 24)
+		pkt[i*4+1] = byte(v >> 16)
+		pkt[i*4+2] = byte(v >> 8)
+		pkt[i*4+3] = byte(v)
+	}
+	p.pendingFree = append(p.pendingFree, pkt[:]...)
+	p.pendingFreeCount++
+}
+
+// dropPendingFree forgets queued frees: for a connection that is being
+// closed without another request, the server releases the statements at
+// detach.
+func (p *wireProtocol) dropPendingFree() {
+	p.pendingFree = nil
+	p.pendingFreeCount = 0
+}
+
+// skipDeferredResponses consumes the op_response packets owed for deferred
+// requests that precede the response a reader expects. b is the operation
+// code just read; the returned code is the first one that isn't owed.
+func (p *wireProtocol) skipDeferredResponses(b []byte) ([]byte, error) {
+	var err error
+	for bytes_to_bint32(b) == op_response && p.lazyResponseCount > 0 {
+		p.lazyResponseCount--
+		if _, _, _, err = p._parse_op_response(); err != nil {
+			return b, err
+		}
+		if b, err = p.recvPackets(4); err != nil {
+			return b, err
+		}
+	}
+	return b, nil
+}
+
 func (p *wireProtocol) opPrepareStatement(stmtHandle int32, transHandle int32, query string) error {
 	p.debugPrint("opPrepareStatement():%d,%d,%v", transHandle, stmtHandle, query)
 
@@ -1647,6 +1707,9 @@ func (p *wireProtocol) opSliceResponse(meta *ArrayMeta) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+	}
+	if b, err = p.skipDeferredResponses(b); err != nil {
+		return nil, err
 	}
 	switch bytes_to_bint32(b) {
 	case op_slice_response:

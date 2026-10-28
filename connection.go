@@ -169,6 +169,7 @@ func (fc *firebirdsqlConn) Close() (err error) {
 		// Close in the caller's goroutine. Dropping the socket makes the server
 		// roll back and release the attachment.
 		fc.wp.clearAllInlineBlobCache()
+		fc.wp.dropPendingFree()
 		return fc.wp.conn.Close()
 	}
 	for tx := range fc.transactionSet {

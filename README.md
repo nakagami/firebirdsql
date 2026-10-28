@@ -151,6 +151,17 @@ The driver advertises Firebird wire protocols 10–19. The server chooses the hi
 
 Inspect the negotiated version with `ProtocolVersion()` (same Raw pattern as `WireCipher`).
 
+### Deferred packets
+
+On the lazy-send port type (`ptype_lazy_send`, negotiated with every server since Firebird 2.1) a request whose answer nothing depends on need not be waited for. The driver uses this in two ways:
+
+- **Allocate + prepare** go out in one write, and the two responses are read together (`lazyResponseCount` records how many responses the server still owes).
+- **Cursor close** (`op_free_statement` with `DSQL_close`, what `rows.Close()` sends when the statement stays prepared) is not written at all when it happens. It is queued and written in front of the next request on the connection, in the same packet, and its response is skipped when the next response is read. This is what fbclient (`defer_packet`), Jaybird (`V11Statement`: the close is written without a flush) and node-firebird do.
+
+So a query on a prepared statement costs two packets in a transaction (execute, fetch) and three in autocommit mode (execute, fetch, commit retaining), instead of three and four. `stmt.Close()` (`DSQL_drop`) is still written immediately, so the statement's metadata locks are released at once; only its response is deferred. A queued close that is never followed by another request is dropped when the connection is closed: detaching releases every statement anyway.
+
+The server processes the packets of one write in order, so a request that follows a queued close always sees the cursor closed. Deferred responses are plain `op_response` packets with no data; a response of another kind (fetch, sql, slice) can never be mistaken for one.
+
 ### Local live tests
 
 Protocol 18/19 integration tests use a read-only EMPLOYEE database:
