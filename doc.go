@@ -8,7 +8,23 @@ wire protocol — no C dependencies or cgo required.
 Two driver names are registered:
 
   - "firebirdsql" — attach to an existing database.
-  - "firebirdsql_createdb" — create the database if it does not exist, then attach.
+  - "firebirdsql_createdb" — create the database, then attach. A database that
+    already exists at that path is overwritten, and this happens on every new
+    connection the pool opens, not only the first one.
+
+To create a database once, open it with "firebirdsql_createdb", call Ping, close
+that *sql.DB, and then open the database with "firebirdsql":
+
+	db, err := sql.Open("firebirdsql_createdb", dsn)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := db.Ping(); err != nil { // creates the database
+		log.Fatal(err)
+	}
+	db.Close()
+
+	db, err = sql.Open("firebirdsql", dsn)
 
 # Connection String (DSN)
 

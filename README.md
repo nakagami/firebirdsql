@@ -109,7 +109,31 @@ db, err := sql.Open("firebirdsql", dsn)
 Two driver names are registered with `database/sql`:
 
 - `"firebirdsql"` - attach to an existing database.
-- `"firebirdsql_createdb"` - create the database if it does not exist, then attach.
+- `"firebirdsql_createdb"` - create the database, then attach. A database that
+  already exists at that path is overwritten. This happens on every new connection
+  the `*sql.DB` opens, not only the first one. If no other connection holds the
+  database, for example after the pool closed its only connection, the new one
+  wipes the data (Firebird 2.5 SuperServer was seen to hang instead). If another
+  connection holds it, the create fails with `object DATABASE is in use`
+  (Firebird 3 and later). Use it once to create the database, then open the
+  database with `"firebirdsql"`:
+
+  ```go
+  db, err := sql.Open("firebirdsql_createdb", dsn)
+  if err != nil {
+      log.Fatal(err)
+  }
+  if err := db.Ping(); err != nil { // creates the database
+      log.Fatal(err)
+  }
+  db.Close()
+
+  db, err = sql.Open("firebirdsql", dsn)
+  if err != nil {
+      log.Fatal(err)
+  }
+  ```
+
   See `_examples/service_manager.go` for a usage example.
 
 ### General
