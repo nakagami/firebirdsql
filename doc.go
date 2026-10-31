@@ -73,7 +73,8 @@ Windows database path:
 
 See the README for the full list of optional query parameters (auth_plugin_name,
 auth_plugin_list, charset, role, timezone, wire_crypt, wire_crypt_plugin,
-wire_compress, column_name_to_lower, max_inline_blob_size, max_blob_cache_size).
+wire_compress, column_name_to_lower, page_size, max_inline_blob_size,
+max_blob_cache_size).
 
 The timezone parameter takes an IANA name ("Europe/Berlin") or a fixed UTC
 offset. Write a fixed offset percent-encoded on the DSN: a raw '+' in a URL

@@ -5,7 +5,7 @@ Firebird RDBMS https://firebirdsql.org SQL driver for Go
 ## Requirements
 
 * Firebird 2.5 or higher
-* Golang 1.20 or higher
+* Go 1.22 or higher
 
 ## Example
 
@@ -153,7 +153,7 @@ param1, param2... are
 | auth_plugin_name | Preferred authentication plugin. Must be a member of `auth_plugin_list`. | Srp256 | Srp256/Srp/Legacy_Auth are available. |
 | auth_plugin_list | Ordered, comma-separated allow-list of acceptable authentication plugins (a subset of the supported `Srp256,Srp,Legacy_Auth`). The plugin the server selects must be a member, otherwise the connection is refused before any credentials are sent. Omit a plugin to refuse it (e.g. `Srp256,Srp` to refuse a server-forced downgrade to `Legacy_Auth`, which would otherwise put a brute-forceable DES `crypt(password)` hash on the wire). | Srp256,Srp,Legacy_Auth | `Legacy_Auth` is kept in the default for backward compatibility but is weak; set `Srp256,Srp` to harden. |
 | column_name_to_lower | Force column name to lower | false | For "github.com/jmoiron/sqlx" |
-| page_size | Page size in bytes for a database created with the `firebirdsql_createdb` driver: 4096, 8192, 16384 or 32768. Any other value is rejected before dialing. Ignored when attaching. | 4096 | Firebird 2.5/3.0 accept 4096-16384, 4.0/5.0 4096-32768 and 6.0 8192-32768; the server adjusts a size outside its range (4096 becomes 8192 on 6.0). |
+| page_size | Page size in bytes for a database created with the `firebirdsql_createdb` driver: 4096, 8192, 16384 or 32768. Any other value is rejected before dialing. Only used by `firebirdsql_createdb`; validated on every DSN. | 4096 | Firebird 2.5/3.0 accept 4096-16384, 4.0/5.0 4096-32768 and 6.0 8192-32768; the server adjusts a size outside its range (4096 becomes 8192 on 6.0). |
 | role | Role name | | |
 | timezone | IANA time zone name (e.g. `UTC`, `Europe/Berlin`), or a fixed UTC offset (e.g. `%2B05:30`) | | Controls client-side decoding of naive DATE/TIME/TIMESTAMP and server session time zone (FB 4+). Write a fixed offset percent-encoded: a raw `+` in a URL query becomes a space. See "Time and timestamp handling" below. |
 | wire_crypt | Wire-encryption policy, mirroring the server's `WireCrypt` setting. Tri-state `disabled`/`enabled`/`required`, with boolean aliases `false`=`disabled` and `true`=`enabled`. `enabled` encrypts when the server offers a cipher but tolerates plaintext; `required` fails the connection closed on every non-encrypting handshake outcome (including a legacy plain `op_accept` for protocol versions ≤ 12 and an `op_accept_data` with no negotiated cipher), refusing before any credentials are sent. Note: `enabled` tolerates an active-MITM downgrade to plaintext; on untrusted networks use `required`. | true (=`enabled`) | For Firebird 3.0+. Against pre-3.0 / non-encrypting servers, `required` is refused (use `enabled` to allow plaintext). |
