@@ -2094,21 +2094,57 @@ func TestWireCryptRequiredPolicy(t *testing.T) {
 	require.Contains(t, err.Error(), "wire_crypt=required but no wire encryption was established")
 }
 
+// serverDefaultPageSize is the page size Firebird uses when op_create sends
+// none: 4096 on 2.5, 8192 since 3.0.
+func serverDefaultPageSize(major int) int {
+	if major < 3 {
+		return 4096
+	}
+	return 8192
+}
+
 func TestCreateDatabasePageSize(t *testing.T) {
-	dbPath := GetTestDatabase("test_page_size_")
-	t.Cleanup(func() { _ = removeDatabaseFile(dbPath) })
+	for _, tc := range []struct {
+		name  string
+		query string
+		want  func(major int) int // expected mon$page_size for the engine major version
+	}{
+		// No isc_dpb_page_size: the server default, 4096 on 2.5 and 8192 since 3.0.
+		{"unset", "", serverDefaultPageSize},
+		{"empty", "?page_size=", serverDefaultPageSize},
+		// Firebird 6.0 raised the minimum page size to 8192.
+		{"4096", "?page_size=4096", func(major int) int {
+			if major < 6 {
+				return 4096
+			}
+			return 8192
+		}},
+		{"16384", "?page_size=16384", func(int) int { return 16384 }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dbPath := GetTestDatabase("test_page_size_")
+			t.Cleanup(func() { _ = removeDatabaseFile(dbPath) })
 
-	conn, err := sql.Open("firebirdsql_createdb", GetTestDSNFromDatabase(dbPath)+"?page_size=16384")
-	if err != nil {
-		t.Fatalf("Error connecting: %v", err)
-	}
-	defer conn.Close()
+			conn, err := sql.Open("firebirdsql_createdb", GetTestDSNFromDatabase(dbPath)+tc.query)
+			if err != nil {
+				t.Fatalf("Error connecting: %v", err)
+			}
+			defer conn.Close()
+			// A second firebirdsql_createdb connection would create the
+			// database again; keep both queries on one connection.
+			conn.SetMaxOpenConns(1)
 
-	var pageSize int
-	if err := conn.QueryRow("SELECT mon$page_size FROM mon$database").Scan(&pageSize); err != nil {
-		t.Fatalf("Error QueryRow: %v", err)
-	}
-	if pageSize != 16384 {
-		t.Errorf("page size = %d, want 16384", pageSize)
+			major := engineMajorVersion(conn)
+			if major == 0 {
+				t.Fatal("cannot determine the engine version")
+			}
+			var pageSize int
+			if err := conn.QueryRow("SELECT mon$page_size FROM mon$database").Scan(&pageSize); err != nil {
+				t.Fatalf("Error QueryRow: %v", err)
+			}
+			if want := tc.want(major); pageSize != want {
+				t.Errorf("page size = %d, want %d (Firebird %d)", pageSize, want, major)
+			}
+		})
 	}
 }

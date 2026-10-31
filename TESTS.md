@@ -113,9 +113,12 @@ Legend: ✅ pass · ⏭️ skip (version/capability gate or server configuration
 | `TestDSNOptionsDefaults` | Every documented DSN option resolves to its default | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestDSNOptionsOverridesAndAliases` | Explicit options win over defaults | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestDSNOptionsFailFast` | Invalid wire_crypt / auth plugin / page_size config fails at parse time | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
-| `TestParseDSNPageSize` | page_size defaults to 4096; an explicit value is passed through | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
-| `TestParseDSNInvalidPageSize` | Sizes outside 4096/8192/16384/32768, empty and non-numeric values fail at parse time | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
-| `TestCreateDatabasePageSize` | `firebirdsql_createdb` honors `page_size=16384` (checked via `mon$page_size`) | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestParseDSNPageSize` | page_size defaults to empty (server default); an explicit or empty value is passed through | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestParseDSNInvalidPageSize` | Sizes outside 4096/8192/16384/32768 (including 0) and non-numeric values fail at parse time | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCreateDatabasePageSize` | `firebirdsql_createdb` creates `mon$page_size` 16384 for `page_size=16384`, 4096 for `page_size=4096` (8192 on 6.0) and the server default for an unset or empty `page_size` (4096 on 2.5, 8192 on 3.0+) | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestParsePageSize` | An empty page_size maps to 0 (no `isc_dpb_page_size`), a valid size passes through, 0 and invalid values fail | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCreateDPBPageSize` | The op_create DPB carries `isc_dpb_page_size` (little-endian) only for a set page size; the other items stay intact | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCreateDPBUnchangedWithPageSize` | With `page_size=4096` the op_create DPB is byte-identical to the one sent before the page size became optional | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestTimezoneLegacyAliases` | GMT/ACT/AET/AGT/ART/AST legacy zone aliases round-trip | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestTimezoneMapInvalidEntries` | Unknown zone names/ids yield zero values, never a wrong zone | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestAdvertisedProtocolRange` | Connect packet offers protocols 10–19, weights ascending, pflag only with compression | ✅ pass | ✅ pass | ✅ pass | ✅ pass |

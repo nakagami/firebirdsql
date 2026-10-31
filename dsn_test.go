@@ -108,7 +108,8 @@ func TestParseDSNTimezoneOffsetEscaping(t *testing.T) {
 
 func TestParseDSNPageSize(t *testing.T) {
 	for dsns, want := range map[string]string{
-		"user:pass@localhost/test.fdb":                 "4096",
+		"user:pass@localhost/test.fdb":                 "",
+		"user:pass@localhost/test.fdb?page_size=":      "",
 		"user:pass@localhost/test.fdb?page_size=16384": "16384",
 	} {
 		dsn, err := parseDSN(dsns)
@@ -122,9 +123,34 @@ func TestParseDSNPageSize(t *testing.T) {
 }
 
 func TestParseDSNInvalidPageSize(t *testing.T) {
-	for _, v := range []string{"4097", "0", "-4096", "1024", "2048", "65536", "abc", ""} {
+	for _, v := range []string{"4097", "0", "-4096", "1024", "2048", "65536", "abc"} {
 		if _, err := parseDSN("user:pass@localhost/test.fdb?page_size=" + v); err == nil {
 			t.Errorf("page_size=%q: expected error", v)
+		}
+	}
+}
+
+// TestParsePageSize checks the value op_create sends: an empty page_size
+// becomes 0 (no isc_dpb_page_size, the server default), a valid size passes
+// through, and an invalid one fails with 0.
+func TestParsePageSize(t *testing.T) {
+	for _, tc := range []struct {
+		in      string
+		want    int32
+		wantErr bool
+	}{
+		{"", 0, false},
+		{" ", 0, false},
+		{"4096", 4096, false},
+		{"16384", 16384, false},
+		{" 8192 ", 8192, false},
+		{"0", 0, true},
+		{"4097", 0, true},
+		{"abc", 0, true},
+	} {
+		got, err := parsePageSize(tc.in)
+		if (err != nil) != tc.wantErr || got != tc.want {
+			t.Errorf("parsePageSize(%q) = %d, %v; want %d, error %v", tc.in, got, err, tc.want, tc.wantErr)
 		}
 	}
 }
