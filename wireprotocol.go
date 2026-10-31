@@ -150,7 +150,8 @@ type wireProtocol struct {
 	maxBlobCacheSize  int32
 	inlineBlobCache   *inlineBlobCache
 
-	// Page size for op_create (DSN page_size).
+	// Page size for op_create (DSN page_size); 0 sends none and the server
+	// uses its default.
 	pageSize int32
 
 	// Hard-drop on cancel (opt-in, DSN cancel_hard_drop=true): after a
@@ -1231,33 +1232,40 @@ func (p *wireProtocol) appendExecuteTrailers() {
 func (p *wireProtocol) opCreate(dbName string, user string, password string, role string) error {
 	p.debugPrint("opCreate")
 
+	p.packInt(op_create)
+	p.packInt(0) // Database Object ID
+	p.packString(dbName)
+	p.packBytes(p.createDPB(user, password, role))
+	_, err := p.sendPackets()
+	return err
+}
+
+// createDPB builds the op_create DPB. isc_dpb_page_size is sent only when
+// pageSize is set; otherwise the server uses its default page size.
+func (p *wireProtocol) createDPB(user string, password string, role string) []byte {
 	encode := []byte(p.charset)
 	userBytes := []byte(strings.ToUpper(user))
 	passwordBytes := []byte(password)
 	roleBytes := []byte(role)
 	dpb := bytes.Join([][]byte{
-		[]byte{isc_dpb_version1},
-		[]byte{isc_dpb_set_db_charset, byte(len(encode))}, encode,
-		[]byte{isc_dpb_lc_ctype, byte(len(encode))}, encode,
-		[]byte{isc_dpb_user_name, byte(len(userBytes))}, userBytes,
-		[]byte{isc_dpb_password, byte(len(passwordBytes))}, passwordBytes,
-		[]byte{isc_dpb_sql_role_name, byte(len(roleBytes))}, roleBytes,
-		[]byte{isc_dpb_sql_dialect, 4}, int32_to_bytes(3),
-		[]byte{isc_dpb_force_write, 4}, bint32_to_bytes(1),
-		[]byte{isc_dpb_overwrite, 4}, bint32_to_bytes(1),
-		[]byte{isc_dpb_page_size, 4}, int32_to_bytes(p.pageSize),
-		[]byte{isc_dpb_utf8_filename, 1, 1},
+		{isc_dpb_version1},
+		{isc_dpb_set_db_charset, byte(len(encode))}, encode,
+		{isc_dpb_lc_ctype, byte(len(encode))}, encode,
+		{isc_dpb_user_name, byte(len(userBytes))}, userBytes,
+		{isc_dpb_password, byte(len(passwordBytes))}, passwordBytes,
+		{isc_dpb_sql_role_name, byte(len(roleBytes))}, roleBytes,
+		{isc_dpb_sql_dialect, 4}, int32_to_bytes(3),
+		{isc_dpb_force_write, 4}, bint32_to_bytes(1),
+		{isc_dpb_overwrite, 4}, bint32_to_bytes(1),
 	}, nil)
+	if p.pageSize > 0 {
+		dpb = append(dpb, isc_dpb_page_size, 4)
+		dpb = append(dpb, int32_to_bytes(p.pageSize)...)
+	}
+	dpb = append(dpb, isc_dpb_utf8_filename, 1, 1)
 
 	dpb = p.appendAuthAndTimezone(dpb)
-	dpb = p.appendInlineBlobDPB(dpb)
-
-	p.packInt(op_create)
-	p.packInt(0) // Database Object ID
-	p.packString(dbName)
-	p.packBytes(dpb)
-	_, err := p.sendPackets()
-	return err
+	return p.appendInlineBlobDPB(dpb)
 }
 
 // defaultClientVersionValue caches the fallback client version string.

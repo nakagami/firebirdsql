@@ -301,3 +301,85 @@ func TestAppendInlineBlobDPB(t *testing.T) {
 		t.Fatal("should not append DPB items below protocol 19")
 	}
 }
+
+// dpbItems walks an isc_dpb_version1 buffer (tag, one-byte length, value) and
+// returns the value of every item by tag.
+func dpbItems(t *testing.T, dpb []byte) map[byte][]byte {
+	t.Helper()
+	if len(dpb) == 0 || dpb[0] != isc_dpb_version1 {
+		t.Fatalf("DPB does not start with isc_dpb_version1: %x", dpb)
+	}
+	items := make(map[byte][]byte)
+	for i := 1; i < len(dpb); {
+		if i+2 > len(dpb) || i+2+int(dpb[i+1]) > len(dpb) {
+			t.Fatalf("truncated DPB item at offset %d: %x", i, dpb)
+		}
+		tag, n := dpb[i], int(dpb[i+1])
+		items[tag] = dpb[i+2 : i+2+n]
+		i += 2 + n
+	}
+	return items
+}
+
+func TestCreateDPBPageSize(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		pageSize int32
+		want     []byte // nil: no isc_dpb_page_size item
+	}{
+		{"server default", 0, nil},
+		{"4096", 4096, []byte{0x00, 0x10, 0x00, 0x00}},
+		{"16384", 16384, []byte{0x00, 0x40, 0x00, 0x00}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Protocol 19, auth data and a time zone add items after the
+			// page size, so the walk covers the whole DPB.
+			p := &wireProtocol{
+				charset:           "UTF8",
+				pageSize:          tc.pageSize,
+				authData:          []byte{0xab, 0xcd},
+				timezone:          "Europe/Berlin",
+				protocolVersion:   PROTOCOL_VERSION19,
+				maxInlineBlobSize: 65536,
+				maxBlobCacheSize:  10485760,
+			}
+			items := dpbItems(t, p.createDPB("sysdba", "masterkey", ""))
+			got, ok := items[isc_dpb_page_size]
+			if tc.want == nil {
+				if ok {
+					t.Fatalf("isc_dpb_page_size = %x, want no item", got)
+				}
+			} else if !bytes.Equal(got, tc.want) {
+				t.Fatalf("isc_dpb_page_size = %x (present %v), want %x", got, ok, tc.want)
+			}
+			for _, tag := range []byte{isc_dpb_user_name, isc_dpb_overwrite, isc_dpb_utf8_filename,
+				isc_dpb_specific_auth_data, isc_dpb_session_time_zone, isc_dpb_max_blob_cache_size} {
+				if _, ok := items[tag]; !ok {
+					t.Errorf("DPB item %d missing", tag)
+				}
+			}
+		})
+	}
+}
+
+// TestCreateDPBUnchangedWithPageSize pins the op_create DPB for an explicit
+// page size to the bytes sent before the page size became optional.
+func TestCreateDPBUnchangedWithPageSize(t *testing.T) {
+	p := &wireProtocol{charset: "UTF8", pageSize: 4096}
+	want := bytes.Join([][]byte{
+		{isc_dpb_version1},
+		{isc_dpb_set_db_charset, 4}, []byte("UTF8"),
+		{isc_dpb_lc_ctype, 4}, []byte("UTF8"),
+		{isc_dpb_user_name, 6}, []byte("SYSDBA"),
+		{isc_dpb_password, 9}, []byte("masterkey"),
+		{isc_dpb_sql_role_name, 0},
+		{isc_dpb_sql_dialect, 4}, int32_to_bytes(3),
+		{isc_dpb_force_write, 4}, bint32_to_bytes(1),
+		{isc_dpb_overwrite, 4}, bint32_to_bytes(1),
+		{isc_dpb_page_size, 4}, int32_to_bytes(4096),
+		{isc_dpb_utf8_filename, 1, 1},
+	}, nil)
+	if got := p.createDPB("sysdba", "masterkey", ""); !bytes.Equal(got, want) {
+		t.Fatalf("createDPB =\n%x\nwant\n%x", got, want)
+	}
+}
