@@ -133,7 +133,7 @@ func (fc *firebirdsqlConn) PrepareBatch(ctx context.Context, sql string, opts Ba
 		stmt:          stmt,
 		opts:          opts,
 		autoFlushSize: defaultPreparedBatchFlushSize,
-		paramBlr:      calcBlr(stmt.inputXsqlda),
+		paramBlr:      calcOutputBlr(stmt.inputXsqlda),
 		msgLen:        int32(calculateBatchMessageLength(stmt.inputXsqlda)),
 	}
 	stmt.activeBatch = b

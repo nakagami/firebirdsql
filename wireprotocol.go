@@ -2222,6 +2222,24 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 				blr = []byte{9, 0}
 			}
 		}
+		// A text value bound to a text parameter declares the parameter's
+		// described charset (blr_text2), as fbclient does.
+		if len(blr) == 3 && blr[0] == 14 && param != nil && i < len(inputXsqlda) {
+			if t := inputXsqlda[i].sqltype; t == SQL_TYPE_TEXT || t == SQL_TYPE_VARYING {
+				if cs, ok := inputXsqlda[i].blrCharset(); ok {
+					blr = []byte{15, cs, 0, blr[1], blr[2]}
+				}
+			} else if _, isBytes := param.([]byte); isBytes && t == SQL_TYPE_BLOB && inputXsqlda[i].sqlsubtype == 0 {
+				// short []byte sent inline for a binary BLOB: declare OCTETS
+				blr = []byte{15, charsetIDOctets, 0, blr[1], blr[2]}
+			} else if t == SQL_TYPE_BLOB && inputXsqlda[i].sqlsubtype == 1 {
+				// short value sent inline for a text BLOB: declare the
+				// described charset, which a text BLOB carries in sqlscale
+				if cs := byte(inputXsqlda[i].sqlscale); cs != charsetDynamic {
+					blr = []byte{15, cs, 0, blr[1], blr[2]}
+				}
+			}
+		}
 		valuesList = append(valuesList, v)
 		if protocolVersion < PROTOCOL_VERSION13 {
 			if param == nil {

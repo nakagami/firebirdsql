@@ -167,6 +167,20 @@ using `blr_text2`/`blr_varying2` (matching `fbclient` and Jaybird), so the serve
 does not size or validate unconverted columns (`NONE`, `OCTETS`) in the connection
 character set.
 
+### Binary data (`OCTETS`) and Firebird 6
+
+Firebird 6 also treats a row-buffer or parameter item declared without a
+character set as text in the connection character set, and validates it. An
+`OCTETS` column, or a `[]byte` parameter, holding bytes that aren't valid UTF8
+then fails with `Malformed string`; before Firebird 6 the bytes were copied as
+they are. The driver declares text parameters (including `[]byte` values and
+batch parameters) with the character set the server described for them
+(`blr_text2` / `blr_varying2`), as `fbclient` does, so values keep the same
+transliteration and comparison behaviour as on Firebird 5. A short `[]byte`
+sent inline for a `BLOB SUB_TYPE BINARY` is declared as `OCTETS`, and a short
+value sent inline for a text BLOB uses that BLOB's character set. A `[]byte`
+of 32 KB or more is sent as a BLOB, as before.
+
 ## Wire protocols 16–19
 
 The driver advertises Firebird wire protocols 10–19. The server chooses the highest mutually supported version.
