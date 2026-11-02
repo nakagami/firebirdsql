@@ -93,7 +93,7 @@ func parseDSN(dsns string) (*firebirdDsn, error) {
 		"column_name_to_lower": "false",
 		"host_name":            "",
 		"os_user":              "",
-		"page_size":            "4096",
+		"page_size":            "",
 		"role":                 "",
 		"timezone":             "",
 		"wire_crypt":           "true",
@@ -152,10 +152,17 @@ func parseDSN(dsns string) (*firebirdDsn, error) {
 var validPageSizes = []int{4096, 8192, 16384, 32768}
 
 // parsePageSize parses the page_size option used by firebirdsql_createdb.
+// An empty value (the default) returns 0: op_create then sends no page size and
+// the server uses its default. "0" is rejected like any other size outside
+// validPageSizes.
 func parsePageSize(s string) (int32, error) {
-	n, err := strconv.Atoi(strings.TrimSpace(s))
+	t := strings.TrimSpace(s)
+	if t == "" {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(t)
 	if err != nil || !slices.Contains(validPageSizes, n) {
-		return 4096, fmt.Errorf("firebirdsql: invalid page_size value %q (want one of %v)", s, validPageSizes)
+		return 0, fmt.Errorf("firebirdsql: invalid page_size value %q (want one of %v, or empty for the server default)", s, validPageSizes)
 	}
 	return int32(n), nil
 }

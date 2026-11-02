@@ -157,7 +157,7 @@ func TestDSNOptionsDefaults(t *testing.T) {
 		"auth_plugin_list":     defaultAuthPlugins,
 		"charset":              "UTF8",
 		"column_name_to_lower": "false",
-		"page_size":            "4096",
+		"page_size":            "",
 		"role":                 "",
 		"timezone":             "",
 		"wire_crypt":           "true",
