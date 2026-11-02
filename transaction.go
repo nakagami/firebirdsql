@@ -117,7 +117,7 @@ func (tx *firebirdsqlTx) begin() (err error) {
 	return
 }
 
-// commitRetainging commits the autocommit transaction.
+// commitRetaining commits the autocommit transaction.
 //
 // On the statement hot path (exec, ExecImmediate, batch) the caller passes its
 // context: the commit response carries the statement's server-side work, so a
@@ -129,7 +129,7 @@ func (tx *firebirdsqlTx) begin() (err error) {
 //
 // The teardown caller (freeStatement) passes nil and keeps the fixed
 // abandonReadTimeout bound, so a silent wire cannot hang rows.Close/stmt.Close.
-func (tx *firebirdsqlTx) commitRetainging(ctx context.Context) (err error) {
+func (tx *firebirdsqlTx) commitRetaining(ctx context.Context) (err error) {
 	if ctx != nil && ctx.Err() == nil {
 		err = tx.fc.wp.withContextDeadline(ctx, func() error {
 			if err := tx.fc.wp.opCommitRetaining(tx.transHandle); err != nil {

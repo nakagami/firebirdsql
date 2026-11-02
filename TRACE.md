@@ -81,6 +81,7 @@ and run the full existing suite with the race detector. Supported matrix argumen
 `2.5.9`, `3.0.10`, `4.0.6`, `5.0.0`, `5.0.3`, `5.0.4`.
 The default Go version is 1.22. Set `GO_VERSION` or `TEST_PATTERN` to select a
 runtime or test subset. Images are pinned by digest; the live test logs the exact server banner. No production server is used.
+On Firebird 3.0+ the server runs with CI's `AuthServer` and `WireCrypt = Enabled` settings.
 
 The dedicated CI matrix runs the Trace/service regression subset on Go 1.22.
 `FIREBIRDSQL_TRACE_TEST=1` enables the live Trace test for a separately provisioned

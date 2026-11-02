@@ -221,12 +221,7 @@ func TestBatchParity(t *testing.T) {
 	defer sqlConn.Close()
 
 	err = sqlConn.Raw(func(dc any) error {
-		fc, ok := dc.(interface {
-			PrepareBatch(context.Context, string, BatchOptions) (*PreparedBatch, error)
-		})
-		if !ok {
-			return errBatchUnsupported
-		}
+		fc := dc.(*firebirdsqlConn)
 		ctx := stmtCtx
 
 		// Many rows in one batch.
@@ -262,9 +257,6 @@ func TestBatchParity(t *testing.T) {
 		}
 		return b2.Close()
 	})
-	if err == errBatchUnsupported {
-		t.Skip("PrepareBatch not available on driver conn")
-	}
 	if err == errBatchAffectedMismatch {
 		t.Fatal("batch affected rows below expectation")
 	}
@@ -276,7 +268,6 @@ func TestBatchParity(t *testing.T) {
 }
 
 var (
-	errBatchUnsupported      = errStatic("batch unsupported")
 	errBatchAffectedMismatch = errStatic("batch affected mismatch")
 	errBatchExpectedError    = errStatic("expected batch error")
 )

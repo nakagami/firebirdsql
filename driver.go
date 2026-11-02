@@ -48,6 +48,9 @@ func (d *firebirdsqlDriver) OpenConnector(dsns string) (driver.Connector, error)
 	return &firebirdConnector{dsn: dsn, dsnErr: err}, nil
 }
 
+// firebirdsqlCreateDbDriver is the "firebirdsql_createdb" driver. Open creates
+// the database, overwriting an existing one, on every call, so database/sql
+// re-creates it for each new pooled connection.
 type firebirdsqlCreateDbDriver struct{}
 
 func (d *firebirdsqlCreateDbDriver) Open(dsns string) (driver.Conn, error) {

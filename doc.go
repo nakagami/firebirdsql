@@ -8,7 +8,23 @@ wire protocol — no C dependencies or cgo required.
 Two driver names are registered:
 
   - "firebirdsql" — attach to an existing database.
-  - "firebirdsql_createdb" — create the database if it does not exist, then attach.
+  - "firebirdsql_createdb" — create the database, then attach. A database that
+    already exists at that path is overwritten, and this happens on every new
+    connection the pool opens, not only the first one.
+
+To create a database once, open it with "firebirdsql_createdb", call Ping, close
+that *sql.DB, and then open the database with "firebirdsql":
+
+	db, err := sql.Open("firebirdsql_createdb", dsn)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := db.Ping(); err != nil { // creates the database
+		log.Fatal(err)
+	}
+	db.Close()
+
+	db, err = sql.Open("firebirdsql", dsn)
 
 # Connection String (DSN)
 
@@ -57,7 +73,12 @@ Windows database path:
 
 See the README for the full list of optional query parameters (auth_plugin_name,
 auth_plugin_list, charset, role, timezone, wire_crypt, wire_crypt_plugin,
-wire_compress, column_name_to_lower, max_inline_blob_size, max_blob_cache_size).
+wire_compress, column_name_to_lower, page_size, max_inline_blob_size,
+max_blob_cache_size).
+
+The timezone parameter takes an IANA name ("Europe/Berlin") or a fixed UTC
+offset. Write a fixed offset percent-encoded on the DSN: a raw '+' in a URL
+query becomes a space. Example: timezone=%2B05:30.
 
 Authentication is controlled by two parameters:
 

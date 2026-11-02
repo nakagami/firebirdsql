@@ -5,7 +5,7 @@ Firebird RDBMS https://firebirdsql.org SQL driver for Go
 ## Requirements
 
 * Firebird 2.5 or higher
-* Golang 1.20 or higher
+* Go 1.22 or higher
 
 ## Example
 
@@ -109,7 +109,31 @@ db, err := sql.Open("firebirdsql", dsn)
 Two driver names are registered with `database/sql`:
 
 - `"firebirdsql"` - attach to an existing database.
-- `"firebirdsql_createdb"` - create the database if it does not exist, then attach.
+- `"firebirdsql_createdb"` - create the database, then attach. A database that
+  already exists at that path is overwritten. This happens on every new connection
+  the `*sql.DB` opens, not only the first one. If no other connection holds the
+  database, for example after the pool closed its only connection, the new one
+  wipes the data (Firebird 2.5 SuperServer was seen to hang instead). If another
+  connection holds it, the create fails with `object DATABASE is in use`
+  (Firebird 3 and later). Use it once to create the database, then open the
+  database with `"firebirdsql"`:
+
+  ```go
+  db, err := sql.Open("firebirdsql_createdb", dsn)
+  if err != nil {
+      log.Fatal(err)
+  }
+  if err := db.Ping(); err != nil { // creates the database
+      log.Fatal(err)
+  }
+  db.Close()
+
+  db, err = sql.Open("firebirdsql", dsn)
+  if err != nil {
+      log.Fatal(err)
+  }
+  ```
+
   See `_examples/service_manager.go` for a usage example.
 
 ### General
@@ -129,8 +153,9 @@ param1, param2... are
 | auth_plugin_name | Preferred authentication plugin. Must be a member of `auth_plugin_list`. | Srp256 | Srp256/Srp/Legacy_Auth are available. |
 | auth_plugin_list | Ordered, comma-separated allow-list of acceptable authentication plugins (a subset of the supported `Srp256,Srp,Legacy_Auth`). The plugin the server selects must be a member, otherwise the connection is refused before any credentials are sent. Omit a plugin to refuse it (e.g. `Srp256,Srp` to refuse a server-forced downgrade to `Legacy_Auth`, which would otherwise put a brute-forceable DES `crypt(password)` hash on the wire). | Srp256,Srp,Legacy_Auth | `Legacy_Auth` is kept in the default for backward compatibility but is weak; set `Srp256,Srp` to harden. |
 | column_name_to_lower | Force column name to lower | false | For "github.com/jmoiron/sqlx" |
+| page_size | Page size in bytes for a database created with the `firebirdsql_createdb` driver: 4096, 8192, 16384 or 32768. When unset or empty, no page size is sent and the server uses its default (4096 on Firebird 2.5, 8192 on 3.0 and later); set `page_size=4096` for the size older driver versions always used. Any other value is rejected before dialing. Only used by `firebirdsql_createdb`; validated on every DSN. | server default | Firebird 2.5/3.0 accept 4096-16384, 4.0/5.0 4096-32768 and 6.0 8192-32768; the server adjusts a size outside its range (4096 becomes 8192 on 6.0). |
 | role | Role name | | |
-| timezone | IANA time zone name (e.g. `UTC`, `Europe/Berlin`) | | Controls client-side decoding of naive DATE/TIME/TIMESTAMP and server session time zone (FB 4+). See "Time and timestamp handling" below. |
+| timezone | IANA time zone name (e.g. `UTC`, `Europe/Berlin`), or a fixed UTC offset (e.g. `%2B05:30`) | | Controls client-side decoding of naive DATE/TIME/TIMESTAMP and server session time zone (FB 4+). Write a fixed offset percent-encoded: a raw `+` in a URL query becomes a space. See "Time and timestamp handling" below. |
 | wire_crypt | Wire-encryption policy, mirroring the server's `WireCrypt` setting. Tri-state `disabled`/`enabled`/`required`, with boolean aliases `false`=`disabled` and `true`=`enabled`. `enabled` encrypts when the server offers a cipher but tolerates plaintext; `required` fails the connection closed on every non-encrypting handshake outcome (including a legacy plain `op_accept` for protocol versions ≤ 12 and an `op_accept_data` with no negotiated cipher), refusing before any credentials are sent. Note: `enabled` tolerates an active-MITM downgrade to plaintext; on untrusted networks use `required`. | true (=`enabled`) | For Firebird 3.0+. Against pre-3.0 / non-encrypting servers, `required` is refused (use `enabled` to allow plaintext). |
 | wire_crypt_plugin | Ordered, comma-separated allow-list of acceptable wire ciphers, mirroring the server's `WireCryptPlugin`. Order is client preference; omit a cipher to refuse it (e.g. `ChaCha64,ChaCha` to refuse the deprecated RC4/`Arc4`). | ChaCha64,ChaCha,Arc4 | For Firebird 3.0+. `Arc4` (RC4) is kept for FB 3.0 compatibility but is cryptographically weak. |
 | wire_compress | Enable wire protocol compression. | false | For Firebird 3.0+ (protocol version 13+) |
@@ -178,6 +203,17 @@ The driver advertises Firebird wire protocols 10–19. The server chooses the hi
 `ExecImmediate` runs SQL with `op_execute_immediate` (no OpExecute trailers). Reach it the same way through `sql.Conn.Raw`.
 
 Inspect the negotiated version with `ProtocolVersion()` (same Raw pattern as `WireCipher`).
+
+### Deferred packets
+
+On the lazy-send port type (`ptype_lazy_send`, negotiated with every server since Firebird 2.1) a request whose answer nothing depends on need not be waited for. The driver uses this in two ways:
+
+- **Allocate + prepare** go out in one write, and the two responses are read together (`lazyResponseCount` records how many responses the server still owes).
+- **Cursor close** (`op_free_statement` with `DSQL_close`, what `rows.Close()` sends when the statement stays prepared) is not written at all when it happens. It is queued and written in front of the next request on the connection, in the same packet, and its response is skipped when the next response is read. This is what fbclient (`defer_packet`), Jaybird (`V11Statement`: the close is written without a flush) and node-firebird do.
+
+So a query on a prepared statement costs two packets in a transaction (execute, fetch) and three in autocommit mode (execute, fetch, commit retaining), instead of three and four. `stmt.Close()` (`DSQL_drop`) is still written immediately, so the statement's metadata locks are released at once; only its response is deferred. A queued close that is never followed by another request is dropped when the connection is closed: detaching releases every statement anyway.
+
+The server processes the packets of one write in order, so a request that follows a queued close always sees the cursor closed. Deferred responses are plain `op_response` packets with no data; a response of another kind (fetch, sql, slice) can never be mistaken for one.
 
 ### Local live tests
 
@@ -234,7 +270,7 @@ Element types: `int16`, `int32`, `int64`, `float32`, `float64`, `string`, `time.
 
 Firebird's `DATE`, `TIME`, and `TIMESTAMP` types store wall-clock components without zone information - by design. When the driver decodes such a column into a Go `time.Time`, it must attach some `*time.Location`. Resolution order:
 
-1. If `?timezone=<IANA>` is set on the DSN, that location is used.
+1. If `?timezone=<IANA>` is set on the DSN, that location is used; a fixed offset is also accepted (write it percent-encoded, `?timezone=%2B05:30`; a raw `+` in a URL query becomes a space).
 2. Otherwise `time.Local` is used (matching Firebird's Java driver Jaybird, which uses the JVM default).
 
 For cross-host determinism (e.g. app servers in different time zones all reading the same rows), set `?timezone=UTC` on the DSN:
@@ -261,6 +297,25 @@ tx, err := db.BeginTx(ctx, &sql.TxOptions{
 ```
 
 This maps to a transaction TPB containing `READ COMMITTED`, `RECORD VERSION`, and `NOWAIT`.
+
+## Row scanning on Go 1.27
+
+When built with Go 1.27 or later, the driver implements
+`database/sql/driver.RowsColumnScanner`. Existing `Rows.Next` and `Rows.Scan`
+calls automatically use this path. A reusable row buffer calls the same
+`driver.Rows.Next` implementation as earlier Go versions, including BLOB and
+array fetching and errors. Exact `int`, `int32`, `int64`, `float64`, and `bool`
+destinations avoid reflection; out-of-range integers and other conversions use
+`database/sql.ConvertAssign` to preserve standard scan behavior and errors.
+
+The minimum supported Go version remains 1.22. Earlier Go versions keep using
+`driver.Rows.Next` through `database/sql`.
+
+On Go 1.27+, `database/sql` holds the connection lock while calling
+`ScanColumn`, including any custom `sql.Scanner`. A custom `Scanner.Scan` must
+not execute a query using the same `*sql.Conn` or `*sql.Tx`: this can deadlock,
+even if it worked with the earlier scanning path. Scan the values first, then
+run dependent queries after `Rows.Scan` returns.
 
 ## GORM for Firebird
 

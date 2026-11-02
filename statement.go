@@ -48,11 +48,21 @@ func (stmt *firebirdsqlStmt) freeStatement(mode int32) error {
 		stmt.activeBatch.releaseBeforeFree()
 		stmt.activeBatch = nil
 	}
+	lazy := (stmt.fc.wp.acceptType & ptype_MASK) == ptype_lazy_send
+	if lazy && mode == DSQL_close {
+		// a cursor close rides with the next request (fbclient, Jaybird);
+		// a drop is sent now, so the statement's metadata locks go at once
+		stmt.fc.wp.deferFreeStatement(stmt.stmtHandle, mode)
+		if stmt.fc.tx.isAutocommit {
+			stmt.fc.tx.commitRetaining(nil) // teardown: fixed bound
+		}
+		return nil
+	}
 	err := stmt.fc.wp.opFreeStatement(stmt.stmtHandle, mode)
 	if err != nil {
 		return err
 	}
-	if (stmt.fc.wp.acceptType & ptype_MASK) == ptype_lazy_send {
+	if lazy {
 		stmt.fc.wp.lazyResponseCount++
 	} else {
 		// Teardown read: bound it so a silent wire can't hang rows.Close()/stmt.Close()
@@ -60,7 +70,7 @@ func (stmt *firebirdsqlStmt) freeStatement(mode int32) error {
 		_, _, _, err = stmt.fc.wp.opResponseTimeout(abandonReadTimeout)
 	}
 	if stmt.fc.tx.isAutocommit {
-		stmt.fc.tx.commitRetainging(nil) // teardown: fixed bound
+		stmt.fc.tx.commitRetaining(nil) // teardown: fixed bound
 	}
 	return err
 }
@@ -295,7 +305,7 @@ func (stmt *firebirdsqlStmt) exec(ctx context.Context, args []driver.Value) (res
 	}
 
 	if stmt.fc.tx.isAutocommit {
-		if cerr := stmt.fc.tx.commitRetainging(ctx); cerr != nil {
+		if cerr := stmt.fc.tx.commitRetaining(ctx); cerr != nil {
 			return result, cerr
 		}
 	}
