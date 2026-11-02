@@ -169,6 +169,7 @@ func (fc *firebirdsqlConn) Close() (err error) {
 		// Close in the caller's goroutine. Dropping the socket makes the server
 		// roll back and release the attachment.
 		fc.wp.clearAllInlineBlobCache()
+		fc.wp.dropPendingFree()
 		return fc.wp.conn.Close()
 	}
 	for tx := range fc.transactionSet {
@@ -290,6 +291,7 @@ func handshakeFirebirdsqlConn(wp *wireProtocol, dsn *firebirdDsn, dbOp func(*wir
 	wp.inlineBlobCache = newInlineBlobCache(int(wp.maxBlobCacheSize))
 	wp.cancelHardDrop = convertToBool(dsn.options["cancel_hard_drop"], false)
 	wp.cancelHardDropGrace = time.Duration(parseOptionInt(dsn.options["cancel_hard_drop_grace"], 3000)) * time.Millisecond
+	wp.pageSize, _ = parsePageSize(dsn.options["page_size"]) // validated in parseDSN
 
 	if err = wp.opConnect(dsn.dbName, dsn.user, dsn.passwd, dsn.options, clientPublic); err != nil {
 		return nil, err

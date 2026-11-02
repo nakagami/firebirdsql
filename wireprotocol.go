@@ -115,7 +115,17 @@ type wireProtocol struct {
 	protocolVersion    int32
 	acceptArchitecture int32
 	acceptType         int32
-	lazyResponseCount  int
+	// lazyResponseCount is the number of op_response packets the server
+	// still owes for requests whose response was not waited for (deferred
+	// packets, see deferFreeStatement); the readers skip that many before
+	// the response they expect.
+	lazyResponseCount int
+	// pendingFree holds op_free_statement packets built but not yet
+	// written: a cursor close (DSQL_close) goes out in front of the next
+	// request instead of in a packet of its own. pendingFreeCount is how
+	// many packets it holds.
+	pendingFree      []byte
+	pendingFreeCount int
 
 	pluginName string
 	user       string
@@ -139,6 +149,10 @@ type wireProtocol struct {
 	maxInlineBlobSize int32
 	maxBlobCacheSize  int32
 	inlineBlobCache   *inlineBlobCache
+
+	// Page size for op_create (DSN page_size); 0 sends none and the server
+	// uses its default.
+	pageSize int32
 
 	// Hard-drop on cancel (opt-in, DSN cancel_hard_drop=true): after a
 	// ctx cancel fired op_cancel and the wrapped read still has not
@@ -268,6 +282,14 @@ func (p *wireProtocol) uid(user string, password string, authPluginName string, 
 
 func (p *wireProtocol) sendPackets() (written int, err error) {
 	p.debugPrint("\tsendPackets():%v", p.buf)
+	if len(p.pendingFree) > 0 {
+		// the deferred frees travel in the same write, ahead of the request;
+		// the server answers them first, so their responses are skipped
+		p.buf = append(p.pendingFree, p.buf...)
+		p.lazyResponseCount += p.pendingFreeCount
+		p.pendingFree = nil
+		p.pendingFreeCount = 0
+	}
 	n := 0
 	for written < len(p.buf) {
 		n, err = p.conn.Write(p.buf[written:])
@@ -1212,36 +1234,41 @@ func (p *wireProtocol) appendExecuteTrailers() {
 
 func (p *wireProtocol) opCreate(dbName string, user string, password string, role string) error {
 	p.debugPrint("opCreate")
-	var page_size int32
-	page_size = 4096
 
+	p.packInt(op_create)
+	p.packInt(0) // Database Object ID
+	p.packString(dbName)
+	p.packBytes(p.createDPB(user, password, role))
+	_, err := p.sendPackets()
+	return err
+}
+
+// createDPB builds the op_create DPB. isc_dpb_page_size is sent only when
+// pageSize is set; otherwise the server uses its default page size.
+func (p *wireProtocol) createDPB(user string, password string, role string) []byte {
 	encode := []byte(p.charset)
 	userBytes := []byte(strings.ToUpper(user))
 	passwordBytes := []byte(password)
 	roleBytes := []byte(role)
 	dpb := bytes.Join([][]byte{
-		[]byte{isc_dpb_version1},
-		[]byte{isc_dpb_set_db_charset, byte(len(encode))}, encode,
-		[]byte{isc_dpb_lc_ctype, byte(len(encode))}, encode,
-		[]byte{isc_dpb_user_name, byte(len(userBytes))}, userBytes,
-		[]byte{isc_dpb_password, byte(len(passwordBytes))}, passwordBytes,
-		[]byte{isc_dpb_sql_role_name, byte(len(roleBytes))}, roleBytes,
-		[]byte{isc_dpb_sql_dialect, 4}, int32_to_bytes(3),
-		[]byte{isc_dpb_force_write, 4}, bint32_to_bytes(1),
-		[]byte{isc_dpb_overwrite, 4}, bint32_to_bytes(1),
-		[]byte{isc_dpb_page_size, 4}, int32_to_bytes(page_size),
-		[]byte{isc_dpb_utf8_filename, 1, 1},
+		{isc_dpb_version1},
+		{isc_dpb_set_db_charset, byte(len(encode))}, encode,
+		{isc_dpb_lc_ctype, byte(len(encode))}, encode,
+		{isc_dpb_user_name, byte(len(userBytes))}, userBytes,
+		{isc_dpb_password, byte(len(passwordBytes))}, passwordBytes,
+		{isc_dpb_sql_role_name, byte(len(roleBytes))}, roleBytes,
+		{isc_dpb_sql_dialect, 4}, int32_to_bytes(3),
+		{isc_dpb_force_write, 4}, bint32_to_bytes(1),
+		{isc_dpb_overwrite, 4}, bint32_to_bytes(1),
 	}, nil)
+	if p.pageSize > 0 {
+		dpb = append(dpb, isc_dpb_page_size, 4)
+		dpb = append(dpb, int32_to_bytes(p.pageSize)...)
+	}
+	dpb = append(dpb, isc_dpb_utf8_filename, 1, 1)
 
 	dpb = p.appendAuthAndTimezone(dpb)
-	dpb = p.appendInlineBlobDPB(dpb)
-
-	p.packInt(op_create)
-	p.packInt(0) // Database Object ID
-	p.packString(dbName)
-	p.packBytes(dpb)
-	_, err := p.sendPackets()
-	return err
+	return p.appendInlineBlobDPB(dpb)
 }
 
 // defaultClientVersionValue caches the fallback client version string.
@@ -1465,6 +1492,48 @@ func (p *wireProtocol) opFreeStatement(stmtHandle int32, mode int32) error {
 	return err
 }
 
+// deferFreeStatement queues an op_free_statement to be written in front of
+// the next request (see sendPackets), the way fbclient and Jaybird send a
+// cursor close: the server's response to it is skipped when the next
+// response is read. Only for connections on a lazy-send port type.
+func (p *wireProtocol) deferFreeStatement(stmtHandle int32, mode int32) {
+	p.debugPrint("deferFreeStatement:<%v>", stmtHandle)
+	var pkt [12]byte
+	for i, v := range []int32{op_free_statement, stmtHandle, mode} {
+		pkt[i*4] = byte(v >> 24)
+		pkt[i*4+1] = byte(v >> 16)
+		pkt[i*4+2] = byte(v >> 8)
+		pkt[i*4+3] = byte(v)
+	}
+	p.pendingFree = append(p.pendingFree, pkt[:]...)
+	p.pendingFreeCount++
+}
+
+// dropPendingFree forgets queued frees: for a connection that is being
+// closed without another request, the server releases the statements at
+// detach.
+func (p *wireProtocol) dropPendingFree() {
+	p.pendingFree = nil
+	p.pendingFreeCount = 0
+}
+
+// skipDeferredResponses consumes the op_response packets owed for deferred
+// requests that precede the response a reader expects. b is the operation
+// code just read; the returned code is the first one that isn't owed.
+func (p *wireProtocol) skipDeferredResponses(b []byte) ([]byte, error) {
+	var err error
+	for bytes_to_bint32(b) == op_response && p.lazyResponseCount > 0 {
+		p.lazyResponseCount--
+		if _, _, _, err = p._parse_op_response(); err != nil {
+			return b, err
+		}
+		if b, err = p.recvPackets(4); err != nil {
+			return b, err
+		}
+	}
+	return b, nil
+}
+
 func (p *wireProtocol) opPrepareStatement(stmtHandle int32, transHandle int32, query string) error {
 	p.debugPrint("opPrepareStatement():%d,%d,%v", transHandle, stmtHandle, query)
 
@@ -1649,6 +1718,9 @@ func (p *wireProtocol) opSliceResponse(meta *ArrayMeta) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+	}
+	if b, err = p.skipDeferredResponses(b); err != nil {
+		return nil, err
 	}
 	switch bytes_to_bint32(b) {
 	case op_slice_response:

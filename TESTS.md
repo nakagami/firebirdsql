@@ -10,7 +10,7 @@ Legend: ✅ pass · ⏭️ skip (version/capability gate or server configuration
 | `TestTestUtilCreateDatabaseWithDDL` | Throwaway database creation + DDL execution + file cleanup | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestTestUtilMustExecRowsAffected` | mustExec helper and RowsAffected reporting | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestTestUtilErrorMatchers` | requireGDSError / requireSQLCode / requireSQLState matchers on a real constraint violation | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
-| `TestTestUtilProtocolGate` | negotiatedProtocol + requireProtocol gates pass or skip, never fail | ⏭️ skip | ⏭️ skip | ⏭️ skip | ⏭️ skip |
+| `TestTestUtilProtocolGate` | negotiatedProtocol + requireProtocol gates pass or skip, never fail | ⏭️ skip | ⏭️ skip | ⏭️ skip | ✅ pass |
 | `TestTestUtilVersionGates` | Firebird version gates (pass on new servers, skip on old) | ⏭️ skip | ⏭️ skip | ⏭️ skip | ⏭️ skip |
 | `TestTestUtilUserFixture` | Services-API user fixture: create → authenticate → grant → auto-drop | ⏭️ skip | ✅ pass | ✅ pass | ✅ pass |
 
@@ -61,6 +61,7 @@ Legend: ✅ pass · ⏭️ skip (version/capability gate or server configuration
 |---|---|:-:|:-:|:-:|:-:|
 | `TestBlobSegmentBoundaries` | Blob sizes 1 → 100 000 bytes across the 32 K segment boundary | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestBlobEdgeCases` | NULL vs empty (both subtypes), cross-connection visibility, rollback, parameter reuse | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestEmptyBinaryBlobNotNil` | Empty binary BLOB reads as empty, not nil, on `[]byte`/`sql.Null`/`any`, cross-checked with `IS NULL`/`OCTET_LENGTH` (`inline` subtest needs protocol 19; skips otherwise) | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestClobLargeText` | Multi-segment unicode CLOB round trip | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestInlineBlobTempDB` | Inline-blob DSN options: enabled/disabled/oversized (needs protocol 19; skips otherwise) | ⏭️ skip | ⏭️ skip | ⏭️ skip | ⏭️ skip |
 
@@ -87,7 +88,9 @@ Legend: ✅ pass · ⏭️ skip (version/capability gate or server configuration
 
 | Test | What it verifies | FB 2.5 | FB 3.0 | FB 4.0 | FB 5.0 |
 |---|---|:-:|:-:|:-:|:-:|
-| `TestNegotiatedProtocolVersion` | Negotiated protocol within the advertised 10–17 range | ⏭️ skip | ⏭️ skip | ⏭️ skip | ⏭️ skip |
+| `TestNegotiatedProtocolVersion` | Negotiated protocol within the advertised 10–19 range | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestFeatureProtocolGating/batch_(protocol_16+)` | PrepareBatch insert behind the protocol-16 gate | ⏭️ skip | ⏭️ skip | ✅ pass | ✅ pass |
+| `TestFeatureProtocolGating/scrollable_cursors_(protocol_18+)` | First/Absolute/Relative/Last/Prior/Next return the expected rows; Next past the end returns io.EOF | ⏭️ skip | ⏭️ skip | ⏭️ skip | ✅ pass |
 | `TestCancelOperationParity` | Context cancellation aborts a long statement; pool stays usable | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 
 ### CHARACTER SET NONE columns — charset_none_test.go, charset_none_live_test.go
@@ -115,6 +118,14 @@ Firebird 6 validates charset-less text items as connection-charset text, so OCTE
 | `TestOctetsColumns` | VARCHAR/CHAR OCTETS values with NUL and 0xFF bytes read over UTF8 and WIN1252 connections; CHAR NUL padding kept; following columns aligned; []byte as filter, insert and update parameters | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestBytesParameterToBlob` | []byte parameters of 1 byte to 40 KB to a BLOB SUB_TYPE BINARY (in-message and BLOB paths); []byte to a text column | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 
+### Deferred cursor close — deferred_close_live_test.go
+
+| Test | What it verifies | FB 2.5 | FB 3.0 | FB 4.0 | FB 5.0 | FB 6.0 |
+|---|---|:-:|:-:|:-:|:-:|:-:|
+| `TestDeferredCursorClosePacketCount` | A query on a prepared statement writes exactly 2 packets in a transaction and 3 in autocommit mode: the cursor close rides with the next request (counted under the driver's write buffer; skips on a non-lazy port type) | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestDeferredCursorCloseFollowedBy` | Every request that can follow a queued close on one connection (query, blob read, statement error, insert + commit, rollback, drop, prepare, ping, connection close) gets its own response, never a skipped one | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestDeferredCursorCloseConcurrent` | Queries and updates from 8 goroutines over a 4-connection pool, deferred closes interleaving with other requests | ✅ pass | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+
 ### Additions to existing files
 
 | Test | What it verifies | FB 2.5 | FB 3.0 | FB 4.0 | FB 5.0 |
@@ -126,10 +137,16 @@ Firebird 6 validates charset-less text items as connection-charset text, so OCTE
 | `TestDSNIPv6Formats` | Bracketed IPv6 hosts keep/append the default port | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestDSNOptionsDefaults` | Every documented DSN option resolves to its default | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestDSNOptionsOverridesAndAliases` | Explicit options win over defaults | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
-| `TestDSNOptionsFailFast` | Invalid wire_crypt / auth plugin config fails at parse time | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestDSNOptionsFailFast` | Invalid wire_crypt / auth plugin / page_size config fails at parse time | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestParseDSNPageSize` | page_size defaults to empty (server default); an explicit or empty value is passed through | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestParseDSNInvalidPageSize` | Sizes outside 4096/8192/16384/32768 (including 0) and non-numeric values fail at parse time | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCreateDatabasePageSize` | `firebirdsql_createdb` creates `mon$page_size` 16384 for `page_size=16384`, 4096 for `page_size=4096` (8192 on 6.0) and the server default for an unset or empty `page_size` (4096 on 2.5, 8192 on 3.0+) | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestParsePageSize` | An empty page_size maps to 0 (no `isc_dpb_page_size`), a valid size passes through, 0 and invalid values fail | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCreateDPBPageSize` | The op_create DPB carries `isc_dpb_page_size` (little-endian) only for a set page size; the other items stay intact | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCreateDPBUnchangedWithPageSize` | With `page_size=4096` the op_create DPB is byte-identical to the one sent before the page size became optional | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestTimezoneLegacyAliases` | GMT/ACT/AET/AGT/ART/AST legacy zone aliases round-trip | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestTimezoneMapInvalidEntries` | Unknown zone names/ids yield zero values, never a wrong zone | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
-| `TestAdvertisedProtocolRange` | Connect packet offers protocols 10–17, weights ascending, pflag only with compression | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestAdvertisedProtocolRange` | Connect packet offers protocols 10–19, weights ascending, pflag only with compression | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `FuzzParseDSN` | DSN parser never panics on hostile input (seed corpus) | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestLegacyAuthWireCrypt` | Legacy auth + wire-crypt policy combinations (skips plaintext case when the server requires encryption) | ✅ pass | ⏭️ skip | ✅ pass | ✅ pass |
 

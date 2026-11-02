@@ -329,7 +329,7 @@ func (b *PreparedBatch) Exec(ctx context.Context) (*BatchResult, error) {
 	if b.fc.tx.isAutocommit {
 		if batchErr != nil {
 			_ = b.fc.tx.Rollback()
-		} else if cerr := b.fc.tx.commitRetainging(ctx); cerr != nil {
+		} else if cerr := b.fc.tx.commitRetaining(ctx); cerr != nil {
 			return res, cerr
 		}
 	}

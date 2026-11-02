@@ -6,7 +6,7 @@ root="$PWD"
 version="${1:-5.0.4}"
 case "$version" in
   2.5.9) image='jacobalberty/firebird@sha256:6efd02fc057818e3f9b5da77d56997bafd883a582e666cf7e5371aefec7f84ac' ;;
-  3.0.10) image='jacobalberty/firebird@sha256:765807beb822a182205259dbcadf5b06df66fa6c51a746ac67d48deb981026d7' ;;
+  3.0.10) image='firebirdsql/firebird@sha256:38fd283350b0b1327085f121dac5f7b848bc63baeb11e3577e220633130c1d63' ;;
   4.0.6) image='firebirdsql/firebird@sha256:1bef0d3c18c2e1dc3e3de6a2fe7d9e79dbe27e534f95b23915846fadecd8f5dd' ;;
   5.0.0) image='firebirdsql/firebird@sha256:e75a3b245fd5a88c6f464c63f85604b84aa0dc3b8aa1f0afaf7abe25a09419db' ;;
   5.0.3) image='firebirdsql/firebird@sha256:d1e15bdcc0da40bf5e8af24ba6ba1d14b23d0a43fd21faa4ec8b2089feefb3b8' ;;
@@ -17,16 +17,12 @@ name="firebirdsql-trace-test-$$"
 trap 'docker rm -fv "$name" >/dev/null 2>&1 || true' EXIT
 # Published ports are unnecessary: the test runner shares the server network,
 # including the dynamically allocated auxiliary port used by existing tests.
+# AuthServer and WireCrypt match CI. The server default WireCrypt = Required
+# refuses the plaintext connections some tests make. Firebird 2.5 ignores both.
 docker run -d --name "$name" --platform linux/amd64 \
-  -e ISC_PASSWORD=masterkey -e FIREBIRD_ROOT_PASSWORD=masterkey "$image" >/dev/null
-if [[ "$version" == 3.0.10 ]]; then
-  for attempt in {1..30}; do
-    if docker exec "$name" test -f /firebird/etc/firebird.conf; then break; fi
-    sleep 1
-  done
-  docker exec "$name" sed -i 's/^DatabaseAccess =.*/DatabaseAccess = Full/' /firebird/etc/firebird.conf
-  docker restart "$name" >/dev/null
-fi
+  -e ISC_PASSWORD=masterkey -e FIREBIRD_ROOT_PASSWORD=masterkey \
+  -e 'FIREBIRD_CONF_AuthServer=Srp256, Srp, Legacy_Auth' \
+  -e FIREBIRD_CONF_WireCrypt=Enabled "$image" >/dev/null
 # Bash's TCP probe is available in the Go image, including Go 1.22.
 docker run --rm --platform linux/amd64 --network "container:$name" \
   -v "$root:/work:ro" -v firebirdsql-matrix-mod:/go/pkg/mod \

@@ -81,3 +81,76 @@ func TestParseDSNEmptyPathNoPanic(t *testing.T) {
 		}()
 	}
 }
+
+// A raw '+' in a query value becomes a space after the URL decode. The DSN
+// value timezone=+05:30 never reaches the driver as an offset. Write the
+// offset as %2B05:30. The test keeps this rule visible.
+func TestParseDSNTimezoneOffsetEscaping(t *testing.T) {
+	dsn, err := parseDSN("sysdba:masterkey@host/db.fdb?timezone=%2B05:30")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := dsn.options["timezone"]; got != "+05:30" {
+		t.Errorf("percent-encoded timezone = %q, want %q", got, "+05:30")
+	}
+
+	dsn, err = parseDSN("sysdba:masterkey@host/db.fdb?timezone=+05:30")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := dsn.options["timezone"]; got != " 05:30" {
+		t.Errorf("raw timezone=+05:30 arrives as %q, want %q (a leading space: '+' is not query-safe)", got, " 05:30")
+	}
+	if _, ok := parseUTCOffset(dsn.options["timezone"]); ok {
+		t.Errorf("%q must not parse as a UTC offset", dsn.options["timezone"])
+	}
+}
+
+func TestParseDSNPageSize(t *testing.T) {
+	for dsns, want := range map[string]string{
+		"user:pass@localhost/test.fdb":                 "",
+		"user:pass@localhost/test.fdb?page_size=":      "",
+		"user:pass@localhost/test.fdb?page_size=16384": "16384",
+	} {
+		dsn, err := parseDSN(dsns)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := dsn.options["page_size"]; got != want {
+			t.Errorf("%s: page_size = %q, want %q", dsns, got, want)
+		}
+	}
+}
+
+func TestParseDSNInvalidPageSize(t *testing.T) {
+	for _, v := range []string{"4097", "0", "-4096", "1024", "2048", "65536", "abc"} {
+		if _, err := parseDSN("user:pass@localhost/test.fdb?page_size=" + v); err == nil {
+			t.Errorf("page_size=%q: expected error", v)
+		}
+	}
+}
+
+// TestParsePageSize checks the value op_create sends: an empty page_size
+// becomes 0 (no isc_dpb_page_size, the server default), a valid size passes
+// through, and an invalid one fails with 0.
+func TestParsePageSize(t *testing.T) {
+	for _, tc := range []struct {
+		in      string
+		want    int32
+		wantErr bool
+	}{
+		{"", 0, false},
+		{" ", 0, false},
+		{"4096", 4096, false},
+		{"16384", 16384, false},
+		{" 8192 ", 8192, false},
+		{"0", 0, true},
+		{"4097", 0, true},
+		{"abc", 0, true},
+	} {
+		got, err := parsePageSize(tc.in)
+		if (err != nil) != tc.wantErr || got != tc.want {
+			t.Errorf("parsePageSize(%q) = %d, %v; want %d, error %v", tc.in, got, err, tc.want, tc.wantErr)
+		}
+	}
+}

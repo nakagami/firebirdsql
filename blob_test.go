@@ -61,9 +61,8 @@ func TestBlobEdgeCases(t *testing.T) {
 	db, dsn, _ := createTestDatabaseWithDDL(t, "blob_edge_",
 		`CREATE TABLE BLOB_EDGE (ID INTEGER PRIMARY KEY, BIN BLOB SUB_TYPE BINARY, TXT BLOB SUB_TYPE TEXT)`)
 
-	// Empty string/blob and NULL are distinct states for text blobs; an
-	// empty []byte parameter is written as NULL (documented current
-	// contract — Jaybird round-trips an empty binary blob instead).
+	// Empty and NULL are distinct states for both blob subtypes; an empty
+	// []byte parameter stores an empty blob (as in Jaybird), not NULL.
 	mustExec(t, stmtCtx, db, "INSERT INTO BLOB_EDGE (ID, BIN, TXT) VALUES (1, X'', ?)", "")
 	mustExec(t, stmtCtx, db, "INSERT INTO BLOB_EDGE (ID, BIN, TXT) VALUES (2, ?, ?)", nil, nil)
 	mustExec(t, stmtCtx, db, "INSERT INTO BLOB_EDGE (ID, BIN, TXT) VALUES (3, ?, ?)",
@@ -73,8 +72,7 @@ func TestBlobEdgeCases(t *testing.T) {
 	var bin []byte
 	var txt, binTxt sql.NullString
 
-	// Scanning blob columns into sql.NullString distinguishes SQL NULL from
-	// an empty value (an empty []byte dest would alias to nil either way).
+	// sql.NullString reports whether the value is SQL NULL.
 	require.NoError(t, db.QueryRow("SELECT BIN, TXT FROM BLOB_EDGE WHERE ID = 1").Scan(&binTxt, &txt))
 	require.True(t, binTxt.Valid, "empty binary blob (X'') must not read back as NULL")
 	require.Len(t, binTxt.String, 0)
@@ -89,12 +87,15 @@ func TestBlobEdgeCases(t *testing.T) {
 	require.Equal(t, []byte{0xDE, 0xAD}, bin)
 	require.Equal(t, "text 🎉", txt.String)
 
-	// An empty []byte parameter stores as SQL NULL on Firebird 5 (protocol
-	// 19) and as an empty blob on Firebird 4 and older — either way it must
-	// never come back as actual content.
+	// An empty blob scanned into []byte is empty, not nil: nil means NULL.
+	require.NoError(t, db.QueryRow("SELECT BIN FROM BLOB_EDGE WHERE ID = 1").Scan(&bin))
+	require.NotNil(t, bin, "empty binary blob (X'') must not read back as nil")
+	require.Len(t, bin, 0)
+
+	// An empty []byte parameter stores an empty blob, not NULL.
 	require.NoError(t, db.QueryRow("SELECT BIN FROM BLOB_EDGE WHERE ID = 4").Scan(&bin))
-	require.True(t, bin == nil || len(bin) == 0,
-		"empty []byte parameter must not produce content, got %d bytes", len(bin))
+	require.NotNil(t, bin, "empty []byte parameter must not read back as nil")
+	require.Len(t, bin, 0)
 
 	// The same parameter can be reused for several inserts.
 	data := randomBytes(5000)
@@ -118,6 +119,79 @@ func TestBlobEdgeCases(t *testing.T) {
 	c2 := openTestDatabase(t, dsn)
 	require.NoError(t, c2.QueryRow("SELECT BIN FROM BLOB_EDGE WHERE ID = 3").Scan(&bin))
 	require.Equal(t, []byte{0xDE, 0xAD}, bin)
+}
+
+// TestEmptyBinaryBlobNotNil checks that an empty binary BLOB reads back as an
+// empty value and only a NULL column reads back as nil, on every destination
+// type and with the server's own NULL test. With inline BLOBs enabled the
+// server sends even a zero-length BLOB inline (op_inline_blob) ahead of the
+// row, a different read path from segment fetching.
+func TestEmptyBinaryBlobNotNil(t *testing.T) {
+	db, dsn, _ := createTestDatabaseWithDDL(t, "blob_empty_",
+		`CREATE TABLE T (ID INTEGER PRIMARY KEY, B BLOB SUB_TYPE BINARY)`)
+	mustExec(t, stmtCtx, db, "INSERT INTO T (ID, B) VALUES (1, X'')")
+	mustExec(t, stmtCtx, db, "INSERT INTO T (ID, B) VALUES (2, ?)", []byte{})
+	mustExec(t, stmtCtx, db, "INSERT INTO T (ID, B) VALUES (3, ?)", nil)
+
+	check := func(t *testing.T, db *sql.DB) {
+		for id := 1; id <= 3; id++ {
+			empty := id != 3
+
+			var b []byte
+			require.NoError(t, db.QueryRow("SELECT B FROM T WHERE ID = ?", id).Scan(&b))
+			if empty {
+				require.NotNil(t, b, "row %d: empty blob read as nil", id)
+				require.Len(t, b, 0)
+			} else {
+				require.Nil(t, b, "row %d", id)
+			}
+
+			var n sql.Null[[]byte]
+			require.NoError(t, db.QueryRow("SELECT B FROM T WHERE ID = ?", id).Scan(&n))
+			if empty {
+				require.True(t, n.Valid, "row %d", id)
+				require.NotNil(t, n.V, "row %d: empty blob read as nil", id)
+				require.Len(t, n.V, 0)
+			} else {
+				require.False(t, n.Valid, "row %d", id)
+			}
+
+			var a any
+			require.NoError(t, db.QueryRow("SELECT B FROM T WHERE ID = ?", id).Scan(&a))
+			if empty {
+				ab, ok := a.([]byte)
+				require.True(t, ok, "row %d: got %T", id, a)
+				require.NotNil(t, ab, "row %d: empty blob read as nil", id)
+				require.Len(t, ab, 0)
+			} else {
+				require.Nil(t, a, "row %d", id)
+			}
+
+			// What the server itself says: IS NULL and OCTET_LENGTH.
+			var isNull int
+			var octets sql.NullInt64
+			require.NoError(t, db.QueryRow(
+				"SELECT CASE WHEN B IS NULL THEN 1 ELSE 0 END, OCTET_LENGTH(B) FROM T WHERE ID = ?",
+				id).Scan(&isNull, &octets))
+			if empty {
+				require.Equal(t, 0, isNull, "row %d", id)
+				require.True(t, octets.Valid, "row %d", id)
+				require.EqualValues(t, 0, octets.Int64, "row %d", id)
+			} else {
+				require.Equal(t, 1, isNull, "row %d", id)
+				require.False(t, octets.Valid, "row %d", id)
+			}
+		}
+	}
+
+	t.Run("inline", func(t *testing.T) {
+		inlineDB := openTestDatabase(t, dsn)
+		requireInlineBlobs(t, inlineDB) // protocol 19 only; skipped below Firebird 5.0.3
+		check(t, inlineDB)
+	})
+	t.Run("no_inline", func(t *testing.T) {
+		check(t, openTestDatabase(t, dsn+"?max_inline_blob_size=0"))
+	})
 }
 
 // TestClobLargeText mirrors Jaybird's FBClobTest: large multi-segment text

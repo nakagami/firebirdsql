@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go: ['1.22', '1.23']
+        go: ['1.22', '1.23', '1.27']
         firebird-version: ['2.5-sc', '2.5-ss', '3', '4', '5']
         include:
           - firebird-version: '2.5-sc'
@@ -63,4 +63,4 @@ jobs:
         ISC_PASSWORD: masterkey
         FIREBIRDSQL_TRACE_TEST: "1"
       run: |
-        go test -v ./...
+        go test -race -count=1 -v ./...
