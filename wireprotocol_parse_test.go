@@ -1,9 +1,11 @@
 package firebirdsql
 
 import (
+	"bufio"
 	"bytes"
 	"database/sql/driver"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"io"
 	"strings"
@@ -464,6 +466,79 @@ func TestParseConnectResponse_SRPSaltLengthInvalid(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), "salt length") {
 				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+// TestServiceAttachDeferredAuthData runs a canned connect reply through the
+// handshake and pins the op_service_attach packet that follows. op_accept_data
+// leaves the SRP proof to the attach, and an SPB carries it under a different
+// tag than a DPB: the server ignores the DPB tag, and the login fails.
+func TestServiceAttachDeferredAuthData(t *testing.T) {
+	const specificAuthDataTag = 0x6f // isc_spb_specific_auth_data on the wire
+
+	var acceptData acceptFrame
+	acceptData.acceptHeader(op_accept_data)
+	acceptData.blob(srpServerData(32, 256))
+	acceptData.blob([]byte("Srp256"))
+	acceptData.int32(0) // not yet authenticated
+	acceptData.blob(nil)
+
+	var accept acceptFrame
+	accept.acceptHeader(op_accept)
+
+	for _, tc := range []struct {
+		name      string
+		reply     []byte
+		wireCrypt string
+		deferred  bool
+	}{
+		{"wire crypt off", acceptData.bytes(), "false", true},
+		{"server without wire crypt", acceptData.bytes(), "true", true},
+		{"no deferred proof", accept.bytes(), "true", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			clientPublic, clientSecret, err := getClientSeed()
+			if err != nil {
+				t.Fatalf("getClientSeed: %v", err)
+			}
+			options := testConnectOptions()
+			options["wire_crypt"] = tc.wireCrypt
+
+			p := testProtocol(tc.reply)
+			if err := p._parse_connect_response("SYSDBA", "masterkey", options, clientPublic, clientSecret); err != nil {
+				t.Fatalf("_parse_connect_response: %v", err)
+			}
+			if deferred := len(p.authData) > 0; deferred != tc.deferred {
+				t.Fatalf("authData = %x, want deferred = %v", p.authData, tc.deferred)
+			}
+
+			var out bytes.Buffer
+			p.conn.writer = bufio.NewWriter(&out)
+			if err := p.opServiceAttach(); err != nil {
+				t.Fatalf("opServiceAttach: %v", err)
+			}
+
+			spb := []byte{isc_spb_version, isc_spb_current_version}
+			spb = append(spb, isc_spb_user_name, 6)
+			spb = append(spb, "SYSDBA"...)
+			spb = append(spb, isc_spb_password, 9)
+			spb = append(spb, "masterkey"...)
+			spb = append(spb, isc_spb_utf8_filename, 1, 1)
+			if tc.deferred {
+				proof := hex.EncodeToString(p.authData)
+				spb = append(spb, specificAuthDataTag, byte(len(proof)))
+				spb = append(spb, proof...)
+			}
+
+			var want acceptFrame
+			want.int32(op_service_attach)
+			want.int32(0)
+			want.blob([]byte("service_mgr"))
+			want.blob(spb)
+			if !bytes.Equal(out.Bytes(), want.bytes()) {
+				t.Fatalf("op_service_attach packet = %x, want %x", out.Bytes(), want.bytes())
 			}
 		})
 	}

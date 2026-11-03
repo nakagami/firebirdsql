@@ -25,9 +25,11 @@ package firebirdsql
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"slices"
 	"testing"
 )
 
@@ -118,4 +120,32 @@ func TestServiceManagerWireCryptDefault(t *testing.T) {
 		return
 	}
 	require.NotEmpty(t, sm.WireCipher(), "default service-manager connection must be encrypted on a wire-crypt-capable server")
+}
+
+// TestServiceManagerWireCryptFalse attaches without wire crypt, where the
+// handshake leaves the SRP proof to the attach's SPB. The only accepted refusal
+// is a server that requires encryption: any other error is a failure, so a
+// proof the server cannot read never turns into a skip.
+func TestServiceManagerWireCryptFalse(t *testing.T) {
+	requireServiceAvailable(t)
+	major := get_firebird_major_version(t)
+
+	sm, err := NewServiceManager(testServerAddr(), GetTestUser(), GetTestPassword(), GetDefaultServiceManagerOptions().WithoutWireCrypt())
+	var fbErr *FbError
+	if errors.As(err, &fbErr) && slices.Contains(fbErr.GDSCodes, ISCWirecryptIncompatible) {
+		t.Skipf("server requires wire encryption: %v", err)
+	}
+	require.NoError(t, err, "NewServiceManager")
+	defer sm.Close()
+
+	require.Empty(t, sm.WireCipher(), "connection without wire crypt must be plaintext")
+	if major < 3 {
+		require.Empty(t, sm.wp.authData, "FB <3.0 has no deferred auth data")
+	} else {
+		require.NotEmpty(t, sm.wp.authData, "FB 3.0+ must defer the SRP proof to the attach")
+	}
+
+	version, err := sm.GetServerVersion()
+	require.NoError(t, err, "GetServerVersion")
+	require.Equal(t, major, version.Major)
 }
