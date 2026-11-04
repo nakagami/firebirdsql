@@ -26,8 +26,10 @@ package firebirdsql
 import (
 	"context"
 	"database/sql/driver"
+	"fmt"
 	"math/big"
 	"reflect"
+	"time"
 )
 
 type firebirdsqlConn struct {
@@ -114,6 +116,28 @@ func (fc *firebirdsqlConn) ProtocolVersion() int {
 	return int(fc.wp.protocolVersion)
 }
 
+// IsValid implements driver.Validator. database/sql calls it before returning
+// the connection to the pool: a connection whose wire was left mid-exchange (a
+// bounded read gave up, a context ended during a round-trip, or a batch request's
+// replies could not be read in full) is discarded instead of serving the next query
+// with the previous exchange's late response.
+// Unlike driver.ErrBadConn this does not make database/sql retry the statement.
+func (fc *firebirdsqlConn) IsValid() bool {
+	return !fc.wp.desynced
+}
+
+// errConnDesynced is returned instead of writing to a connection whose wire is desynced.
+// It wraps driver.ErrBadConn so a held sql.Conn is closed.
+var errConnDesynced = fmt.Errorf("firebirdsql: connection is out of step with the server: %w", driver.ErrBadConn)
+
+// checkWire returns errConnDesynced when the wire is desynced.
+func (fc *firebirdsqlConn) checkWire() error {
+	if fc.wp.desynced {
+		return errConnDesynced
+	}
+	return nil
+}
+
 // ============ driver.Conn implementation
 
 func (fc *firebirdsqlConn) begin(isolationLevel int) (driver.Tx, error) {
@@ -139,6 +163,15 @@ func (fc *firebirdsqlConn) Begin() (driver.Tx, error) {
 // idle connections, it shouldn't be necessary for drivers to
 // do their own connection caching.
 func (fc *firebirdsqlConn) Close() (err error) {
+	if fc.wp.desynced {
+		// Rollback/detach would read the abandoned exchange's response (or wait
+		// out abandonReadTimeout each on a silent wire); database/sql runs this
+		// Close in the caller's goroutine. Dropping the socket makes the server
+		// roll back and release the attachment.
+		fc.wp.clearAllInlineBlobCache()
+		fc.wp.dropPendingFree()
+		return fc.wp.conn.Close()
+	}
 	for tx := range fc.transactionSet {
 		tx.Rollback()
 	}
@@ -160,14 +193,21 @@ func (fc *firebirdsqlConn) prepare(ctx context.Context, query string) (driver.St
 	if fc.tx == nil {
 		return nil, driver.ErrBadConn
 	}
-	if fc.tx.needBegin {
-		err := fc.tx.begin()
-		if err != nil {
-			return nil, err
+	var stmt *firebirdsqlStmt
+	err := fc.wp.withContextDeadline(ctx, func() error {
+		if fc.tx.needBegin {
+			if err := fc.tx.begin(); err != nil {
+				return err
+			}
 		}
+		var err error
+		stmt, err = newFirebirdsqlStmt(fc, query)
+		return err
+	})
+	if err != nil {
+		return nil, err
 	}
-
-	return newFirebirdsqlStmt(fc, query)
+	return stmt, nil
 }
 
 // Prepare returns a prepared statement, bound to this connection.
@@ -207,11 +247,36 @@ func (fc *firebirdsqlConn) Query(query string, args []driver.Value) (rows driver
 	return fc.query(context.Background(), query, args)
 }
 
-func openFirebirdsqlConn(dsn *firebirdDsn, dbOp func(*wireProtocol) error) (*firebirdsqlConn, error) {
-	wp, err := newWireProtocol(dsn.addr, dsn.options["timezone"], dsn.options["charset"])
+// openFirebirdsqlConn dials, authenticates and runs dbOp (attach or create)
+// bounded by ctx (see withContextDeadline). On failure the socket is closed
+// instead of being left to the garbage collector.
+func openFirebirdsqlConn(ctx context.Context, dsn *firebirdDsn, dbOp func(*wireProtocol) error) (*firebirdsqlConn, error) {
+	wp, err := newWireProtocolContext(ctx, dsn.addr, dsn.options["timezone"], dsn.options["charset"])
 	if err != nil {
 		return nil, err
 	}
+	var fc *firebirdsqlConn
+	err = wp.withContextDeadline(ctx, func() error {
+		var err error
+		fc, err = handshakeFirebirdsqlConn(wp, dsn, dbOp)
+		return err
+	})
+	if err != nil {
+		wp.conn.Close()
+		return nil, err
+	}
+	return fc, nil
+}
+
+func openFirebirdsqlConnWithWire(dsn *firebirdDsn, dbOp func(*wireProtocol) error, wire func(string, string, string) (*wireProtocol, error)) (*firebirdsqlConn, error) {
+	wp, err := wire(dsn.addr, dsn.options["timezone"], dsn.options["charset"])
+	if err != nil {
+		return nil, err
+	}
+	return handshakeFirebirdsqlConn(wp, dsn, dbOp)
+}
+
+func handshakeFirebirdsqlConn(wp *wireProtocol, dsn *firebirdDsn, dbOp func(*wireProtocol) error) (*firebirdsqlConn, error) {
 	columnNameToLower := convertToBool(dsn.options["column_name_to_lower"], false)
 	clientPublic, clientSecret, err := getClientSeed()
 	if err != nil {
@@ -224,9 +289,13 @@ func openFirebirdsqlConn(dsn *firebirdDsn, dbOp func(*wireProtocol) error) (*fir
 	wp.maxInlineBlobSize = int32(parseOptionInt(dsn.options["max_inline_blob_size"], 65536))
 	wp.maxBlobCacheSize = int32(parseOptionInt(dsn.options["max_blob_cache_size"], 10485760))
 	wp.inlineBlobCache = newInlineBlobCache(int(wp.maxBlobCacheSize))
-	// Клиентский диалект DPB (1 или 3): нужен диалект-1 целям (FB 2.5/IB),
-	// иначе сервер отклоняет metadata update («not allowed by the current
-	// database SQL dialect 1»).
+	wp.cancelHardDrop = convertToBool(dsn.options["cancel_hard_drop"], false)
+	wp.cancelHardDropGrace = time.Duration(parseOptionInt(dsn.options["cancel_hard_drop_grace"], 3000)) * time.Millisecond
+	wp.pageSize, _ = parsePageSize(dsn.options["page_size"]) // validated in parseDSN
+
+	// Client SQL dialect (DSN option sql_dialect): needed for dialect-1
+	// target databases (Firebird 2.5 / InterBase); everything else is
+	// dialect 3. Values other than 1 fall back to 3.
 	wp.sqlDialect = int32(parseOptionInt(dsn.options["sql_dialect"], 3))
 	if wp.sqlDialect != 1 {
 		wp.sqlDialect = 3
@@ -262,14 +331,59 @@ func openFirebirdsqlConn(dsn *firebirdDsn, dbOp func(*wireProtocol) error) (*fir
 	return fc, nil
 }
 
-func attachFirebirdsqlConn(dsn *firebirdDsn) (*firebirdsqlConn, error) {
-	return openFirebirdsqlConn(dsn, func(wp *wireProtocol) error {
+func attachFirebirdsqlConn(ctx context.Context, dsn *firebirdDsn) (*firebirdsqlConn, error) {
+	return openFirebirdsqlConn(ctx, dsn, func(wp *wireProtocol) error {
 		return wp.opAttach(dsn.dbName, dsn.user, dsn.passwd, dsn.options["role"])
 	})
 }
 
-func createFirebirdsqlConn(dsn *firebirdDsn) (*firebirdsqlConn, error) {
-	return openFirebirdsqlConn(dsn, func(wp *wireProtocol) error {
+func createFirebirdsqlConn(ctx context.Context, dsn *firebirdDsn) (*firebirdsqlConn, error) {
+	return openFirebirdsqlConn(ctx, dsn, func(wp *wireProtocol) error {
 		return wp.opCreate(dsn.dbName, dsn.user, dsn.passwd, dsn.options["role"])
 	})
+}
+
+// withContextDeadline bounds fn, a run of wire round-trips that the server
+// cannot cancel (connect/auth/attach, op_transaction, op_allocate/op_prepare),
+// by ctx: ctx's deadline is mirrored onto the socket and cancelling ctx expires
+// it at once. Without this those reads block until the OS gives up on the
+// socket, which is never when the peer keeps the TCP connection open but stops
+// answering.
+//
+// If ctx ends while fn is on the wire the exchange is left half done, so the
+// error wraps driver.ErrBadConn and database/sql discards the connection. The
+// watcher is joined before the deadline is cleared, so a late cancellation
+// cannot leave an expired deadline on a pooled connection.
+func (p *wireProtocol) withContextDeadline(ctx context.Context, fn func() error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if ctx.Done() == nil {
+		// Context can never be canceled; skip the watcher goroutine entirely.
+		return fn()
+	}
+	if dl, ok := ctx.Deadline(); ok {
+		p.conn.SetDeadline(dl)
+	}
+	stop := make(chan struct{})
+	watcherDone := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			p.conn.SetDeadline(time.Now())
+		case <-stop:
+		}
+		close(watcherDone)
+	}()
+	err := fn()
+	close(stop)
+	<-watcherDone
+	p.conn.SetDeadline(time.Time{})
+	if err != nil {
+		if cerr := contextErrOrDeadlineExceeded(ctx); cerr != nil {
+			p.desynced = true
+			return fmt.Errorf("%w: %w", cerr, driver.ErrBadConn)
+		}
+	}
+	return err
 }

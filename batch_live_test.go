@@ -27,11 +27,14 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -326,4 +329,52 @@ func TestCompareBatchVsExecInsert100k(t *testing.T) {
 		batchDur, execDur, speedup,
 		float64(n)/batchDur.Seconds(),
 		float64(n)/execDur.Seconds())
+}
+
+// TestBatchOverflowKeepsConnInStep: the server refuses an op_batch_msg once the rows no
+// longer fit its batch buffer ("batch too big"). The reply to the op_ping / op_batch_sync
+// sent after it must still be read, or every later request on the connection reads the
+// previous one's reply (a "SELECT ... FROM rdb$database" then returns no rows).
+func TestBatchOverflowKeepsConnInStep(t *testing.T) {
+	db, _, _ := createTestDatabaseWithDDL(t, "test_batch_overflow_")
+	requireBatchSupport(t, db)
+	db.SetMaxOpenConns(1)
+	ctx := context.Background()
+	mustExec(t, ctx, db, "CREATE TABLE t_batch_overflow (id INTEGER, s VARCHAR(2000))")
+
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	var b *PreparedBatch
+	if err := conn.Raw(func(dc any) error {
+		var e error
+		b, e = dc.(*firebirdsqlConn).PrepareBatch(ctx,
+			"INSERT INTO t_batch_overflow (id, s) VALUES (?, ?)", BatchOptions{BufferBytes: 64 * 1024})
+		return e
+	}); err != nil {
+		t.Fatalf("PrepareBatch: %v", err)
+	}
+	pad := strings.Repeat("x", 1900)
+	var addErr error
+	for i := 0; i < 5000 && addErr == nil; i++ {
+		addErr = b.Add(int64(i), pad) // flushes every 128 KiB: well past a 64 KiB buffer
+	}
+	var fbErr *FbError
+	if !errors.As(addErr, &fbErr) || !slices.Contains(fbErr.GDSCodes, ISCBatchTooBig) {
+		t.Fatalf("Add err = %v, want the server's batch-too-big refusal", addErr)
+	}
+	if err := b.Close(); err != nil {
+		t.Fatalf("batch Close: %v", err)
+	}
+
+	var v int
+	if err := conn.QueryRowContext(ctx, "SELECT 6809 FROM rdb$database").Scan(&v); err != nil || v != 6809 {
+		t.Fatalf("query after the refused batch = %d, %v; want 6809 (the connection is out of step)", v, err)
+	}
+	var n int
+	if err := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM t_batch_overflow").Scan(&n); err != nil || n != 0 {
+		t.Fatalf("COUNT(*) = %d, %v; want 0 (the batch never ran)", n, err)
+	}
 }

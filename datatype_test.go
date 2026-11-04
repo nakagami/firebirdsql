@@ -208,6 +208,7 @@ func TestDatatypeMatrix(t *testing.T) {
 				}
 				gotBytes, ok := got.([]byte)
 				require.True(t, ok, "got %T", got)
+				require.NotNil(t, gotBytes, "non-NULL blob read as nil")
 				require.True(t, bytes.Equal(bind.([]byte), gotBytes))
 			},
 		},

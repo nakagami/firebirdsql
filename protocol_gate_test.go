@@ -25,6 +25,8 @@ package firebirdsql
 
 import (
 	"context"
+	"database/sql/driver"
+	"io"
 	"testing"
 	"time"
 
@@ -62,7 +64,6 @@ func TestNegotiatedProtocolVersion(t *testing.T) {
 func TestFeatureProtocolGating(t *testing.T) {
 	db, _, _ := createTestDatabaseWithDDL(t, "gate_features_",
 		`CREATE TABLE GATE_T (ID INTEGER PRIMARY KEY, V VARCHAR(20))`)
-	mustExec(t, stmtCtx, db, "INSERT INTO GATE_T VALUES (1, 'a')")
 
 	t.Run("batch (protocol 16+)", func(t *testing.T) {
 		requireProtocol(t, db, PROTOCOL_VERSION16)
@@ -70,13 +71,7 @@ func TestFeatureProtocolGating(t *testing.T) {
 		require.NoError(t, err)
 		defer sqlConn.Close()
 		err = sqlConn.Raw(func(dc any) error {
-			fc, ok := dc.(interface {
-				PrepareBatch(context.Context, string, BatchOptions) (*PreparedBatch, error)
-			})
-			if !ok {
-				return errBatchUnsupported
-			}
-			b, err := fc.PrepareBatch(stmtCtx, "INSERT INTO GATE_T (ID, V) VALUES (?, ?)", BatchOptions{})
+			b, err := dc.(*firebirdsqlConn).PrepareBatch(stmtCtx, "INSERT INTO GATE_T (ID, V) VALUES (?, ?)", BatchOptions{})
 			if err != nil {
 				return err
 			}
@@ -93,35 +88,50 @@ func TestFeatureProtocolGating(t *testing.T) {
 			}
 			return nil
 		})
-		if err == errBatchUnsupported {
-			t.Skip("PrepareBatch not available on driver conn")
-		}
 		require.NoError(t, err)
 	})
 
 	t.Run("scrollable cursors (protocol 18+)", func(t *testing.T) {
 		requireProtocol(t, db, PROTOCOL_VERSION18)
+		mustExec(t, stmtCtx, db, `CREATE TABLE GATE_SCROLL (ID INTEGER PRIMARY KEY)`)
+		for id := 1; id <= 5; id++ {
+			mustExec(t, stmtCtx, db, "INSERT INTO GATE_SCROLL VALUES (?)", id)
+		}
 		sqlConn, err := db.Conn(stmtCtx)
 		require.NoError(t, err)
 		defer sqlConn.Close()
+
+		// Each step depends on the cursor position left by the previous one,
+		// and every orientation is used once, so a wrong orientation or
+		// offset on the wire lands on a different row.
+		steps := []struct {
+			name        string
+			orientation int32
+			offset      int32
+			want        int64
+		}{
+			{"first", ScrollFirst, 0, 1},
+			{"absolute 3", ScrollAbsolute, 3, 3},
+			{"relative -1", ScrollRelative, -1, 2},
+			{"last", ScrollLast, 0, 5},
+			{"prior", ScrollPrior, 0, 4},
+			{"next", ScrollNext, 0, 5},
+		}
 		err = sqlConn.Raw(func(dc any) error {
-			q, ok := dc.(interface {
-				QueryScrollable(context.Context, string, ...any) (*ScrollableStmt, error)
-			})
-			if !ok {
-				return errBatchUnsupported
-			}
-			sc, err := q.QueryScrollable(stmtCtx, "SELECT ID FROM GATE_T ORDER BY ID")
+			sc, err := dc.(*firebirdsqlConn).QueryScrollable(stmtCtx, "SELECT ID FROM GATE_SCROLL ORDER BY ID")
 			if err != nil {
 				return err
 			}
 			defer sc.Close()
-			_, err = sc.FetchOne(ScrollLast, 0)
-			return err
+			for i, st := range steps {
+				row, err := sc.FetchOne(st.orientation, st.offset)
+				require.NoError(t, err, "step %d (%s)", i+1, st.name)
+				require.Equal(t, []driver.Value{st.want}, row, "step %d (%s)", i+1, st.name)
+			}
+			_, err = sc.FetchOne(ScrollNext, 0)
+			require.ErrorIs(t, err, io.EOF, "next past the end")
+			return sc.Close()
 		})
-		if err == errBatchUnsupported {
-			t.Skip("QueryScrollable not available on driver conn")
-		}
 		require.NoError(t, err)
 	})
 }

@@ -213,6 +213,11 @@ const (
 	isc_spb_config            = 123
 	isc_spb_expected_db       = 124
 
+	// isc_spb_specific_auth_data carries deferred auth plugin data in an SPB.
+	// Firebird defines it as an alias of isc_spb_trusted_auth, it differs
+	// from isc_dpb_specific_auth_data.
+	isc_spb_specific_auth_data = isc_spb_trusted_auth
+
 	isc_spb_connect_timeout       = 57 // isc_dpb_connect_timeout
 	isc_spb_dummy_packet_interval = 58 // isc_dpb_dummy_packet_interval
 	isc_spb_sql_role_name         = 60 // isc_dpb_sql_role_name

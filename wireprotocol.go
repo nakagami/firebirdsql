@@ -25,6 +25,7 @@ package firebirdsql
 
 import (
 	"bytes"
+	"context"
 	"database/sql/driver"
 	"encoding/hex"
 	"errors"
@@ -105,10 +106,26 @@ type wireProtocol struct {
 	dbHandle int32
 	addr     string
 
+	// desynced is set when a context abandoned a request/response exchange
+	// halfway (see withContextDeadline), or when a batch request's replies could
+	// not be read in full (receiveTwoResponses): the next bytes on the wire belong
+	// to that exchange, so Close drops the socket instead of talking to the server.
+	desynced bool
+
 	protocolVersion    int32
 	acceptArchitecture int32
 	acceptType         int32
-	lazyResponseCount  int
+	// lazyResponseCount is the number of op_response packets the server
+	// still owes for requests whose response was not waited for (deferred
+	// packets, see deferFreeStatement); the readers skip that many before
+	// the response they expect.
+	lazyResponseCount int
+	// pendingFree holds op_free_statement packets built but not yet
+	// written: a cursor close (DSQL_close) goes out in front of the next
+	// request instead of in a packet of its own. pendingFreeCount is how
+	// many packets it holds.
+	pendingFree      []byte
+	pendingFreeCount int
 
 	pluginName string
 	user       string
@@ -127,24 +144,46 @@ type wireProtocol struct {
 	osUser        string
 	hostName      string
 
-	// Client SQL dialect sent in the attach/create DPB (DSN option
-	// sql_dialect; 1 or 3, default 3).
-	sqlDialect int32
-
 	// Protocol 18/19 execute trailers and inline blob support.
 	cursorFlags       int32
 	maxInlineBlobSize int32
 	maxBlobCacheSize  int32
 	inlineBlobCache   *inlineBlobCache
+
+	// Page size for op_create (DSN page_size); 0 sends none and the server
+	// uses its default.
+	pageSize int32
+
+	// Hard-drop on cancel (opt-in, DSN cancel_hard_drop=true): after a
+	// ctx cancel fired op_cancel and the wrapped read still has not
+	// returned within cancelHardDropGrace, close the socket. FB does not
+	// honor op_cancel raise for waits inside an executing statement (e.g.
+	// a lock wait inside a running SP), so without this the read can
+	// outlive any client timeout. cancelHardDropOnce guards the one-shot
+	// close; the connection is dead either way once dropped.
+	cancelHardDrop      bool
+	cancelHardDropGrace time.Duration
+	cancelHardDropOnce  sync.Once
+
+	// Client SQL dialect sent in the attach/create DPB and as the
+	// statement prepare dialect (DSN option sql_dialect; 1 or 3,
+	// default 3). Required for dialect-1 target databases (Firebird 2.5
+	// / InterBase): without it the server rejects metadata updates with
+	// "not allowed by the current database SQL dialect 1".
+	sqlDialect int32
 }
 
 func newWireProtocol(addr string, timezone string, charset string) (*wireProtocol, error) {
+	return newWireProtocolContext(context.Background(), addr, timezone, charset)
+}
+
+func newWireProtocolContext(ctx context.Context, addr string, timezone string, charset string) (*wireProtocol, error) {
 	p := new(wireProtocol)
 	p.buf = make([]byte, 0, BUFFER_LEN)
-	p.sqlDialect = 3 // DSN-опция sql_dialect переопределяет (1 или 3)
+	p.sqlDialect = 3 // default; the DSN option sql_dialect overrides (1 or 3)
 
 	p.addr = addr
-	conn, err := net.Dial("tcp", p.addr)
+	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", p.addr)
 	if err != nil {
 		return nil, err
 	}
@@ -248,6 +287,14 @@ func (p *wireProtocol) uid(user string, password string, authPluginName string, 
 
 func (p *wireProtocol) sendPackets() (written int, err error) {
 	p.debugPrint("\tsendPackets():%v", p.buf)
+	if len(p.pendingFree) > 0 {
+		// the deferred frees travel in the same write, ahead of the request;
+		// the server answers them first, so their responses are skipped
+		p.buf = append(p.pendingFree, p.buf...)
+		p.lazyResponseCount += p.pendingFreeCount
+		p.pendingFree = nil
+		p.pendingFreeCount = 0
+	}
 	n := 0
 	for written < len(p.buf) {
 		n, err = p.conn.Write(p.buf[written:])
@@ -579,10 +626,15 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 	p.debugPrint("_parse_connect_response")
 
 	b, err := p.recvPackets(4)
+	if err != nil {
+		return
+	}
 	opcode := bytes_to_bint32(b)
 
 	for opcode == op_dummy {
-		b, _ = p.recvPackets(4)
+		if b, err = p.recvPackets(4); err != nil {
+			return
+		}
 		opcode = bytes_to_bint32(b)
 	}
 
@@ -595,7 +647,9 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 		return
 	}
 
-	b, _ = p.recvPackets(12)
+	if b, err = p.recvPackets(12); err != nil {
+		return
+	}
 	p.protocolVersion = int32(b[3])
 	p.acceptArchitecture = bytes_to_bint32(b[4:8])
 	p.acceptType = bytes_to_bint32(b[8:12])
@@ -1185,36 +1239,41 @@ func (p *wireProtocol) appendExecuteTrailers() {
 
 func (p *wireProtocol) opCreate(dbName string, user string, password string, role string) error {
 	p.debugPrint("opCreate")
-	var page_size int32
-	page_size = 4096
 
+	p.packInt(op_create)
+	p.packInt(0) // Database Object ID
+	p.packString(dbName)
+	p.packBytes(p.createDPB(user, password, role))
+	_, err := p.sendPackets()
+	return err
+}
+
+// createDPB builds the op_create DPB. isc_dpb_page_size is sent only when
+// pageSize is set; otherwise the server uses its default page size.
+func (p *wireProtocol) createDPB(user string, password string, role string) []byte {
 	encode := []byte(p.charset)
 	userBytes := []byte(strings.ToUpper(user))
 	passwordBytes := []byte(password)
 	roleBytes := []byte(role)
 	dpb := bytes.Join([][]byte{
-		[]byte{isc_dpb_version1},
-		[]byte{isc_dpb_set_db_charset, byte(len(encode))}, encode,
-		[]byte{isc_dpb_lc_ctype, byte(len(encode))}, encode,
-		[]byte{isc_dpb_user_name, byte(len(userBytes))}, userBytes,
-		[]byte{isc_dpb_password, byte(len(passwordBytes))}, passwordBytes,
-		[]byte{isc_dpb_sql_role_name, byte(len(roleBytes))}, roleBytes,
-		[]byte{isc_dpb_sql_dialect, 4}, int32_to_bytes(p.sqlDialect),
-		[]byte{isc_dpb_force_write, 4}, bint32_to_bytes(1),
-		[]byte{isc_dpb_overwrite, 4}, bint32_to_bytes(1),
-		[]byte{isc_dpb_page_size, 4}, int32_to_bytes(page_size),
-		[]byte{isc_dpb_utf8_filename, 1, 1},
+		{isc_dpb_version1},
+		{isc_dpb_set_db_charset, byte(len(encode))}, encode,
+		{isc_dpb_lc_ctype, byte(len(encode))}, encode,
+		{isc_dpb_user_name, byte(len(userBytes))}, userBytes,
+		{isc_dpb_password, byte(len(passwordBytes))}, passwordBytes,
+		{isc_dpb_sql_role_name, byte(len(roleBytes))}, roleBytes,
+		{isc_dpb_sql_dialect, 4}, int32_to_bytes(p.sqlDialect),
+		{isc_dpb_force_write, 4}, bint32_to_bytes(1),
+		{isc_dpb_overwrite, 4}, bint32_to_bytes(1),
 	}, nil)
+	if p.pageSize > 0 {
+		dpb = append(dpb, isc_dpb_page_size, 4)
+		dpb = append(dpb, int32_to_bytes(p.pageSize)...)
+	}
+	dpb = append(dpb, isc_dpb_utf8_filename, 1, 1)
 
 	dpb = p.appendAuthAndTimezone(dpb)
-	dpb = p.appendInlineBlobDPB(dpb)
-
-	p.packInt(op_create)
-	p.packInt(0) // Database Object ID
-	p.packString(dbName)
-	p.packBytes(dpb)
-	_, err := p.sendPackets()
-	return err
+	return p.appendInlineBlobDPB(dpb)
 }
 
 // defaultClientVersionValue caches the fallback client version string.
@@ -1438,6 +1497,48 @@ func (p *wireProtocol) opFreeStatement(stmtHandle int32, mode int32) error {
 	return err
 }
 
+// deferFreeStatement queues an op_free_statement to be written in front of
+// the next request (see sendPackets), the way fbclient and Jaybird send a
+// cursor close: the server's response to it is skipped when the next
+// response is read. Only for connections on a lazy-send port type.
+func (p *wireProtocol) deferFreeStatement(stmtHandle int32, mode int32) {
+	p.debugPrint("deferFreeStatement:<%v>", stmtHandle)
+	var pkt [12]byte
+	for i, v := range []int32{op_free_statement, stmtHandle, mode} {
+		pkt[i*4] = byte(v >> 24)
+		pkt[i*4+1] = byte(v >> 16)
+		pkt[i*4+2] = byte(v >> 8)
+		pkt[i*4+3] = byte(v)
+	}
+	p.pendingFree = append(p.pendingFree, pkt[:]...)
+	p.pendingFreeCount++
+}
+
+// dropPendingFree forgets queued frees: for a connection that is being
+// closed without another request, the server releases the statements at
+// detach.
+func (p *wireProtocol) dropPendingFree() {
+	p.pendingFree = nil
+	p.pendingFreeCount = 0
+}
+
+// skipDeferredResponses consumes the op_response packets owed for deferred
+// requests that precede the response a reader expects. b is the operation
+// code just read; the returned code is the first one that isn't owed.
+func (p *wireProtocol) skipDeferredResponses(b []byte) ([]byte, error) {
+	var err error
+	for bytes_to_bint32(b) == op_response && p.lazyResponseCount > 0 {
+		p.lazyResponseCount--
+		if _, _, _, err = p._parse_op_response(); err != nil {
+			return b, err
+		}
+		if b, err = p.recvPackets(4); err != nil {
+			return b, err
+		}
+	}
+	return b, nil
+}
+
 func (p *wireProtocol) opPrepareStatement(stmtHandle int32, transHandle int32, query string) error {
 	p.debugPrint("opPrepareStatement():%d,%d,%v", transHandle, stmtHandle, query)
 
@@ -1448,7 +1549,7 @@ func (p *wireProtocol) opPrepareStatement(stmtHandle int32, transHandle int32, q
 	p.packInt(op_prepare_statement)
 	p.packInt(transHandle)
 	p.packInt(stmtHandle)
-	p.packInt(p.sqlDialect) // statement dialect (DSN sql_dialect; 1 or 3)
+	p.packInt(p.sqlDialect) // statement dialect (DSN option sql_dialect; 1 or 3)
 	p.packString(query)
 	p.packBytes(bs)
 	p.packInt(int32(BUFFER_LEN))
@@ -1482,9 +1583,7 @@ func (p *wireProtocol) opExecute(stmt *firebirdsqlStmt, params []driver.Value, i
 	} else {
 		blr, values, err := p.paramsToBlr(transHandle, params, p.protocolVersion, inputXsqlda)
 		if err != nil {
-			// Nothing was sent, but the op_execute header is already in the
-			// packet buffer — drop it or the next statement desyncs the wire.
-			p.buf = p.buf[:0]
+			p.buf = p.buf[:0] // drop the packed op_execute2 header (see opExecute)
 			return err
 		}
 		p.packBytes(blr)
@@ -1512,7 +1611,9 @@ func (p *wireProtocol) opExecute2(stmt *firebirdsqlStmt, params []driver.Value, 
 	} else {
 		blr, values, err := p.paramsToBlr(transHandle, params, p.protocolVersion, inputXsqlda)
 		if err != nil {
-			p.buf = p.buf[:0] // drop the packed op_execute2 header (see opExecute)
+			// Nothing was sent, but the op_execute header is already in the
+			// packet buffer — drop it or the next statement desyncs the wire.
+			p.buf = p.buf[:0]
 			return err
 		}
 		p.packBytes(blr)
@@ -1622,6 +1723,9 @@ func (p *wireProtocol) opSliceResponse(meta *ArrayMeta) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+	}
+	if b, err = p.skipDeferredResponses(b); err != nil {
+		return nil, err
 	}
 	switch bytes_to_bint32(b) {
 	case op_slice_response:
@@ -1975,12 +2079,17 @@ var abandonReadTimeout = 10 * time.Second
 // silent wire must not hang the caller: cancelAndDrain's cancel-ack read, and the teardown
 // reads (statement/cursor close, autocommit commit-retaining, rollback, detach) that
 // database/sql's awaitDone goroutine can reach automatically when a QueryContext deadline
-// fires mid-fetch. The deadline is cleared on return regardless; on timeout the caller
-// discards the connection rather than reusing it.
+// fires mid-fetch. The deadline is cleared on return regardless. On timeout the response
+// is still owed on the wire, so the protocol is marked desynced: IsValid then reports the
+// connection as unusable and database/sql discards it instead of pooling it.
 func (p *wireProtocol) opResponseTimeout(d time.Duration) (int32, []byte, []byte, error) {
 	p.conn.SetDeadline(time.Now().Add(d))
 	defer p.conn.SetDeadline(time.Time{})
-	return p.opResponse()
+	h, oid, buf, err := p.opResponse()
+	if errors.Is(err, os.ErrDeadlineExceeded) {
+		p.desynced = true
+	}
+	return h, oid, buf, err
 }
 
 func (p *wireProtocol) opSqlResponse(xsqlda []xSQLVAR) ([]driver.Value, error) {
@@ -2231,6 +2340,9 @@ func (p *wireProtocol) opConnectRequest() error {
 	p.packInt(p.dbHandle)
 	p.packInt(partner_identification)
 	_, err := p.sendPackets()
+	if err == nil {
+		err = p.conn.Flush()
+	}
 	return err
 }
 
@@ -2243,6 +2355,9 @@ func (p *wireProtocol) opQueEvents(auxHandle int32, epb []byte, eventId int32) e
 	p.packInt(argument_to_ast_routine)
 	p.packInt(eventId)
 	_, err := p.sendPackets()
+	if err == nil {
+		err = p.conn.Flush()
+	}
 	return err
 }
 
@@ -2288,7 +2403,7 @@ func (p *wireProtocol) opServiceAttach() error {
 		specificAuthData := []byte(hex.EncodeToString(p.authData))
 		spb = bytes.Join([][]byte{
 			spb,
-			{isc_dpb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)
+			{isc_spb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)
 	}
 	p.packBytes(spb)
 	_, err := p.sendPackets()

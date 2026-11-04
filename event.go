@@ -26,175 +26,150 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package firebirdsql
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"net"
 	"sync"
 	"sync/atomic"
 )
 
-// Errors
 var (
 	ErrAlreadySubscribe = errors.New("already subscribe")
 	ErrFbEventClosed    = errors.New("fbevent already closed")
 )
 
-// SQLs
-const (
-	sqlPostEvent = `execute block as begin post_event '%s'; end`
-)
+const sqlPostEvent = `execute block as begin post_event '%s'; end`
 
-// FbEvent allows you to subscribe to events, also stores subscribers.
-// It is possible to send events to the database.
-type FbEvent struct {
-	mu               sync.RWMutex
-	dsn              *firebirdDsn
-	conn             *sql.DB
-	done             chan struct{}
-	closed           int32
-	closer           sync.Once
-	chDoneSubscriber chan *Subscription
-	subscribers      []*Subscription
-}
-
-// Event stores event data: the amount since the last time the event was received and id
 type Event struct {
 	Name     string
 	Count    int
 	ID       int32
 	RemoteID int32
 }
-
-// EventHandler callback function type
 type EventHandler func(e Event)
+type FbEvent struct {
+	mu          sync.RWMutex
+	dsn         *firebirdDsn
+	conn        *sql.DB
+	workers     sync.WaitGroup
+	ctx         context.Context
+	cancel      context.CancelFunc
+	pending     sync.WaitGroup
+	closed      int32
+	closer      sync.Once
+	closeErr    error
+	subscribers []*Subscription
+	dial        func(context.Context, string, string) (net.Conn, error)
+	// Package-private construction boundary also permits deterministic lifecycle tests.
+	prepare func(*eventScope, *firebirdDsn, []string, EventHandler, chan Event) (*Subscription, error)
+}
 
-// NewFBEvent returns FbEvent for event subscription
 func NewFBEvent(dsns string) (*FbEvent, error) {
+	dsn, err := parseDSN(dsns)
+	if err != nil {
+		return nil, err
+	}
 	conn, err := sql.Open("firebirdsql", dsns)
 	if err != nil {
 		return nil, err
 	}
-	// can ignore error, would have been thrown by sql.Open
-	dsn, _ := parseDSN(dsns)
-	fbEvent := &FbEvent{
-		dsn:              dsn,
-		conn:             conn,
-		done:             make(chan struct{}),
-		chDoneSubscriber: make(chan *Subscription),
-	}
-	go fbEvent.run()
-	return fbEvent, nil
+	ctx, cancel := context.WithCancel(context.Background())
+	return &FbEvent{dsn: dsn, conn: conn, ctx: ctx, cancel: cancel, dial: (&net.Dialer{}).DialContext, prepare: newSubscription}, nil
 }
-
-// PostEvent posts an event to the database
 func (e *FbEvent) PostEvent(name string) error {
 	_, err := e.conn.Exec(fmt.Sprintf(sqlPostEvent, name))
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
-
-func (e *FbEvent) newSubscriber(events []string, cb EventHandler, chEvent chan Event) (*Subscription, error) {
-	subscriber, err := newSubscription(e.dsn, events, cb, chEvent, e.chDoneSubscriber)
+func (e *FbEvent) newSubscriber(events []string, cb EventHandler, ch chan Event) (*Subscription, error) {
+	e.mu.Lock()
+	if e.IsClosed() {
+		e.mu.Unlock()
+		return nil, ErrFbEventClosed
+	}
+	e.pending.Add(1)
+	e.mu.Unlock()
+	defer e.pending.Done()
+	scope := newEventScope(e.ctx, e.dial)
+	s, err := e.prepare(scope, e.dsn, events, cb, ch)
 	if err != nil {
+		scope.close()
+		if e.ctx.Err() != nil {
+			return nil, e.ctx.Err()
+		}
 		return nil, err
 	}
 	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.subscribers = append(e.subscribers, subscriber)
-	return subscriber, nil
+	if e.IsClosed() {
+		e.mu.Unlock()
+		scope.close()
+		return nil, ErrFbEventClosed
+	}
+	e.subscribers = append(e.subscribers, s)
+	e.workers.Add(1)
+	s.owner = e
+	s.onDone = e.shutdownSubscriber
+	s.workerDone = e.workers.Done
+	s.start()
+	e.mu.Unlock()
+	return s, nil
 }
-
-// Subscribers returns slice of all subscribers
-func (e *FbEvent) Subscribers() []*Subscription {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	return e.subscribers[:]
-}
-
-// Count returns the number of subscribers
-func (e *FbEvent) Count() int {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	return len(e.subscribers)
-}
-
-// Subscribe subscribe to events using the callback function
 func (e *FbEvent) Subscribe(events []string, cb EventHandler) (*Subscription, error) {
 	return e.newSubscriber(events, cb, nil)
 }
-
-// SubscribeChan subscribe to events using the channel
-func (e *FbEvent) SubscribeChan(events []string, chEvent chan Event) (*Subscription, error) {
-	return e.newSubscriber(events, nil, chEvent)
+func (e *FbEvent) SubscribeChan(events []string, ch chan Event) (*Subscription, error) {
+	return e.newSubscriber(events, nil, ch)
 }
-
-func (e *FbEvent) run() {
-	for {
-		select {
-		case <-e.done:
-			return
-		case subscriber := <-e.chDoneSubscriber:
-			e.shutdownSubscriber(subscriber)
-		}
-	}
+func (e *FbEvent) Subscribers() []*Subscription {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return append([]*Subscription(nil), e.subscribers...)
 }
-
-func (e *FbEvent) shutdownSubscriber(subscriber *Subscription) {
+func (e *FbEvent) Count() int { e.mu.RLock(); defer e.mu.RUnlock(); return len(e.subscribers) }
+func (e *FbEvent) shutdownSubscriber(s *Subscription) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	for i := range e.subscribers {
-		if e.subscribers[i] == subscriber {
-			last := len(e.subscribers) - 1
-			e.subscribers[i] = e.subscribers[last]
-			e.subscribers[last] = nil
-			e.subscribers = e.subscribers[:last]
+	for i, v := range e.subscribers {
+		if v == s {
+			e.subscribers = append(e.subscribers[:i], e.subscribers[i+1:]...)
 			return
 		}
 	}
 }
+func (e *FbEvent) IsClosed() bool { return atomic.LoadInt32(&e.closed) == 1 }
 
-// IsClosed returns a close flag
-func (e *FbEvent) IsClosed() bool {
-	return atomic.LoadInt32(&e.closed) == 1
-}
-
-// Close closes FbEvent and all subscribers
+// Close cancels construction and joins driver-owned workers, including pending
+// error deliveries. Cleanup runs once; repeated public calls return ErrFbEventClosed.
 func (e *FbEvent) Close() error {
-	if e.IsClosed() {
-		return ErrFbEventClosed
-	}
-	return e.doClose(nil)
-}
-
-func (e *FbEvent) closeWithError(err error) error {
-	if e.IsClosed() {
-		return ErrFbEventClosed
-	}
-	return e.doClose(err)
-}
-
-func (e *FbEvent) doClose(err error) (errResult error) {
-	atomic.StoreInt32(&e.closed, 1)
+	first := false
 	e.closer.Do(func() {
-		connErr := e.conn.Close()
+		first = true
 		e.mu.Lock()
-		errs := make([]error, len(e.subscribers)+1)
-		errs[0] = connErr
-		wg := &sync.WaitGroup{}
-		wg.Add(len(e.subscribers))
-		for i := range e.subscribers {
-			go func(idx int, subscriber *Subscription) {
-				defer wg.Done()
-				errs[idx+1] = subscriber.unsubscribeNoNotify()
-			}(i, e.subscribers[i])
-		}
-		e.subscribers = nil
+		atomic.StoreInt32(&e.closed, 1)
+		subs := append([]*Subscription(nil), e.subscribers...)
 		e.mu.Unlock()
-		wg.Wait()
-		errResult = errors.Join(errs...)
-		close(e.done)
+		for _, s := range subs {
+			s.cancelNotices()
+			s.stop(nil)
+		}
+		e.cancel()
+		e.pending.Wait()
+		for _, s := range subs {
+			if err := s.finishClose(); err != nil {
+				e.recordCloseError(err)
+			}
+		}
+		e.workers.Wait()
+		if err := e.conn.Close(); err != nil {
+			e.recordCloseError(err)
+		}
 	})
-	return
+	if !first {
+		return ErrFbEventClosed
+	}
+	return e.closeErr
+}
+func (e *FbEvent) recordCloseError(err error) {
+	e.closeErr = errors.Join(e.closeErr, err)
 }

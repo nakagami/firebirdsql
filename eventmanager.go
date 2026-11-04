@@ -34,15 +34,18 @@ type eventManager struct {
 	wp         *wireProtocol
 	handle     int32
 	destructor sync.Once
+	scope      *eventScope
+	done       chan struct{}
 }
 
-func newEventManager(address string, auxHandle int32) (*eventManager, error) {
-	wp, err := newWireProtocol(address, "", "UTF8")
+func newEventManager(scope *eventScope, address string, auxHandle int32) (*eventManager, error) {
+	wp, err := scope.wire(address, "", "UTF8")
 	if err != nil {
 		return nil, err
 	}
 	newManager := &eventManager{
-		wp:     wp,
+		wp:    wp,
+		scope: scope, done: make(chan struct{}),
 		handle: auxHandle,
 	}
 	return newManager, nil
@@ -51,6 +54,7 @@ func newEventManager(address string, auxHandle int32) (*eventManager, error) {
 func (e *eventManager) wait(event *remoteEvent, eventCounts chan<- Event) <-chan error {
 	chErr := make(chan error, 1)
 	go func() {
+		defer close(e.done)
 		for {
 			data, err := e.wp.recvPackets(4)
 			if err != nil {
@@ -100,7 +104,11 @@ func (e *eventManager) wait(event *remoteEvent, eventCounts chan<- Event) <-chan
 					return
 				}
 				for _, count := range counts {
-					eventCounts <- count
+					select {
+					case eventCounts <- count:
+					case <-e.scope.ctx.Done():
+						return
+					}
 				}
 			default:
 				e.wp.debugPrint("unknown operation:%v:%v", op, data)

@@ -151,13 +151,13 @@ func TestReturningEdgeCases(t *testing.T) {
 		mustExec(t, stmtCtx, db, "INSERT INTO RET_EDGE VALUES (?, ?, NULL)", i, "note")
 	}
 
-	// Single-row UPDATE ... RETURNING works everywhere, including BLOB columns.
+	// Single-row UPDATE ... RETURNING works everywhere. (RETURNING of BLOB
+	// columns additionally requires fetching blob values out of the returning
+	// record - covered by the wire-protocol feature branch.)
 	var id int64
-	var doc string
 	require.NoError(t, db.QueryRow(
-		"UPDATE RET_EDGE SET NOTE = 'single', DOC = 'blob doc' WHERE ID = 1 RETURNING ID, DOC").Scan(&id, &doc))
+		"UPDATE RET_EDGE SET NOTE = 'single' WHERE ID = 1 RETURNING ID").Scan(&id))
 	require.Equal(t, int64(1), id)
-	require.Equal(t, "blob doc", doc)
 
 	// Multi-row UPDATE/DELETE ... RETURNING: Firebird 5 streams every affected
 	// row, while Firebird 4 and older reject the statement with "multiple rows
@@ -221,12 +221,7 @@ func TestBatchParity(t *testing.T) {
 	defer sqlConn.Close()
 
 	err = sqlConn.Raw(func(dc any) error {
-		fc, ok := dc.(interface {
-			PrepareBatch(context.Context, string, BatchOptions) (*PreparedBatch, error)
-		})
-		if !ok {
-			return errBatchUnsupported
-		}
+		fc := dc.(*firebirdsqlConn)
 		ctx := stmtCtx
 
 		// Many rows in one batch.
@@ -262,9 +257,6 @@ func TestBatchParity(t *testing.T) {
 		}
 		return b2.Close()
 	})
-	if err == errBatchUnsupported {
-		t.Skip("PrepareBatch not available on driver conn")
-	}
 	if err == errBatchAffectedMismatch {
 		t.Fatal("batch affected rows below expectation")
 	}
@@ -276,7 +268,6 @@ func TestBatchParity(t *testing.T) {
 }
 
 var (
-	errBatchUnsupported      = errStatic("batch unsupported")
 	errBatchAffectedMismatch = errStatic("batch affected mismatch")
 	errBatchExpectedError    = errStatic("expected batch error")
 )

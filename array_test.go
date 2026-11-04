@@ -1,6 +1,7 @@
 package firebirdsql
 
 import (
+	"math/big"
 	"testing"
 	"time"
 
@@ -84,6 +85,10 @@ func TestArrayElementStride(t *testing.T) {
 		{SQL_TYPE_TIMESTAMP, 8, 8, 8, 8, false},
 		{SQL_TYPE_TEXT, 4, 4, 4, 4, false},
 		{SQL_TYPE_VARYING, 10, 12, 42, 40, true},
+		{SQL_TYPE_DEC64, 8, 8, 8, 8, false},
+		{SQL_TYPE_DEC128, 16, 16, 16, 16, false},
+		{SQL_TYPE_INT128, 16, 16, 16, 16, false},
+		{SQL_TYPE_DEC_FIXED, 16, 16, 16, 16, false},
 	}
 	for _, c := range cases {
 		meta := &ArrayMeta{TypeID: c.typeID, Length: c.length, FieldBytes: c.length}
@@ -277,3 +282,83 @@ func TestTimezoneElementUnsupported(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "not supported")
 }
+
+func TestGenerateSDLInt128(t *testing.T) {
+	meta := &ArrayMeta{
+		TableName: "T", FieldName: "I128",
+		TypeID: SQL_TYPE_INT128, BlrTypeID: blr_type_int128, Scale: -2, Length: 16, FieldBytes: 16,
+		Dimensions: []ArrayDimension{{LowerBound: 1, Length: 3}},
+	}
+	sdl := generateSDL(meta, meta.Dimensions, false)
+	// version1, struct, 1, blr_int128, scale -2 (byte 254), relation "T", field "I128",
+	// do1 dim0 (lower=1), tiny bound 3, element, 1, scalar, 0, 1 dim, variable 0, eoc
+	want := []byte{
+		1, 6, 1, blr_type_int128, 254,
+		2, 1, 'T',
+		4, 4, 'I', '1', '2', '8',
+		35, 0, 9, 3,
+		36, 1, 8, 0, 1, 7, 0,
+		255,
+	}
+	require.Equal(t, want, sdl)
+}
+
+func TestDecodeSliceElementsINT128(t *testing.T) {
+	p := &wireProtocol{charset: "UTF8"}
+	meta := &ArrayMeta{TypeID: SQL_TYPE_INT128, BlrTypeID: blr_type_int128, Length: 16, FieldBytes: 16}
+	// Two 16-byte elements: 12345, -1
+	raw1 := int128Bytes(big.NewInt(12345))
+	raw2 := int128Bytes(big.NewInt(-1))
+	data := append(raw1, raw2...)
+	decoded, err := p.decodeSliceElements(meta, data)
+	require.NoError(t, err)
+	require.Equal(t, []any{"12345", "-1"}, decoded)
+}
+
+func TestDecodeSliceElementsDEC64(t *testing.T) {
+	p := &wireProtocol{charset: "UTF8"}
+	meta := &ArrayMeta{TypeID: SQL_TYPE_DEC64, BlrTypeID: blr_type_dec64, Length: 8, FieldBytes: 8}
+	// Two 8-byte elements: NaN, Infinity
+	raw1 := []byte{0x7C, 0, 0, 0, 0, 0, 0, 0}
+	raw2 := []byte{0x78, 0, 0, 0, 0, 0, 0, 0}
+	data := append(raw1, raw2...)
+	decoded, err := p.decodeSliceElements(meta, data)
+	require.NoError(t, err)
+	require.Equal(t, []any{"NaN", "Infinity"}, decoded)
+}
+
+func TestDecodeSliceElementsDEC128(t *testing.T) {
+	p := &wireProtocol{charset: "UTF8"}
+	meta := &ArrayMeta{TypeID: SQL_TYPE_DEC128, BlrTypeID: blr_type_dec128, Length: 16, FieldBytes: 16}
+	// Two 16-byte elements: NaN, Infinity
+	raw1 := append([]byte{0x7C}, make([]byte, 15)...)
+	raw2 := append([]byte{0x78}, make([]byte, 15)...)
+	data := append(raw1, raw2...)
+	decoded, err := p.decodeSliceElements(meta, data)
+	require.NoError(t, err)
+	require.Equal(t, []any{"NaN", "Infinity"}, decoded)
+}
+
+func TestEncodeDecodeSliceINT128RoundTrip(t *testing.T) {
+	p := &wireProtocol{charset: "UTF8"}
+	meta := &ArrayMeta{TypeID: SQL_TYPE_INT128, BlrTypeID: blr_type_int128, Length: 16, FieldBytes: 16}
+	elements := []any{big.NewInt(1234567890123456), "-9876543210987654", int64(42)}
+	data, err := p.encodeSliceElements(meta, elements)
+	require.NoError(t, err)
+	require.Len(t, data, 48) // 3 elements × 16 bytes
+	decoded, err := p.decodeSliceElements(meta, data)
+	require.NoError(t, err)
+	require.Equal(t, []any{"1234567890123456", "-9876543210987654", "42"}, decoded)
+
+	// Test scaled INT128
+	scaledMeta := &ArrayMeta{TypeID: SQL_TYPE_INT128, BlrTypeID: blr_type_int128, Scale: -2, Length: 16, FieldBytes: 16}
+	scaledElements := []any{"123.45", "-0.99", int64(10)}
+	data, err = p.encodeSliceElements(scaledMeta, scaledElements)
+	require.NoError(t, err)
+	require.Len(t, data, 48)
+	decoded, err = p.decodeSliceElements(scaledMeta, data)
+	require.NoError(t, err)
+	require.Equal(t, []any{"123.45", "-0.99", "10.00"}, decoded)
+}
+
+

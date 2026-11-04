@@ -23,12 +23,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 package firebirdsql
 
+import "context"
+
 type firebirdsqlTx struct {
 	fc             *firebirdsqlConn
 	isolationLevel int
 	isAutocommit   bool
 	transHandle    int32
 	needBegin      bool
+	// ctx is the BeginTx context. database/sql documents it as used until the
+	// transaction is committed or rolled back, and Tx.Commit takes no context
+	// of its own, so Commit is bounded by it. Nil for the connection's
+	// autocommit transaction.
+	ctx context.Context
 }
 
 func tpbForIsolationLevel(isolationLevel int) ([]byte, error) {
@@ -110,32 +117,66 @@ func (tx *firebirdsqlTx) begin() (err error) {
 	return
 }
 
-func (tx *firebirdsqlTx) commitRetainging() (err error) {
-	err = tx.fc.wp.opCommitRetaining(tx.transHandle)
-	if err != nil {
-		return
+// commitRetaining commits the autocommit transaction.
+//
+// On the statement hot path (exec, ExecImmediate, batch) the caller passes its
+// context: the commit response carries the statement's server-side work, so a
+// fixed cap would fail a server that is merely slow (#288). The read is bounded by
+// that context alone, and unbounded when it has no deadline (the v0.9.19
+// behaviour). A context that has already ended falls back to the teardown bound,
+// so the statement's work is still committed rather than left pending on a
+// pooled connection.
+//
+// The teardown caller (freeStatement) passes nil and keeps the fixed
+// abandonReadTimeout bound, so a silent wire cannot hang rows.Close/stmt.Close.
+func (tx *firebirdsqlTx) commitRetaining(ctx context.Context) (err error) {
+	if ctx != nil && ctx.Err() == nil {
+		err = tx.fc.wp.withContextDeadline(ctx, func() error {
+			if err := tx.fc.wp.opCommitRetaining(tx.transHandle); err != nil {
+				return err
+			}
+			_, _, _, err := tx.fc.wp.opResponse()
+			return err
+		})
+	} else {
+		err = tx.fc.wp.opCommitRetaining(tx.transHandle)
+		if err != nil {
+			return
+		}
+		_, _, _, err = tx.fc.wp.opResponseTimeout(abandonReadTimeout)
 	}
-	// Teardown read: bounded so the autocommit commit-retaining cannot hang a silent-wire
-	// close (it runs in freeStatement's teardown path as well as the exec hot path).
-	_, _, _, err = tx.fc.wp.opResponseTimeout(abandonReadTimeout)
 	tx.fc.wp.clearInlineBlobCache(tx.transHandle)
 	tx.isAutocommit = tx.fc.isAutocommit
 	return
 }
 
+// Commit is bounded by the BeginTx context: if it ends before the server answers,
+// Commit returns the context error wrapped with driver.ErrBadConn and the
+// connection is discarded. As with any connection lost mid-commit, the outcome of
+// the commit on the server is then unknown.
 func (tx *firebirdsqlTx) Commit() (err error) {
-	err = tx.fc.wp.opCommit(tx.transHandle)
-	if err != nil {
-		return err
+	ctx := tx.ctx
+	tx.ctx = nil
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	_, _, _, err = tx.fc.wp.opResponse()
+	err = tx.fc.wp.withContextDeadline(ctx, func() error {
+		if err := tx.fc.wp.opCommit(tx.transHandle); err != nil {
+			return err
+		}
+		_, _, _, err := tx.fc.wp.opResponse()
+		return err
+	})
 	tx.fc.wp.clearInlineBlobCache(tx.transHandle)
 	tx.isAutocommit = tx.fc.isAutocommit
 	tx.needBegin = true
 	return
 }
 
+// Rollback keeps its fixed teardown bound instead of the BeginTx context:
+// database/sql rolls back precisely when that context has ended.
 func (tx *firebirdsqlTx) Rollback() (err error) {
+	tx.ctx = nil
 	err = tx.fc.wp.opRollback(tx.transHandle)
 	if err != nil {
 		return err

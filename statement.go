@@ -48,11 +48,21 @@ func (stmt *firebirdsqlStmt) freeStatement(mode int32) error {
 		stmt.activeBatch.releaseBeforeFree()
 		stmt.activeBatch = nil
 	}
+	lazy := (stmt.fc.wp.acceptType & ptype_MASK) == ptype_lazy_send
+	if lazy && mode == DSQL_close {
+		// a cursor close rides with the next request (fbclient, Jaybird);
+		// a drop is sent now, so the statement's metadata locks go at once
+		stmt.fc.wp.deferFreeStatement(stmt.stmtHandle, mode)
+		if stmt.fc.tx.isAutocommit {
+			stmt.fc.tx.commitRetaining(nil) // teardown: fixed bound
+		}
+		return nil
+	}
 	err := stmt.fc.wp.opFreeStatement(stmt.stmtHandle, mode)
 	if err != nil {
 		return err
 	}
-	if (stmt.fc.wp.acceptType & ptype_MASK) == ptype_lazy_send {
+	if lazy {
 		stmt.fc.wp.lazyResponseCount++
 	} else {
 		// Teardown read: bound it so a silent wire can't hang rows.Close()/stmt.Close()
@@ -60,7 +70,7 @@ func (stmt *firebirdsqlStmt) freeStatement(mode int32) error {
 		_, _, _, err = stmt.fc.wp.opResponseTimeout(abandonReadTimeout)
 	}
 	if stmt.fc.tx.isAutocommit {
-		stmt.fc.tx.commitRetainging()
+		stmt.fc.tx.commitRetaining(nil) // teardown: fixed bound
 	}
 	return err
 }
@@ -111,6 +121,7 @@ func (stmt *firebirdsqlStmt) withCancelWatcher(ctx context.Context, fn func() er
 		select {
 		case <-ctx.Done():
 			stmt.fc.wp.opCancel(fb_cancel_raise)
+			stmt.hardDropAfterGrace(stop)
 		case <-stop:
 		}
 		close(watcherDone)
@@ -119,6 +130,32 @@ func (stmt *firebirdsqlStmt) withCancelWatcher(ctx context.Context, fn func() er
 	close(stop)
 	<-watcherDone // join: the watcher (and any in-flight op_cancel) has finished past here
 	return err
+}
+
+// hardDropAfterGrace is the cancel_hard_drop extension of the watcher: when
+// the context is canceled, op_cancel raise has been sent but the wrapped read
+// still has not returned after cancelHardDropGrace, close the socket. The
+// parked read fails with a network error, database/sql flags the pooled
+// connection bad, and the application rebuilds — instead of waiting for a
+// server-side wait (a lock wait inside a running SP) that FB will not
+// interrupt via op_cancel. When fn returns first, the stop channel fires and
+// the socket is never touched; the drop can also land in the window where fn
+// is completing — harmless, the connection is discarded either way once its
+// context timed out. No-op unless the DSN opted in.
+func (stmt *firebirdsqlStmt) hardDropAfterGrace(stop <-chan struct{}) {
+	wp := stmt.fc.wp
+	if !wp.cancelHardDrop {
+		return
+	}
+	timer := time.NewTimer(wp.cancelHardDropGrace)
+	defer timer.Stop()
+	select {
+	case <-stop:
+	case <-timer.C:
+		wp.cancelHardDropOnce.Do(func() {
+			_ = wp.conn.Close()
+		})
+	}
 }
 
 func contextErrOrDeadlineExceeded(ctx context.Context) error {
@@ -175,19 +212,30 @@ func (stmt *firebirdsqlStmt) ensureInputXsqlda(args []driver.Value) error {
 	return resolveArrayMeta(stmt.fc, stmt.inputXsqlda)
 }
 
+// prepareExecute runs the round-trips that precede op_execute (lazy begin,
+// re-prepare of a freed handle, bind metadata) bounded by ctx. It returns the
+// statement to execute, which is a new one when the handle had been freed.
+func (stmt *firebirdsqlStmt) prepareExecute(ctx context.Context, args []driver.Value) (*firebirdsqlStmt, error) {
+	err := stmt.fc.wp.withContextDeadline(ctx, func() error {
+		if stmt.fc.tx.needBegin {
+			if err := stmt.fc.tx.begin(); err != nil {
+				return err
+			}
+		}
+		if stmt.stmtHandle == -1 {
+			s, err := newFirebirdsqlStmt(stmt.fc, stmt.queryString)
+			if err != nil {
+				return err
+			}
+			stmt = s
+		}
+		return stmt.ensureInputXsqlda(args)
+	})
+	return stmt, err
+}
+
 func (stmt *firebirdsqlStmt) exec(ctx context.Context, args []driver.Value) (result driver.Result, err error) {
-	if stmt.fc.tx.needBegin {
-		if err = stmt.fc.tx.begin(); err != nil {
-			return
-		}
-	}
-	if stmt.stmtHandle == -1 {
-		stmt, err = newFirebirdsqlStmt(stmt.fc, stmt.queryString)
-		if err != nil {
-			return
-		}
-	}
-	if err = stmt.ensureInputXsqlda(args); err != nil {
+	if stmt, err = stmt.prepareExecute(ctx, args); err != nil {
 		return
 	}
 	err = stmt.fc.wp.opExecute(stmt, args, stmt.inputXsqlda)
@@ -243,23 +291,21 @@ func (stmt *firebirdsqlStmt) exec(ctx context.Context, args []driver.Value) (res
 		return
 	}
 
+	records, countErr := decodeStatementRecords(buf)
 	var rowcount int64
-	if len(buf) >= 32 {
-		if stmt.stmtType == isc_info_sql_stmt_select ||
-			stmt.stmtType == isc_info_sql_stmt_select_for_upd {
-			rowcount = int64(bytes_to_int32(buf[20:24]))
-		} else {
-			rowcount = int64(bytes_to_int32(buf[27:31]) + bytes_to_int32(buf[6:10]) + bytes_to_int32(buf[13:17]))
-		}
+	if countErr == nil {
+		rowcount, countErr = records.rowsAffected(stmt.stmtType)
+	}
+	// Execution already succeeded. Invalid count metadata belongs to RowsAffected,
+	// never to Exec's error (and must not prevent the existing autocommit).
+	if countErr != nil {
+		result = &firebirdsqlResultCountError{err: countErr}
 	} else {
-		rowcount = 0
+		result = &firebirdsqlResult{affectedRows: rowcount}
 	}
 
-	result = &firebirdsqlResult{
-		affectedRows: rowcount,
-	}
 	if stmt.fc.tx.isAutocommit {
-		if cerr := stmt.fc.tx.commitRetainging(); cerr != nil {
+		if cerr := stmt.fc.tx.commitRetaining(ctx); cerr != nil {
 			return result, cerr
 		}
 	}
@@ -275,20 +321,7 @@ func (stmt *firebirdsqlStmt) query(ctx context.Context, args []driver.Value) (dr
 	var err error
 	var result []driver.Value
 
-	if stmt.fc.tx.needBegin {
-		if err = stmt.fc.tx.begin(); err != nil {
-			return nil, err
-		}
-	}
-
-	if stmt.stmtHandle == -1 {
-		stmt, err = newFirebirdsqlStmt(stmt.fc, stmt.queryString)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if err = stmt.ensureInputXsqlda(args); err != nil {
+	if stmt, err = stmt.prepareExecute(ctx, args); err != nil {
 		return nil, err
 	}
 

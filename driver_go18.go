@@ -29,9 +29,7 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
-	"os"
 	"sort"
-	"time"
 )
 
 func flattenNamedValues(named []driver.NamedValue) []driver.Value {
@@ -54,29 +52,47 @@ func (stmt *firebirdsqlStmt) QueryContext(ctx context.Context, namedargs []drive
 }
 
 func (fc *firebirdsqlConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
+	isolationLevel, err := txIsolationLevel(opts)
+	if err != nil {
+		return nil, err
+	}
+	var tx driver.Tx
+	err = fc.wp.withContextDeadline(ctx, func() error {
+		var err error
+		tx, err = fc.begin(isolationLevel)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	tx.(*firebirdsqlTx).ctx = ctx // bounds Commit (see firebirdsqlTx.Commit)
+	return tx, nil
+}
+
+func txIsolationLevel(opts driver.TxOptions) (int, error) {
 	if opts.ReadOnly {
 		// Preserve existing behaviour: readonly always uses READ COMMITTED RO.
 		// The only extra knob we currently support here is NOWAIT.
 		if (sql.IsolationLevel)(opts.Isolation) == LevelReadCommittedNoWait {
-			return fc.begin(ISOLATION_LEVEL_READ_COMMITED_RO_NOWAIT)
+			return ISOLATION_LEVEL_READ_COMMITED_RO_NOWAIT, nil
 		}
-		return fc.begin(ISOLATION_LEVEL_READ_COMMITED_RO)
+		return ISOLATION_LEVEL_READ_COMMITED_RO, nil
 	}
 
 	switch (sql.IsolationLevel)(opts.Isolation) {
 	case sql.LevelDefault:
-		return fc.begin(ISOLATION_LEVEL_READ_COMMITED)
+		return ISOLATION_LEVEL_READ_COMMITED, nil
 	case sql.LevelReadCommitted:
-		return fc.begin(ISOLATION_LEVEL_READ_COMMITED)
+		return ISOLATION_LEVEL_READ_COMMITED, nil
 	case LevelReadCommittedNoWait:
-		return fc.begin(ISOLATION_LEVEL_READ_COMMITED_NOWAIT)
+		return ISOLATION_LEVEL_READ_COMMITED_NOWAIT, nil
 	case sql.LevelRepeatableRead:
-		return fc.begin(ISOLATION_LEVEL_REPEATABLE_READ)
+		return ISOLATION_LEVEL_REPEATABLE_READ, nil
 	case sql.LevelSerializable:
-		return fc.begin(ISOLATION_LEVEL_SERIALIZABLE)
+		return ISOLATION_LEVEL_SERIALIZABLE, nil
 	default:
 	}
-	return nil, errors.New("This isolation level is not supported.")
+	return 0, errors.New("This isolation level is not supported.")
 }
 
 func (fc *firebirdsqlConn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
@@ -92,47 +108,27 @@ var pingInfoItems = []byte{isc_info_ods_version, isc_info_end}
 
 // Ping uses op_info_database (1 round-trip) instead of a SQL query — no transaction is opened.
 // Cancellation needs SetDeadline + watcher goroutine: wire path has no statement to cancel.
-func (fc *firebirdsqlConn) Ping(ctx context.Context) (err error) {
+func (fc *firebirdsqlConn) Ping(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-
-	if ctx.Done() != nil {
-		completed := make(chan struct{})
-		defer close(completed)
-
-		if d, ok := ctx.Deadline(); ok {
-			defer fc.wp.conn.SetDeadline(time.Time{})
-			_ = fc.wp.conn.SetDeadline(d)
+	err := fc.wp.withContextDeadline(ctx, func() error {
+		if err := fc.wp.opInfoDatabase(pingInfoItems); err != nil {
+			return fmt.Errorf("op_info_database failed: %w", err)
 		}
-
-		go func() {
-			select {
-			case <-ctx.Done():
-				_ = fc.wp.conn.SetDeadline(time.Now())
-			case <-completed:
-			}
-		}()
+		_, _, _, err := fc.wp.opResponse()
+		return err
+	})
+	if err == nil {
+		return nil
 	}
-
-	if err = fc.wp.opInfoDatabase(pingInfoItems); err != nil {
-		return fmt.Errorf("ping info_database failed: %w: %w", err, driver.ErrBadConn)
+	// A failed ping always discards the connection; desynced makes Close drop
+	// the socket instead of waiting out rollback and detach on a dead wire.
+	fc.wp.desynced = true
+	if errors.Is(err, driver.ErrBadConn) {
+		return fmt.Errorf("ping failed: %w", err)
 	}
-
-	if _, _, _, err = fc.wp.opResponse(); err != nil {
-		if errors.Is(err, os.ErrDeadlineExceeded) {
-			// ctx is the source of truth. The OS conn deadline can fire a hair
-			// before the ctx timer at the same deadline instant; wait so the
-			// ctx.Err() check below sees the populated cause.
-			<-ctx.Done()
-		}
-
-		if cerr := ctx.Err(); cerr != nil {
-			return fmt.Errorf("ping cancelled: %w: %w", cerr, driver.ErrBadConn)
-		}
-		return fmt.Errorf("ping response failed: %w: %w", err, driver.ErrBadConn)
-	}
-	return nil
+	return fmt.Errorf("ping failed: %w: %w", err, driver.ErrBadConn)
 }
 
 func (fc *firebirdsqlConn) QueryContext(ctx context.Context, query string, namedargs []driver.NamedValue) (rows driver.Rows, err error) {
@@ -142,7 +138,8 @@ func (fc *firebirdsqlConn) QueryContext(ctx context.Context, query string, named
 // ================== Implementation of the Connector interface ====================
 
 type firebirdConnector struct {
-	dsn *firebirdDsn
+	dsn    *firebirdDsn
+	dsnErr error
 }
 
 func (d *firebirdConnector) OpenConnector(dsns string) (driver.Connector, error) {
@@ -158,5 +155,8 @@ func (fc *firebirdConnector) Driver() driver.Driver {
 }
 
 func (fc *firebirdConnector) Connect(ctx context.Context) (driver.Conn, error) {
-	return attachFirebirdsqlConn(fc.dsn)
+	if fc.dsnErr != nil {
+		return nil, fc.dsnErr
+	}
+	return attachFirebirdsqlConn(ctx, fc.dsn)
 }

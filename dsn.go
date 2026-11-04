@@ -25,8 +25,11 @@ package firebirdsql
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"net/url"
+	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -68,18 +71,15 @@ func parseDSN(dsns string) (*firebirdDsn, error) {
 		dsn.addr += ":3050"
 	}
 	dsn.dbName = u.Path
-	if len(dsn.dbName) > 0 && !strings.ContainsRune(dsn.dbName[1:], '/') {
+	if len(dsn.dbName) > 1 && !strings.ContainsRune(dsn.dbName[1:], '/') {
 		dsn.dbName = dsn.dbName[1:]
 	}
 
 	//Windows Path
-	if len(dsn.dbName) >= 2 && strings.ContainsRune(dsn.dbName[2:], ':') {
+	if len(dsn.dbName) > 2 && strings.ContainsRune(dsn.dbName[2:], ':') {
 		dsn.dbName = dsn.dbName[1:]
 	}
 	if strings.TrimLeft(dsn.dbName, "/") == "" {
-		// Empty (or "/"-only) database path: nothing to attach to. Fail
-		// here with a diagnosable error instead of an obscure attach-time
-		// failure later.
 		return nil, ErrDsnDbNameUnknown
 	}
 
@@ -93,14 +93,20 @@ func parseDSN(dsns string) (*firebirdDsn, error) {
 		"column_name_to_lower": "false",
 		"host_name":            "",
 		"os_user":              "",
+		"page_size":            "",
 		"role":                 "",
-		"sql_dialect":          "3", // клиентский диалект в DPB: 1 или 3
+		"sql_dialect":          "3", // client SQL dialect in DPB: 1 or 3
 		"timezone":             "",
 		"wire_crypt":           "true",
 		"wire_crypt_plugin":    defaultWireCryptPlugins,
 		"wire_compress":        "false",
 		"max_inline_blob_size": "65536",
 		"max_blob_cache_size":  "10485760",
+		// Cancel hard-drop: close the socket when a canceled statement's
+		// read has not returned after cancel_hard_drop_grace ms (op_cancel
+		// raise cannot interrupt waits inside an executing statement).
+		"cancel_hard_drop":       "false",
+		"cancel_hard_drop_grace": "3000",
 	}
 
 	for k, v := range default_options {
@@ -120,6 +126,11 @@ func parseDSN(dsns string) (*firebirdDsn, error) {
 		dsn.options["max_blob_cache_size"] = values[0]
 	}
 
+	// Fail fast on an invalid page_size before dialing.
+	if _, err := parsePageSize(dsn.options["page_size"]); err != nil {
+		return nil, err
+	}
+
 	// Fail fast on an invalid wire_crypt policy before dialing.
 	if _, err := parseWireCryptMode(dsn.options["wire_crypt"]); err != nil {
 		return nil, err
@@ -133,4 +144,26 @@ func parseDSN(dsns string) (*firebirdDsn, error) {
 	}
 
 	return dsn, nil
+}
+
+// validPageSizes are the page sizes some supported Firebird version accepts:
+// 4096-16384 on 2.5/3.0, 4096-32768 on 4.0/5.0 and 8192-32768 on 6.0. A size
+// outside the server's own range is adjusted by the server (e.g. 4096 becomes
+// 8192 on 6.0).
+var validPageSizes = []int{4096, 8192, 16384, 32768}
+
+// parsePageSize parses the page_size option used by firebirdsql_createdb.
+// An empty value (the default) returns 0: op_create then sends no page size and
+// the server uses its default. "0" is rejected like any other size outside
+// validPageSizes.
+func parsePageSize(s string) (int32, error) {
+	t := strings.TrimSpace(s)
+	if t == "" {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(t)
+	if err != nil || !slices.Contains(validPageSizes, n) {
+		return 0, fmt.Errorf("firebirdsql: invalid page_size value %q (want one of %v, or empty for the server default)", s, validPageSizes)
+	}
+	return int32(n), nil
 }

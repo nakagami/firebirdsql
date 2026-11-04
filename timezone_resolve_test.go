@@ -31,6 +31,7 @@ func TestResolveTimezone(t *testing.T) {
 		locName   string
 		sessionTZ string
 		wantName  string
+		wantID    int // the expected displacement-zone id; 0 means: use wantName
 	}{
 		{
 			name:     "known IANA name returns itself",
@@ -54,15 +55,15 @@ func TestResolveTimezone(t *testing.T) {
 			wantName: "UTC",
 		},
 		{
-			name:     "fixed-offset zone not in map falls back to UTC",
+			name:     "non-offset name not in map falls back to UTC",
 			locName:  "UTC-5",
 			wantName: "UTC",
 		},
 		{
-			name:      "fixed-offset zone with session timezone uses session timezone",
+			name:      "fixed-offset location keeps its own zone over the session default",
 			locName:   "+05:30",
 			sessionTZ: "Asia/Kolkata",
-			wantName:  "Asia/Kolkata",
+			wantID:    1769, // the +05:30 displacement: the zone of the value is known
 		},
 		{
 			name:      "known IANA name wins over session timezone",
@@ -81,7 +82,11 @@ func TestResolveTimezone(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := resolveTimezone(tc.locName, tc.sessionTZ)
-			if want := getTimezoneIDByName(tc.wantName); got != want {
+			want := int32(tc.wantID)
+			if want == 0 {
+				want = getTimezoneIDByName(tc.wantName)
+			}
+			if got != want {
 				t.Errorf("resolveTimezone(%q, %q) = %d, want %d (%s)", tc.locName, tc.sessionTZ, got, want, tc.wantName)
 			}
 		})

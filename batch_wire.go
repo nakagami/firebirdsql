@@ -25,6 +25,7 @@ package firebirdsql
 
 import (
 	"database/sql/driver"
+	"errors"
 	"fmt"
 )
 
@@ -60,14 +61,26 @@ func (p *wireProtocol) opPing() error {
 	return err
 }
 
+// receiveTwoResponses reads the reply to a batch request and the reply to the op_ping /
+// op_batch_sync sent after it, and returns the first error. Both are read even when the
+// server refused the request: returning early would leave the second reply on the wire,
+// and the next read would take it as its own. A read that fails without a server reply
+// may have left part of that reply on the wire, so it stops there and marks the
+// connection desynced.
 func (p *wireProtocol) receiveTwoResponses() error {
+	var first error
 	for i := 0; i < 2; i++ {
 		_, _, _, err := p.opResponse()
-		if err != nil {
+		var fbErr *FbError
+		if err != nil && !errors.As(err, &fbErr) {
+			p.desynced = true
 			return err
 		}
+		if first == nil {
+			first = err
+		}
 	}
-	return nil
+	return first
 }
 
 func (p *wireProtocol) opBatchCreate(stmtHandle int32, blr []byte, msgLen int32, pb []byte) error {

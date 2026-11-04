@@ -176,15 +176,7 @@ func TestServiceManager_CommitTransaction(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, m)
 	err = m.CommitTransaction(db, 1)
-	if err == nil && get_firebird_major_version(t) < 3 {
-		//FIXME: Not sure if bug
-		t.Log("This tests should fail, but on 2.5 it passing. Ignoring this error as 2.5 is obsolete")
-		return
-	}
-	assert.EqualError(t, err, fmt.Sprintf(`failed to reconnect to a transaction in database %s
-transaction is not in limbo
-transaction 1 is committed
-`, db))
+	assertLimboResolutionError(t, db, err)
 }
 
 func TestServiceManager_RollbackTransaction(t *testing.T) {
@@ -200,15 +192,28 @@ func TestServiceManager_RollbackTransaction(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, m)
 	err = m.RollbackTransaction(db, 1)
-	if err == nil && get_firebird_major_version(t) < 3 {
-		//FIXME: Not sure if bug
-		t.Log("This tests should fail, but on 2.5 it passing. Ignoring this error as 2.5 is obsolete")
-		return
+	assertLimboResolutionError(t, db, err)
+}
+
+// assertLimboResolutionError checks the error of resolving transaction 1, which is
+// committed and so not in limbo.
+//
+// Firebird 2.5's gfix sends "failed to reconnect to a transaction in database" as
+// service text output, not in the status vector, so the error holds only the last two
+// lines. It also clears its status as it exits, so the error can still be missed (nil),
+// rarely. Firebird 3.0 and 4.0 report all three lines.
+func assertLimboResolutionError(t *testing.T, db string, err error) {
+	t.Helper()
+	want := "transaction is not in limbo\ntransaction 1 is committed\n"
+	if testServerVersion(t).Major < 3 {
+		if err == nil {
+			t.Log("Firebird 2.5 cleared the limbo resolution error before it was read")
+			return
+		}
+	} else {
+		want = fmt.Sprintf("failed to reconnect to a transaction in database %s\n", db) + want
 	}
-	assert.EqualError(t, err, fmt.Sprintf(`failed to reconnect to a transaction in database %s
-transaction is not in limbo
-transaction 1 is committed
-`, db))
+	assert.EqualError(t, err, want)
 }
 
 func TestServiceManager_SetDatabaseMode(t *testing.T) {

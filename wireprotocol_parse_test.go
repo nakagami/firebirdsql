@@ -1,10 +1,13 @@
 package firebirdsql
 
 import (
+	"bufio"
 	"bytes"
 	"database/sql/driver"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 )
@@ -373,6 +376,40 @@ func TestParseConnectResponse_TruncatedAcceptFields(t *testing.T) {
 	}
 }
 
+// The connection closes before the server's answer is complete: a server
+// that accepted the socket and died, or a proxy in front of a server that is
+// down. The read error must reach the caller as it is, so that a dropped
+// connection (io.EOF, a net.Error) can be told from a protocol violation.
+func TestParseConnectResponse_ConnectionClosed(t *testing.T) {
+	truncatedAccept := func() []byte {
+		var f acceptFrame
+		f.int32(op_accept)
+		f.int32(PROTOCOL_VERSION13) // 4 of the 12 header bytes
+		return f.bytes()
+	}()
+	afterDummy := func() []byte {
+		var f acceptFrame
+		f.int32(op_dummy)
+		return f.bytes()
+	}()
+	cases := []struct {
+		name  string
+		frame []byte
+	}{
+		{"no answer", nil},
+		{"after op_dummy", afterDummy},
+		{"truncated op_accept header", truncatedAccept},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			err := parseConnectResponse(t, tt.frame)
+			if !errors.Is(err, io.EOF) {
+				t.Fatalf("want io.EOF, got %v", err)
+			}
+		})
+	}
+}
+
 func TestParseConnectResponse_SRPEmptyServerKey(t *testing.T) {
 	// Salt present but no key material after it: the key hex decodes to a
 	// zero public key, which must flow through the client proof computation
@@ -429,6 +466,79 @@ func TestParseConnectResponse_SRPSaltLengthInvalid(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), "salt length") {
 				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+// TestServiceAttachDeferredAuthData runs a canned connect reply through the
+// handshake and pins the op_service_attach packet that follows. op_accept_data
+// leaves the SRP proof to the attach, and an SPB carries it under a different
+// tag than a DPB: the server ignores the DPB tag, and the login fails.
+func TestServiceAttachDeferredAuthData(t *testing.T) {
+	const specificAuthDataTag = 0x6f // isc_spb_specific_auth_data on the wire
+
+	var acceptData acceptFrame
+	acceptData.acceptHeader(op_accept_data)
+	acceptData.blob(srpServerData(32, 256))
+	acceptData.blob([]byte("Srp256"))
+	acceptData.int32(0) // not yet authenticated
+	acceptData.blob(nil)
+
+	var accept acceptFrame
+	accept.acceptHeader(op_accept)
+
+	for _, tc := range []struct {
+		name      string
+		reply     []byte
+		wireCrypt string
+		deferred  bool
+	}{
+		{"wire crypt off", acceptData.bytes(), "false", true},
+		{"server without wire crypt", acceptData.bytes(), "true", true},
+		{"no deferred proof", accept.bytes(), "true", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			clientPublic, clientSecret, err := getClientSeed()
+			if err != nil {
+				t.Fatalf("getClientSeed: %v", err)
+			}
+			options := testConnectOptions()
+			options["wire_crypt"] = tc.wireCrypt
+
+			p := testProtocol(tc.reply)
+			if err := p._parse_connect_response("SYSDBA", "masterkey", options, clientPublic, clientSecret); err != nil {
+				t.Fatalf("_parse_connect_response: %v", err)
+			}
+			if deferred := len(p.authData) > 0; deferred != tc.deferred {
+				t.Fatalf("authData = %x, want deferred = %v", p.authData, tc.deferred)
+			}
+
+			var out bytes.Buffer
+			p.conn.writer = bufio.NewWriter(&out)
+			if err := p.opServiceAttach(); err != nil {
+				t.Fatalf("opServiceAttach: %v", err)
+			}
+
+			spb := []byte{isc_spb_version, isc_spb_current_version}
+			spb = append(spb, isc_spb_user_name, 6)
+			spb = append(spb, "SYSDBA"...)
+			spb = append(spb, isc_spb_password, 9)
+			spb = append(spb, "masterkey"...)
+			spb = append(spb, isc_spb_utf8_filename, 1, 1)
+			if tc.deferred {
+				proof := hex.EncodeToString(p.authData)
+				spb = append(spb, specificAuthDataTag, byte(len(proof)))
+				spb = append(spb, proof...)
+			}
+
+			var want acceptFrame
+			want.int32(op_service_attach)
+			want.int32(0)
+			want.blob([]byte("service_mgr"))
+			want.blob(spb)
+			if !bytes.Equal(out.Bytes(), want.bytes()) {
+				t.Fatalf("op_service_attach packet = %x, want %x", out.Bytes(), want.bytes())
 			}
 		})
 	}

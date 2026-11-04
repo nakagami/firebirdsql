@@ -98,8 +98,10 @@ func arrayElementStride(meta *ArrayMeta) int {
 		return 2
 	case SQL_TYPE_LONG, SQL_TYPE_FLOAT, SQL_TYPE_DATE, SQL_TYPE_TIME:
 		return 4
-	case SQL_TYPE_INT64, SQL_TYPE_DOUBLE, SQL_TYPE_TIMESTAMP:
+	case SQL_TYPE_INT64, SQL_TYPE_DOUBLE, SQL_TYPE_TIMESTAMP, SQL_TYPE_DEC64:
 		return 8
+	case SQL_TYPE_INT128, SQL_TYPE_DEC128, SQL_TYPE_DEC_FIXED:
+		return 16
 	case SQL_TYPE_BOOLEAN:
 		return 1
 	case SQL_TYPE_TEXT:
@@ -170,7 +172,7 @@ func generateSDL(meta *ArrayMeta, dims []ArrayDimension, forGet bool) []byte {
 	sdl = append(sdl, isc_sdl_version1, isc_sdl_struct, 1, byte(meta.BlrTypeID))
 
 	switch meta.BlrTypeID {
-	case 7, 8, 9, blr_type_int64: // blr_short, blr_long, blr_quad, blr_int64
+	case 7, 8, 9, blr_type_int64, blr_type_int128: // blr_short, blr_long, blr_quad, blr_int64, blr_int128
 		sdl = append(sdl, byte(meta.Scale))
 	case blr_type_text, blr_type_text2, blr_type_cstring, blr_type_cstring2, blr_type_varying:
 		textLen := meta.Length
