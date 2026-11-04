@@ -293,6 +293,14 @@ func handshakeFirebirdsqlConn(wp *wireProtocol, dsn *firebirdDsn, dbOp func(*wir
 	wp.cancelHardDropGrace = time.Duration(parseOptionInt(dsn.options["cancel_hard_drop_grace"], 3000)) * time.Millisecond
 	wp.pageSize, _ = parsePageSize(dsn.options["page_size"]) // validated in parseDSN
 
+	// Client SQL dialect (DSN option sql_dialect): needed for dialect-1
+	// target databases (Firebird 2.5 / InterBase); everything else is
+	// dialect 3. Values other than 1 fall back to 3.
+	wp.sqlDialect = int32(parseOptionInt(dsn.options["sql_dialect"], 3))
+	if wp.sqlDialect != 1 {
+		wp.sqlDialect = 3
+	}
+
 	if err = wp.opConnect(dsn.dbName, dsn.user, dsn.passwd, dsn.options, clientPublic); err != nil {
 		return nil, err
 	}

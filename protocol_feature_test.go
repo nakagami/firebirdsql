@@ -365,7 +365,7 @@ func TestCreateDPBPageSize(t *testing.T) {
 // TestCreateDPBUnchangedWithPageSize pins the op_create DPB for an explicit
 // page size to the bytes sent before the page size became optional.
 func TestCreateDPBUnchangedWithPageSize(t *testing.T) {
-	p := &wireProtocol{charset: "UTF8", pageSize: 4096}
+	p := &wireProtocol{charset: "UTF8", pageSize: 4096, sqlDialect: 3}
 	want := bytes.Join([][]byte{
 		{isc_dpb_version1},
 		{isc_dpb_set_db_charset, 4}, []byte("UTF8"),
@@ -381,5 +381,33 @@ func TestCreateDPBUnchangedWithPageSize(t *testing.T) {
 	}, nil)
 	if got := p.createDPB("sysdba", "masterkey", ""); !bytes.Equal(got, want) {
 		t.Fatalf("createDPB =\n%x\nwant\n%x", got, want)
+	}
+}
+
+// TestCreateDPBClientSQLDialect checks that the client SQL dialect (DSN
+// option sql_dialect) lands in the op_create DPB: dialect 1 for dialect-1
+// target databases (Firebird 2.5 / InterBase), 3 otherwise.
+func TestCreateDPBClientSQLDialect(t *testing.T) {
+	for _, tc := range []struct {
+		dialect  int32
+		wantByte byte
+	}{{3, 3}, {1, 1}} {
+		p := &wireProtocol{charset: "UTF8", sqlDialect: tc.dialect}
+		got := p.createDPB("sysdba", "masterkey", "")
+		// find the isc_dpb_sql_dialect item (tag 0x3f) and read its value
+		found := false
+		for i := 0; i+5 < len(got); i++ {
+			if got[i] == isc_dpb_sql_dialect && got[i+1] == 4 {
+				v := int32(got[i+2]) | int32(got[i+3])<<8 | int32(got[i+4])<<16 | int32(got[i+5])<<24
+				if v != int32(tc.wantByte) {
+					t.Fatalf("dialect %d: dpb carries %d", tc.dialect, v)
+				}
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("dialect %d: isc_dpb_sql_dialect not found in DPB", tc.dialect)
+		}
 	}
 }

@@ -164,6 +164,13 @@ type wireProtocol struct {
 	cancelHardDrop      bool
 	cancelHardDropGrace time.Duration
 	cancelHardDropOnce  sync.Once
+
+	// Client SQL dialect sent in the attach/create DPB and as the
+	// statement prepare dialect (DSN option sql_dialect; 1 or 3,
+	// default 3). Required for dialect-1 target databases (Firebird 2.5
+	// / InterBase): without it the server rejects metadata updates with
+	// "not allowed by the current database SQL dialect 1".
+	sqlDialect int32
 }
 
 func newWireProtocol(addr string, timezone string, charset string) (*wireProtocol, error) {
@@ -173,6 +180,7 @@ func newWireProtocol(addr string, timezone string, charset string) (*wireProtoco
 func newWireProtocolContext(ctx context.Context, addr string, timezone string, charset string) (*wireProtocol, error) {
 	p := new(wireProtocol)
 	p.buf = make([]byte, 0, BUFFER_LEN)
+	p.sqlDialect = 3 // default; the DSN option sql_dialect overrides (1 or 3)
 
 	p.addr = addr
 	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", p.addr)
@@ -1254,7 +1262,7 @@ func (p *wireProtocol) createDPB(user string, password string, role string) []by
 		{isc_dpb_user_name, byte(len(userBytes))}, userBytes,
 		{isc_dpb_password, byte(len(passwordBytes))}, passwordBytes,
 		{isc_dpb_sql_role_name, byte(len(roleBytes))}, roleBytes,
-		{isc_dpb_sql_dialect, 4}, int32_to_bytes(3),
+		{isc_dpb_sql_dialect, 4}, int32_to_bytes(p.sqlDialect),
 		{isc_dpb_force_write, 4}, bint32_to_bytes(1),
 		{isc_dpb_overwrite, 4}, bint32_to_bytes(1),
 	}, nil)
@@ -1351,7 +1359,7 @@ func (p *wireProtocol) opAttach(dbName string, user string, password string, rol
 
 	dpb := bytes.Join([][]byte{
 		[]byte{isc_dpb_version1},
-		[]byte{isc_dpb_sql_dialect, 4}, int32_to_bytes(3),
+		[]byte{isc_dpb_sql_dialect, 4}, int32_to_bytes(p.sqlDialect),
 		[]byte{isc_dpb_lc_ctype, byte(len(encode))}, encode,
 		[]byte{isc_dpb_user_name, byte(len(userBytes))}, userBytes,
 		[]byte{isc_dpb_password, byte(len(passwordBytes))}, passwordBytes,
@@ -1541,7 +1549,7 @@ func (p *wireProtocol) opPrepareStatement(stmtHandle int32, transHandle int32, q
 	p.packInt(op_prepare_statement)
 	p.packInt(transHandle)
 	p.packInt(stmtHandle)
-	p.packInt(3) // dialect = 3
+	p.packInt(p.sqlDialect) // statement dialect (DSN option sql_dialect; 1 or 3)
 	p.packString(query)
 	p.packBytes(bs)
 	p.packInt(int32(BUFFER_LEN))
