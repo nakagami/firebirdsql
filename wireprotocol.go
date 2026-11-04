@@ -127,6 +127,10 @@ type wireProtocol struct {
 	osUser        string
 	hostName      string
 
+	// Client SQL dialect sent in the attach/create DPB (DSN option
+	// sql_dialect; 1 or 3, default 3).
+	sqlDialect int32
+
 	// Protocol 18/19 execute trailers and inline blob support.
 	cursorFlags       int32
 	maxInlineBlobSize int32
@@ -137,6 +141,7 @@ type wireProtocol struct {
 func newWireProtocol(addr string, timezone string, charset string) (*wireProtocol, error) {
 	p := new(wireProtocol)
 	p.buf = make([]byte, 0, BUFFER_LEN)
+	p.sqlDialect = 3 // DSN-опция sql_dialect переопределяет (1 или 3)
 
 	p.addr = addr
 	conn, err := net.Dial("tcp", p.addr)
@@ -1194,7 +1199,7 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 		[]byte{isc_dpb_user_name, byte(len(userBytes))}, userBytes,
 		[]byte{isc_dpb_password, byte(len(passwordBytes))}, passwordBytes,
 		[]byte{isc_dpb_sql_role_name, byte(len(roleBytes))}, roleBytes,
-		[]byte{isc_dpb_sql_dialect, 4}, int32_to_bytes(3),
+		[]byte{isc_dpb_sql_dialect, 4}, int32_to_bytes(p.sqlDialect),
 		[]byte{isc_dpb_force_write, 4}, bint32_to_bytes(1),
 		[]byte{isc_dpb_overwrite, 4}, bint32_to_bytes(1),
 		[]byte{isc_dpb_page_size, 4}, int32_to_bytes(page_size),
@@ -1295,7 +1300,7 @@ func (p *wireProtocol) opAttach(dbName string, user string, password string, rol
 
 	dpb := bytes.Join([][]byte{
 		[]byte{isc_dpb_version1},
-		[]byte{isc_dpb_sql_dialect, 4}, int32_to_bytes(3),
+		[]byte{isc_dpb_sql_dialect, 4}, int32_to_bytes(p.sqlDialect),
 		[]byte{isc_dpb_lc_ctype, byte(len(encode))}, encode,
 		[]byte{isc_dpb_user_name, byte(len(userBytes))}, userBytes,
 		[]byte{isc_dpb_password, byte(len(passwordBytes))}, passwordBytes,
@@ -1443,7 +1448,7 @@ func (p *wireProtocol) opPrepareStatement(stmtHandle int32, transHandle int32, q
 	p.packInt(op_prepare_statement)
 	p.packInt(transHandle)
 	p.packInt(stmtHandle)
-	p.packInt(3) // dialect = 3
+	p.packInt(p.sqlDialect) // statement dialect (DSN sql_dialect; 1 or 3)
 	p.packString(query)
 	p.packBytes(bs)
 	p.packInt(int32(BUFFER_LEN))

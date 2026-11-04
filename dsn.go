@@ -94,6 +94,7 @@ func parseDSN(dsns string) (*firebirdDsn, error) {
 		"host_name":            "",
 		"os_user":              "",
 		"role":                 "",
+		"sql_dialect":          "3", // клиентский диалект в DPB: 1 или 3
 		"timezone":             "",
 		"wire_crypt":           "true",
 		"wire_crypt_plugin":    defaultWireCryptPlugins,

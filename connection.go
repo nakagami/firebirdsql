@@ -224,6 +224,13 @@ func openFirebirdsqlConn(dsn *firebirdDsn, dbOp func(*wireProtocol) error) (*fir
 	wp.maxInlineBlobSize = int32(parseOptionInt(dsn.options["max_inline_blob_size"], 65536))
 	wp.maxBlobCacheSize = int32(parseOptionInt(dsn.options["max_blob_cache_size"], 10485760))
 	wp.inlineBlobCache = newInlineBlobCache(int(wp.maxBlobCacheSize))
+	// Клиентский диалект DPB (1 или 3): нужен диалект-1 целям (FB 2.5/IB),
+	// иначе сервер отклоняет metadata update («not allowed by the current
+	// database SQL dialect 1»).
+	wp.sqlDialect = int32(parseOptionInt(dsn.options["sql_dialect"], 3))
+	if wp.sqlDialect != 1 {
+		wp.sqlDialect = 3
+	}
 
 	if err = wp.opConnect(dsn.dbName, dsn.user, dsn.passwd, dsn.options, clientPublic); err != nil {
 		return nil, err
