@@ -33,6 +33,9 @@ import (
 	"golang.org/x/text/encoding/traditionalchinese"
 )
 
+// charsetIDOctets is the id of OCTETS in RDB$CHARACTER_SETS.
+const charsetIDOctets = 1
+
 func charsetEncoding(charset string) encoding.Encoding {
 	switch charset {
 	case "SJIS_0208":

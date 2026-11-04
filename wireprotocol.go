@@ -188,14 +188,17 @@ func newWireProtocolContext(ctx context.Context, addr string, timezone string, c
 	return p, err
 }
 
-// charsetLen sets the length of character depending the charset to get the correct size of column
+// charsetLen sets charsetByteLen, the maximum bytes per character of the
+// connection charset (RDB$CHARACTER_SETS.RDB$BYTES_PER_CHARACTER).
 func (p *wireProtocol) charsetLen() {
-	// all ISO8859_X and WIN125X are 1 byte character length, so omit here
-	// only add charset that character length is > 1
+	// all ISO8859_X, WIN125X, DOSxxx and KOI8x are 1 byte per character,
+	// so only charsets with more than 1 byte per character are listed
 	switch p.charset {
-	case "UNICODE_FSS", "UTF8":
+	case "UTF8", "GB18030":
 		p.charsetByteLen = 4
-	case "BIG_5", "SJIS_0208", "KSC_5601", "EUCJ_0208", "GB_2312", "KOI8R", "KOI8U":
+	case "UNICODE_FSS":
+		p.charsetByteLen = 3
+	case "BIG_5", "SJIS_0208", "KSC_5601", "EUCJ_0208", "GB_2312", "GBK", "CP943C":
 		p.charsetByteLen = 2
 	default:
 		p.charsetByteLen = 1
@@ -2289,6 +2292,24 @@ func (p *wireProtocol) paramsToBlr(transHandle int32, params []driver.Value, pro
 			} else {
 				v, _ = p.createBlob(b, transHandle)
 				blr = []byte{9, 0}
+			}
+		}
+		// A text value bound to a text parameter declares the parameter's
+		// described charset (blr_text2), as fbclient does.
+		if len(blr) == 3 && blr[0] == 14 && param != nil && i < len(inputXsqlda) {
+			if t := inputXsqlda[i].sqltype; t == SQL_TYPE_TEXT || t == SQL_TYPE_VARYING {
+				if cs, ok := inputXsqlda[i].blrCharset(); ok {
+					blr = []byte{15, cs, 0, blr[1], blr[2]}
+				}
+			} else if _, isBytes := param.([]byte); isBytes && t == SQL_TYPE_BLOB && inputXsqlda[i].sqlsubtype == 0 {
+				// short []byte sent inline for a binary BLOB: declare OCTETS
+				blr = []byte{15, charsetIDOctets, 0, blr[1], blr[2]}
+			} else if t == SQL_TYPE_BLOB && inputXsqlda[i].sqlsubtype == 1 {
+				// short value sent inline for a text BLOB: declare the
+				// described charset, which a text BLOB carries in sqlscale
+				if cs := byte(inputXsqlda[i].sqlscale); cs != charsetDynamic {
+					blr = []byte{15, cs, 0, blr[1], blr[2]}
+				}
 			}
 		}
 		valuesList = append(valuesList, v)
