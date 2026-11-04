@@ -119,6 +119,8 @@ Legend: ✅ pass · ⏭️ skip (version/capability gate or server configuration
 | `TestParsePageSize` | An empty page_size maps to 0 (no `isc_dpb_page_size`), a valid size passes through, 0 and invalid values fail | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestCreateDPBPageSize` | The op_create DPB carries `isc_dpb_page_size` (little-endian) only for a set page size; the other items stay intact | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestCreateDPBUnchangedWithPageSize` | With `page_size=4096` the op_create DPB is byte-identical to the one sent before the page size became optional | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestServiceAttachDeferredAuthData` | After a canned connect reply, the op_service_attach packet carries a deferred SRP proof under the SPB tag (111), and no proof after plain `op_accept` | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestServiceManagerWireCryptFalse` | A service attach without wire crypt authenticates and round-trips; skips when the Services API is unavailable or the server requires wire encryption | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestTimezoneLegacyAliases` | GMT/ACT/AET/AGT/ART/AST legacy zone aliases round-trip | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestTimezoneMapInvalidEntries` | Unknown zone names/ids yield zero values, never a wrong zone | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestAdvertisedProtocolRange` | Connect packet offers protocols 10–19, weights ascending, pflag only with compression | ✅ pass | ✅ pass | ✅ pass | ✅ pass |

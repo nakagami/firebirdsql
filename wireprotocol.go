@@ -2395,7 +2395,7 @@ func (p *wireProtocol) opServiceAttach() error {
 		specificAuthData := []byte(hex.EncodeToString(p.authData))
 		spb = bytes.Join([][]byte{
 			spb,
-			{isc_dpb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)
+			{isc_spb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)
 	}
 	p.packBytes(spb)
 	_, err := p.sendPackets()
