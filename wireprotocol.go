@@ -257,7 +257,7 @@ func (p *wireProtocol) uid(user string, password string, authPluginName string, 
 	if authPluginName == "Srp" || authPluginName == "Srp256" {
 		specific_data = getSrpClientPublicBytes(clientPublic)
 	} else if authPluginName == "Legacy_Auth" {
-		b := []byte(crypt.Crypt(password, "9z")[2:])
+		b := legacyPasswordHash(password)
 		specific_data = bytes.Join([][]byte{
 			[]byte{CNCT_specific_data, byte(len(b)) + 1, 0}, b,
 		}, nil)
@@ -636,6 +636,11 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 	}
 	if opcode == op_response {
 		_, _, _, err = p._parse_op_response() // error occured
+		if err == nil {
+			// Servers answer op_connect this way only to refuse it. Taking a
+			// success as an accept would skip the wire-crypt decision below.
+			err = errors.New("firebirdsql: server sent a success response to op_connect; refusing to attach")
+		}
 		return
 	}
 
@@ -647,6 +652,13 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 	p.acceptType = bytes_to_bint32(b[8:12])
 	p.user = user
 	p.password = password
+
+	// Below protocol 13 there is no plugin exchange: the only login is the
+	// Legacy_Auth hash. Refuse here so that every accept opcode is covered.
+	if p.protocolVersion < PROTOCOL_VERSION13 && !isAuthPluginAllowed("Legacy_Auth", options["auth_plugin_list"]) {
+		err = fmt.Errorf("firebirdsql: server negotiated wire protocol %d, which only supports Legacy_Auth, but auth_plugin_list=%q doesn't allow it", p.protocolVersion, options["auth_plugin_list"])
+		return
+	}
 
 	// Check if server accepted compression
 	if (p.acceptType & pflag_compress) != 0 {
@@ -660,7 +672,7 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 	}
 
 	// Hoisted to function scope so the single wire-crypt decision below runs on
-	// every handshake outcome — including the legacy op_accept path, where these
+	// every accept opcode — including the legacy op_accept path, where these
 	// remain at their zero values (no cipher negotiated).
 	var authData []byte
 	var sessionKey []byte
@@ -712,6 +724,11 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 					op := bytes_to_bint32(b)
 					if op == op_response {
 						_, _, _, err = p._parse_op_response() // error occurred
+						// A success means authenticated without a proof, so there
+						// is no session key and required can't be met.
+						if err == nil && mode == wireCryptRequired {
+							err = errWireCryptRequired
+						}
 						return
 					}
 
@@ -758,7 +775,13 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 						p.pluginName, serverSalt, data[4+ln:], serverPublic, authData, sessionKey)
 				}
 			} else if p.pluginName == "Legacy_Auth" {
-				authData = []byte(crypt.Crypt(password, "9z")[2:])
+				// Legacy_Auth has no session key, so required can't be met. Refuse
+				// here, before the hash reaches the wire.
+				if mode == wireCryptRequired {
+					err = errWireCryptRequired
+					return
+				}
+				authData = legacyPasswordHash(password)
 			} else {
 				err = errors.New("Your user name and password are not defined. Ask your database administrator to set up a Firebird login.\n")
 				return
@@ -782,10 +805,12 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 	}
 
 	// Single wire-crypt decision point. Unlike the old in-block check, this runs
-	// on every handshake outcome — op_cond_accept, op_accept_data, AND the legacy
+	// on every accept opcode — op_cond_accept, op_accept_data, AND the legacy
 	// plain op_accept — so wire_crypt=required fails closed whenever no cipher was
 	// established instead of silently falling back to plaintext. It runs before
-	// opAttach/opCreate, so no credentials are sent over a connection we refuse.
+	// opAttach/opCreate, so no attach request goes over a connection we refuse.
+	// It can't protect what op_connect already carried: with
+	// auth_plugin_name=Legacy_Auth that includes the password hash.
 	encrypt, err := wireCryptResolve(mode, enc_plugin, sessionKey != nil)
 	if err != nil {
 		return
@@ -1185,6 +1210,28 @@ func (p *wireProtocol) opConnect(dbName string, user string, password string, op
 	return err
 }
 
+// legacyPasswordHash returns the DES crypt(3) hash without its salt prefix, as
+// carried by Legacy_Auth data and the password_enc items. Firebird uses a fixed
+// salt and only the first 8 bytes of the password.
+func legacyPasswordHash(password string) []byte {
+	return []byte(crypt.Crypt(password, "9z")[2:])
+}
+
+// passwordItem returns the attach parameter block item that carries the login
+// credential, so the password itself stays off the wire. From protocol 13 the
+// server authenticates through the auth plugin exchange and discards this item,
+// so there is none. Below 13 it's the hash alone: Firebird 2.5 fails a login
+// that carries both the plain and the hashed item. The caller passes the tag
+// because a DPB and an SPB define their items separately, even where the values
+// match.
+func (p *wireProtocol) passwordItem(encTag byte, password string) []byte {
+	if p.protocolVersion >= PROTOCOL_VERSION13 {
+		return nil
+	}
+	hash := legacyPasswordHash(password)
+	return append([]byte{encTag, byte(len(hash))}, hash...)
+}
+
 // appendAuthAndTimezone appends auth data and session timezone to a DPB byte slice.
 func (p *wireProtocol) appendAuthAndTimezone(dpb []byte) []byte {
 	if p.authData != nil {
@@ -1245,14 +1292,13 @@ func (p *wireProtocol) opCreate(dbName string, user string, password string, rol
 func (p *wireProtocol) createDPB(user string, password string, role string) []byte {
 	encode := []byte(p.charset)
 	userBytes := []byte(strings.ToUpper(user))
-	passwordBytes := []byte(password)
 	roleBytes := []byte(role)
 	dpb := bytes.Join([][]byte{
 		{isc_dpb_version1},
 		{isc_dpb_set_db_charset, byte(len(encode))}, encode,
 		{isc_dpb_lc_ctype, byte(len(encode))}, encode,
 		{isc_dpb_user_name, byte(len(userBytes))}, userBytes,
-		{isc_dpb_password, byte(len(passwordBytes))}, passwordBytes,
+		p.passwordItem(isc_dpb_password_enc, password),
 		{isc_dpb_sql_role_name, byte(len(roleBytes))}, roleBytes,
 		{isc_dpb_sql_dialect, 4}, int32_to_bytes(3),
 		{isc_dpb_force_write, 4}, bint32_to_bytes(1),
@@ -1320,7 +1366,6 @@ func (p *wireProtocol) opAttach(dbName string, user string, password string, rol
 	p.debugPrint("opAttach")
 	encode := []byte(p.charset)
 	userBytes := []byte(strings.ToUpper(user))
-	passwordBytes := []byte(password)
 	roleBytes := []byte(role)
 
 	processName, err := osext.Executable()
@@ -1354,7 +1399,7 @@ func (p *wireProtocol) opAttach(dbName string, user string, password string, rol
 		[]byte{isc_dpb_sql_dialect, 4}, int32_to_bytes(3),
 		[]byte{isc_dpb_lc_ctype, byte(len(encode))}, encode,
 		[]byte{isc_dpb_user_name, byte(len(userBytes))}, userBytes,
-		[]byte{isc_dpb_password, byte(len(passwordBytes))}, passwordBytes,
+		p.passwordItem(isc_dpb_password_enc, password),
 		[]byte{isc_dpb_sql_role_name, byte(len(roleBytes))}, roleBytes,
 		[]byte{isc_dpb_process_id, 4}, int32_to_bytes(pid),
 		[]byte{isc_dpb_process_name, byte(len(processNameBytes))}, processNameBytes,
@@ -2384,11 +2429,10 @@ func (p *wireProtocol) opServiceAttach() error {
 	p.packString("service_mgr")
 
 	userBytes := []byte(p.user)
-	passwordBytes := []byte(p.password)
 	spb := bytes.Join([][]byte{
 		{isc_spb_version, isc_spb_current_version},
 		{isc_spb_user_name, byte(len(userBytes))}, userBytes,
-		{isc_spb_password, byte(len(passwordBytes))}, passwordBytes,
+		p.passwordItem(isc_spb_password_enc, p.password),
 		{isc_spb_utf8_filename, 1, 1},
 	}, nil)
 	if p.authData != nil {

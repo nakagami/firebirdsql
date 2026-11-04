@@ -523,8 +523,6 @@ func TestServiceAttachDeferredAuthData(t *testing.T) {
 			spb := []byte{isc_spb_version, isc_spb_current_version}
 			spb = append(spb, isc_spb_user_name, 6)
 			spb = append(spb, "SYSDBA"...)
-			spb = append(spb, isc_spb_password, 9)
-			spb = append(spb, "masterkey"...)
 			spb = append(spb, isc_spb_utf8_filename, 1, 1)
 			if tc.deferred {
 				proof := hex.EncodeToString(p.authData)

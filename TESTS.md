@@ -118,8 +118,26 @@ Legend: ✅ pass · ⏭️ skip (version/capability gate or server configuration
 | `TestCreateDatabasePageSize` | `firebirdsql_createdb` creates `mon$page_size` 16384 for `page_size=16384`, 4096 for `page_size=4096` (8192 on 6.0) and the server default for an unset or empty `page_size` (4096 on 2.5, 8192 on 3.0+) | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestParsePageSize` | An empty page_size maps to 0 (no `isc_dpb_page_size`), a valid size passes through, 0 and invalid values fail | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestCreateDPBPageSize` | The op_create DPB carries `isc_dpb_page_size` (little-endian) only for a set page size; the other items stay intact | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
-| `TestCreateDPBUnchangedWithPageSize` | With `page_size=4096` the op_create DPB is byte-identical to the one sent before the page size became optional | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
-| `TestServiceAttachDeferredAuthData` | After a canned connect reply, the op_service_attach packet carries a deferred SRP proof under the SPB tag (111), and no proof after plain `op_accept` | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCreateDPBUnchangedWithPageSize` | With `page_size=4096` the op_create DPB is byte-identical to the one sent before the page size became optional, except for the password, which goes as its hash below protocol 13 | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestServiceAttachDeferredAuthData` | After a canned connect reply, the op_service_attach packet carries a deferred SRP proof under the SPB tag (111) and no password, and no proof after plain `op_accept` | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestAuthPluginListHardened` | `auth_plugin_list=Srp256,Srp` authenticates through SRP at protocol 13+ and is refused below it, naming the list | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestParseConnectResponse_SuccessWithoutAccept` | A success `op_response` to `op_connect` is an error, whatever `wire_crypt` says | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestParseConnectResponse_SuccessDuringContAuth` | A success `op_response` to `op_cont_auth` is refused under `wire_crypt=required`, and counts as authenticated otherwise | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestParseConnectResponse_RefusalKeepsServerError` | The server's own error still comes back from both of those places | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestParseConnectResponse_LegitimateAuthFlows` | The replies real servers send still complete the handshake | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestWireCryptRequiredLegacyPluginSendsNoHash` | Under `wire_crypt=required`, a server selecting `Legacy_Auth` is refused before the hash goes out | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestConnectSuccessResponseSendsNoAttach` | Through all three entry points against a fake server, a success reply to `op_connect` draws no attach request | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestLegacyPluginHashInConnectPacket` | Documented limit: `auth_plugin_name=Legacy_Auth` puts the hash in `op_connect`, even under `wire_crypt=required` | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestLegacyPluginSendsHashNotPassword` | A server selecting `Legacy_Auth` without `wire_crypt=required` gets the hash, never the password | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestAttachBuildersOmitPassword` | At protocols 13, 16 and 19, no attach block builder sends a password item, for a 300-byte password too | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestLegacyPasswordHash` | The hash matches fixed vectors, and only the first 8 bytes and the low 7 bits of each count | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestAttachBuildersBelow13` | Below protocol 13, each builder sends exactly one `password_enc` item and no cleartext | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestPasswordNotOnWire` | Through all three entry points against a fake server, neither the password nor the hash leaves at protocol 13; at 12 only the hash does, and `wire_crypt=required` refuses it on attach and create | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestBelow13RequiresLegacyAuth` | Below protocol 13, every accept opcode is refused before anything is sent if `auth_plugin_list` omits `Legacy_Auth` | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestListWithoutLegacyAuthConnectsAt13` | From protocol 13, a list that omits `Legacy_Auth` isn't refused, on any accept opcode | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestBelow13RefusalSendsNoAttach` | That refusal draws no attach request; documented limit: the service manager always allows `Legacy_Auth` | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestUserManagerPasswordIsRequestData` | Documented limit: a password changed through `UserManager` is in the request itself | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestPasswordOnWireLive` | Reads real plaintext logins off the wire through a relay: create, attach and service attach send no password at any protocol, and `password_enc` below 13 | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestServiceManagerWireCryptFalse` | A service attach without wire crypt authenticates and round-trips; skips when the Services API is unavailable or the server requires wire encryption | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestTimezoneLegacyAliases` | GMT/ACT/AET/AGT/ART/AST legacy zone aliases round-trip | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestTimezoneMapInvalidEntries` | Unknown zone names/ids yield zero values, never a wrong zone | ✅ pass | ✅ pass | ✅ pass | ✅ pass |

@@ -87,11 +87,14 @@ Authentication is controlled by two parameters:
 	auth_plugin_list  ordered, comma-separated allow-list of acceptable auth
 	                  plugins (default "Srp256,Srp,Legacy_Auth"; must be a subset
 	                  of the supported plugins). The plugin the server selects must
-	                  be a member, otherwise the connection is refused before any
-	                  credentials are sent. Omit a plugin to refuse it — e.g.
-	                  "Srp256,Srp" rejects a server downgrade to Legacy_Auth, which
-	                  would otherwise put a brute-forceable DES crypt(password) hash
-	                  on the wire.
+	                  be a member, otherwise the connection is refused before the
+	                  attach request is sent. Below wire protocol 13 there are
+	                  no plugins and the only login is the Legacy_Auth hash, so the
+	                  connection counts as Legacy_Auth, and Firebird 2.5 can't
+	                  connect with a list that omits it. Omit a plugin to refuse it
+	                  — e.g. "Srp256,Srp" rejects a server downgrade to Legacy_Auth,
+	                  which would otherwise put a brute-forceable DES crypt(password)
+	                  hash on the wire.
 
 Wire encryption is controlled by two parameters that mirror the Firebird server's
 own WireCrypt / WireCryptPlugin settings:
@@ -103,13 +106,39 @@ own WireCrypt / WireCryptPlugin settings:
 	                  connection closed on every non-encrypting handshake
 	                  outcome — including a legacy plain op_accept (protocol
 	                  versions <= 12) and an op_accept_data with no negotiated
-	                  cipher — and refuses before any credentials are sent.
-	                  Note: "enabled" tolerates an active-MITM downgrade to
+	                  cipher — and refuses before the attach request is sent. It
+	                  can't protect what the first packet already carried: with
+	                  auth_plugin_name=Legacy_Auth, that includes the DES password
+	                  hash. Note: "enabled" tolerates an active-MITM downgrade to
 	                  plaintext; on untrusted networks use "required".
 	wire_crypt_plugin ordered, comma-separated allow-list of acceptable ciphers
 	                  (default "ChaCha64,ChaCha,Arc4"). Order is client
 	                  preference; omit a cipher to refuse it — e.g.
 	                  "ChaCha64,ChaCha" rejects the weak RC4/Arc4 cipher.
+
+What the driver sends to log in depends on the wire protocol and the plugin the
+server picks. At protocol 13+ (Firebird 3.0+) that's an SRP proof, or the DES
+crypt(password) hash with Legacy_Auth. Below 13 (Firebird 2.5) it's the same hash
+as password_enc. It's never the password.
+
+The hash protects the password but not the login. Only the first 8 bytes of the
+password count, it can be brute-forced, and anyone who captures it can log in with
+it on a server that accepts Legacy_Auth (always on Firebird 2.5; on 3.0+ only when
+AuthServer includes it). It travels unencrypted, because those protocols and
+Legacy_Auth have no wire encryption.
+
+The server picks the protocol and plugin, so with default settings a fake server
+or an active attacker can ask for the hash. wire_crypt=required refuses such a
+connection, and so does an auth_plugin_list that omits Legacy_Auth. The service
+manager can't do so: it has no required mode and always allows Legacy_Auth, so an
+untrusted network isn't safe for it.
+
+With auth_plugin_name=Legacy_Auth, the hash is in the first packet, at every
+protocol, before the server has picked anything. wire_crypt=required can't stop
+that.
+
+Passwords that change a user through UserManager, and any password in SQL text,
+are ordinary request data that only wire encryption protects.
 
 The negotiated cipher can be inspected via the WireCipher method on the driver
 connection (see firebirdsqlConn.WireCipher), reachable through sql.Conn.Raw.
