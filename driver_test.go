@@ -933,8 +933,9 @@ func TestLegacyAuthWireCrypt(t *testing.T) {
 }
 
 // TestAuthPluginListHardened exercises the #22 fix end-to-end: a client allow-list
-// that excludes Legacy_Auth still authenticates normally against an SRP server,
-// and a preferred plugin outside the allow-list is refused before dialing.
+// that excludes Legacy_Auth still authenticates normally against an SRP server, is
+// refused below protocol 13 where Legacy_Auth is the only login, and a preferred
+// plugin outside the allow-list is refused before dialing.
 func TestAuthPluginListHardened(t *testing.T) {
 	test_dsn := GetTestDSN("test_auth_hardened_")
 	var n int
@@ -945,17 +946,27 @@ func TestAuthPluginListHardened(t *testing.T) {
 	if err = conn.Ping(); err != nil {
 		t.Fatalf("Error ping: %v", err)
 	}
+	// Taken from this connection, not a version probe: below 13 a probe goes
+	// through the login under test, and a broken login would skip the test
+	// instead of failing it.
+	protocol := negotiatedProtocol(t, conn)
 	conn.Close()
 
 	time.Sleep(1 * time.Second)
 
-	// A hardened allow-list excluding Legacy_Auth must still connect: the server
-	// selects Srp256/Srp, which the client allows.
+	// A hardened allow-list excluding Legacy_Auth must still connect when the
+	// server selects Srp256/Srp, which the client allows. Below protocol 13 there's
+	// no SRP, so it must be refused.
 	conn, err = sql.Open("firebirdsql", test_dsn+"?auth_plugin_list=Srp256,Srp")
 	if err != nil {
 		t.Fatalf("Error connecting: %v", err)
 	}
-	if err = conn.QueryRow("SELECT Count(*) FROM rdb$relations").Scan(&n); err != nil {
+	err = conn.QueryRow("SELECT Count(*) FROM rdb$relations").Scan(&n)
+	if protocol < PROTOCOL_VERSION13 {
+		if err == nil || !strings.Contains(err.Error(), "auth_plugin_list") {
+			t.Fatalf("protocol %d with auth_plugin_list=Srp256,Srp: err = %v, want a refusal naming the list", protocol, err)
+		}
+	} else if err != nil {
 		t.Fatalf("hardened auth_plugin_list=Srp256,Srp should authenticate via SRP: %v", err)
 	}
 	conn.Close()

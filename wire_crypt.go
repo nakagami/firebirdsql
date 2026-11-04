@@ -84,8 +84,11 @@ var errWireCryptRequired = errors.New("firebirdsql: wire_crypt=required but no w
 // established (fail closed).
 //
 // This is the single source of truth for the policy and MUST be consulted on
-// every handshake outcome — including the legacy op_accept path, where the
-// server never offers a cipher (encPlugin == "" and hasSessionKey == false).
+// every accept opcode — including the legacy op_accept path, where the server
+// never offers a cipher (encPlugin == "" and hasSessionKey == false).
+// _parse_connect_response refuses wire_crypt=required itself in two cases that
+// can't wait for this: a server selecting Legacy_Auth, whose hash would go out
+// first, and a success reply to op_cont_auth, which returns early.
 // nonce is deliberately not an input: Arc4 negotiates with a nil nonce, so the
 // decision must not depend on it.
 func wireCryptResolve(mode wireCryptMode, encPlugin string, hasSessionKey bool) (encrypt bool, err error) {
