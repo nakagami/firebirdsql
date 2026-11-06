@@ -204,7 +204,7 @@ func TestServiceManager_RollbackTransaction(t *testing.T) {
 // rarely. Firebird 3.0 and 4.0 report all three lines.
 func assertLimboResolutionError(t *testing.T, db string, err error) {
 	t.Helper()
-	want := "transaction is not in limbo\ntransaction 1 is committed\n"
+	want := "transaction is not in limbo\ntransaction 1 is committed"
 	if testServerVersion(t).Major < 3 {
 		if err == nil {
 			t.Log("Firebird 2.5 cleared the limbo resolution error before it was read")
