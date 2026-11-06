@@ -33,21 +33,17 @@ func (s *statusBuf) end()        { s.tag(isc_arg_end) }
 func (s *statusBuf) int32(v int32) {
 	_ = binary.Write(&s.buf, binary.BigEndian, v)
 }
-func (s *statusBuf) gds(code int)     { s.tag(isc_arg_gds); s.int32(int32(code)) }
-func (s *statusBuf) warning(code int) { s.tag(isc_arg_warning); s.int32(int32(code)) }
-func (s *statusBuf) str(v string) {
-	s.tag(isc_arg_string)
+func (s *statusBuf) gds(code int)         { s.tag(isc_arg_gds); s.int32(int32(code)) }
+func (s *statusBuf) warning(code int)     { s.tag(isc_arg_warning); s.int32(int32(code)) }
+func (s *statusBuf) num(v int32)          { s.tag(isc_arg_number); s.int32(v) }
+func (s *statusBuf) str(v string)         { s.tagged(isc_arg_string, v) }
+func (s *statusBuf) interpreted(v string) { s.tagged(isc_arg_interpreted, v) }
+func (s *statusBuf) sqlState(st string)   { s.tagged(isc_arg_sql_state, st) }
+func (s *statusBuf) tagged(t int32, v string) {
+	s.tag(t)
 	s.int32(int32(len(v)))
 	s.buf.WriteString(v)
 	if pad := (4 - len(v)%4) % 4; pad > 0 {
-		s.buf.Write(make([]byte, pad))
-	}
-}
-func (s *statusBuf) sqlState(st string) {
-	s.tag(isc_arg_sql_state)
-	s.int32(int32(len(st)))
-	s.buf.WriteString(st)
-	if pad := (4 - len(st)%4) % 4; pad > 0 {
 		s.buf.Write(make([]byte, pad))
 	}
 }
@@ -120,6 +116,91 @@ func TestParseStatusVector_MultiChain(t *testing.T) {
 	}
 	if !slices.Equal(sv.params[1], []string{"val=X"}) {
 		t.Errorf("params[1]: got %v, want [val=X]", sv.params[1])
+	}
+}
+
+// TestParseStatusVector_Message checks how the messages of a status vector are
+// joined: one newline between messages and none at the end, the way the C client
+// returns one message per fb_interpret call.
+func TestParseStatusVector_Message(t *testing.T) {
+	cases := []struct {
+		name  string
+		build func(*statusBuf)
+		want  string
+	}{
+		{
+			name: "single code",
+			build: func(sb *statusBuf) {
+				sb.gds(ISCUniqueKeyViolation)
+				sb.str("INTEG_1")
+				sb.str("T")
+			},
+			want: "violation of PRIMARY or UNIQUE KEY constraint INTEG_1 on table T",
+		},
+		{
+			name: "several codes with string and number params",
+			build: func(sb *statusBuf) {
+				sb.gds(ISCDsqlError)
+				sb.gds(ISCSqlerr)
+				sb.num(-104)
+				sb.gds(ISCDsqlTokenUnkErr)
+				sb.num(1)
+				sb.num(1)
+				sb.gds(ISCRandom)
+				sb.str("incorrect")
+			},
+			want: "Dynamic SQL Error\nSQL error code = -104\nToken unknown - line 1, column 1\nincorrect",
+		},
+		{
+			name: "unknown code followed by a known one",
+			build: func(sb *statusBuf) {
+				sb.gds(335599999) // not in the message table
+				sb.gds(ISCDeadlock)
+			},
+			want: "unknown gds_code: 335599999\ndeadlock",
+		},
+		{
+			name: "interpreted text between messages",
+			build: func(sb *statusBuf) {
+				sb.gds(ISCDsqlError)
+				sb.interpreted("text from the server")
+				sb.gds(ISCDeadlock)
+			},
+			want: "Dynamic SQL Error\ntext from the server\ndeadlock",
+		},
+		{
+			name: "interpreted text first",
+			build: func(sb *statusBuf) {
+				sb.interpreted("text from the server")
+				sb.gds(ISCDeadlock)
+			},
+			want: "text from the server\ndeadlock",
+		},
+		{
+			name: "warnings are left out",
+			build: func(sb *statusBuf) {
+				sb.warning(ISCAdmTaskDenied) // before the error
+				sb.str("ignored")
+				sb.gds(ISCDeadlock)
+				sb.warning(ISCAdmTaskDenied) // and after it
+				sb.interpreted("ignored")
+			},
+			want: "deadlock",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var sb statusBuf
+			c.build(&sb)
+			sb.end()
+			sv, err := testProtocol(sb.bytes())._parse_status_vector()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if sv.message != c.want {
+				t.Errorf("message = %q, want %q", sv.message, c.want)
+			}
+		})
 	}
 }
 

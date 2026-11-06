@@ -61,7 +61,7 @@ type FbError struct {
 	SQLState string     // 5-char SQLSTATE (e.g. "23505"); server value if sent, else fallback
 	Params   [][]string // Params[i] holds @N substitution values for GDSCodes[i]
 	Warnings []int      // GDS codes that arrived as isc_arg_warning entries
-	Message  string     // formatted human-readable message (params already substituted)
+	Message  string     // human-readable text with params substituted; messages separated by newlines, no trailing newline
 }
 
 func (e *FbError) Error() string {

@@ -182,7 +182,7 @@ func TestBasic(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Need metadata update error")
 	}
-	if !strings.Contains(err.Error(), "unsuccessful metadata update\n") {
+	if !strings.Contains(err.Error(), "unsuccessful metadata update") {
 		t.Fatalf("Bad message:%v", err.Error())
 	}
 
@@ -402,7 +402,7 @@ func TestError(t *testing.T) {
 	_, err = conn.Exec("incorrect sql statement")
 	if err == nil {
 		t.Fatalf("Incorrect error")
-	} else if err.Error() != "Dynamic SQL Error\nSQL error code = -104\nToken unknown - line 1, column 1\nincorrect\n" {
+	} else if err.Error() != "Dynamic SQL Error\nSQL error code = -104\nToken unknown - line 1, column 1\nincorrect" {
 		t.Fatalf("Incorrect error: %v", err.Error())
 	}
 	conn.Close()
@@ -1911,11 +1911,11 @@ func TestIssue264(t *testing.T) {
 func TestAuth(t *testing.T) {
 	conn, err := sql.Open("firebirdsql", GetTestUser()+":wrongpassword@"+testServerAddr()+"/employee")
 	err = conn.Ping()
-	assert.EqualError(t, err, "Your user name and password are not defined. Ask your database administrator to set up a Firebird login.\n")
+	assert.EqualError(t, err, "Your user name and password are not defined. Ask your database administrator to set up a Firebird login.")
 
 	conn, err = sql.Open("firebirdsql", "notexisting:wrongpassword@"+testServerAddr()+"/employee")
 	err = conn.Ping()
-	assert.EqualError(t, err, "Your user name and password are not defined. Ask your database administrator to set up a Firebird login.\n")
+	assert.EqualError(t, err, "Your user name and password are not defined. Ask your database administrator to set up a Firebird login.")
 }
 
 func TestInsertTimeDateLocalWallClock(t *testing.T) {
