@@ -3,17 +3,22 @@
 //
 // Usage:
 //
-//	go run ./_attic/errormsgs                                     # fetch from upstream master
-//	go run ./_attic/errormsgs -url <base-url>                     # custom branch/tag base URL
-//	go run ./_attic/errormsgs -src /path/to/firebird/src/include  # local Firebird checkout
+//	go run ./_attic/errormsgs                                     # fetch from the current upstream master commit
+//	go run ./_attic/errormsgs -rev <sha>                          # fetch from that upstream commit
+//	go run ./_attic/errormsgs -url <base-url> [-rev <sha>]        # custom branch/tag base URL
+//	go run ./_attic/errormsgs -src /path/to/firebird/src/include [-rev <sha>]  # local Firebird checkout
 //	go run ./_attic/errormsgs -outdir /path/to/output             # write files elsewhere
+//
+// Generated files record the Firebird commit they came from. With -url or -src
+// the commit cannot be discovered, so -rev states it; without -rev it is "unknown".
 package main
 
 import (
-	"bufio"
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
+	"go/format"
 	"io"
 	"net/http"
 	"os"
@@ -22,10 +27,14 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
-	defaultBaseURL = "https://raw.githubusercontent.com/FirebirdSQL/firebird/master/src/include/firebird/impl"
+	defaultBaseURL  = "https://raw.githubusercontent.com/FirebirdSQL/firebird/master/src/include/firebird/impl"
+	pinnedBaseURL   = "https://raw.githubusercontent.com/FirebirdSQL/firebird/%s/src/include/firebird/impl"
+	masterCommitURL = "https://api.github.com/repos/FirebirdSQL/firebird/commits/master"
+	unknownRevision = "unknown"
 
 	idplHeader = `/****************************************************************************
 The contents of this file are subject to the Interbase Public
@@ -42,6 +51,13 @@ rights and limitations under the License.
 `
 )
 
+var (
+	httpClient  = &http.Client{Timeout: 30 * time.Second}
+	reCommitSHA = regexp.MustCompile(`^[0-9a-f]{40}$`)
+	// errEmptyText marks a message upstream deliberately left without text.
+	errEmptyText = errors.New("empty message text")
+)
+
 type msgEntry struct {
 	facilityName string
 	facilityID   int
@@ -54,7 +70,7 @@ type msgEntry struct {
 }
 
 func (e msgEntry) iscCode() int {
-	return (e.facilityID&0x1F)<<16 | (e.number&0x3FFF) | 0x14000000
+	return (e.facilityID&0x1F)<<16 | (e.number & 0x3FFF) | 0x14000000
 }
 
 func (e msgEntry) sqlState() string {
@@ -72,15 +88,73 @@ func main() {
 	baseURL := flag.String("url", defaultBaseURL, "base URL of Firebird impl/ include directory")
 	srcDir := flag.String("src", "", "local firebird src/include path (overrides -url)")
 	outDir := flag.String("outdir", ".", "directory for generated output files")
+	rev := flag.String("rev", "", "Firebird commit: pins the default URL, or states the commit for -url and -src")
 	flag.Parse()
 
-	if err := run(*srcDir, *baseURL, *outDir); err != nil {
+	resolvedURL, resolvedRev, err := resolveRevision(*srcDir, *baseURL, *rev)
+	if err == nil {
+		err = run(*srcDir, resolvedURL, resolvedRev, *outDir)
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func run(srcDir, baseURL, outDir string) error {
+// resolveRevision returns the base URL to read from and the Firebird commit to
+// record. The default source is pinned to one commit, so every header comes from
+// it. A checkout or custom URL cannot be tied to a commit, so there rev only states
+// what to record.
+func resolveRevision(srcDir, baseURL, rev string) (string, string, error) {
+	pinned := srcDir == "" && baseURL == defaultBaseURL
+	switch {
+	case rev == "" && !pinned:
+		return baseURL, unknownRevision, nil
+	case rev == "":
+		sha, err := lookupCommit(masterCommitURL)
+		if err != nil {
+			return "", "", fmt.Errorf("resolve Firebird master commit: %w (pass -rev <40-hex sha> to skip this lookup)", err)
+		}
+		rev = sha
+	case rev == unknownRevision && !pinned:
+		return baseURL, rev, nil
+	case !reCommitSHA.MatchString(rev):
+		return "", "", fmt.Errorf("invalid -rev %q: want a full 40-character hex commit SHA", rev)
+	}
+	if pinned {
+		baseURL = fmt.Sprintf(pinnedBaseURL, rev)
+	}
+	return baseURL, rev, nil
+}
+
+// lookupCommit reads a commit SHA from a GitHub commits endpoint. The Accept header
+// makes GitHub return the bare SHA instead of a JSON document.
+func lookupCommit(url string) (string, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "application/vnd.github.sha")
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("HTTP %d from %s", resp.StatusCode, url)
+	}
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	sha := strings.TrimSpace(string(b))
+	if !reCommitSHA.MatchString(sha) {
+		return "", fmt.Errorf("unexpected response from %s: %q", url, sha)
+	}
+	return sha, nil
+}
+
+func run(srcDir, baseURL, rev, outDir string) error {
 	helperSrc, err := readContent(srcDir, baseURL, "msg_helper.h")
 	if err != nil {
 		return fmt.Errorf("read msg_helper.h: %w", err)
@@ -97,6 +171,7 @@ func run(srcDir, baseURL, outDir string) error {
 	includes := parseIncludes(allSrc)
 
 	var entries []msgEntry
+	var warnings []string
 	for _, inc := range includes {
 		facSrc, err := readContent(srcDir, baseURL, "msg/"+inc)
 		if err != nil {
@@ -107,11 +182,9 @@ func run(srcDir, baseURL, outDir string) error {
 		if !ok {
 			return fmt.Errorf("facility ID not found for %q (derived from %s); known: %v", facName, inc, facilityKeys(facilities))
 		}
-		got, err := parseEntries(facSrc, facName, facID)
-		if err != nil {
-			return fmt.Errorf("parse msg/%s: %w", inc, err)
-		}
+		got, warned := parseEntries(facSrc, "msg/"+inc, facName, facID)
 		entries = append(entries, got...)
+		warnings = append(warnings, warned...)
 	}
 
 	sort.Slice(entries, func(i, j int) bool {
@@ -122,18 +195,35 @@ func run(srcDir, baseURL, outDir string) error {
 	// regardless of whether -src or -url was used.
 	sourceRef := defaultBaseURL + "/msg/all.h"
 
-	for _, emit := range []struct {
+	outputs := []struct {
 		name string
-		fn   func(string, []msgEntry, string) error
+		emit func(io.Writer, []msgEntry, string, string)
 	}{
 		{"errmsgs.go", emitErrmsgs},
 		{"fberrcode.go", emitFbErrcode},
 		{"sqlstate_map.go", emitSQLStateMap},
 		{"sqlcode_map.go", emitSQLCodeMap},
-	} {
-		if err := emit.fn(outDir, entries, sourceRef); err != nil {
-			return fmt.Errorf("emit %s: %w", emit.name, err)
+	}
+
+	// Render everything first: invalid output must not overwrite any existing file.
+	rendered := make([][]byte, len(outputs))
+	for i, out := range outputs {
+		var buf bytes.Buffer
+		out.emit(&buf, entries, sourceRef, rev)
+		src, err := format.Source(buf.Bytes())
+		if err != nil {
+			return fmt.Errorf("format %s: %w", out.name, err)
 		}
+		rendered[i] = src
+	}
+	for i, out := range outputs {
+		if err := os.WriteFile(filepath.Join(outDir, out.name), rendered[i], 0o644); err != nil {
+			return fmt.Errorf("write %s: %w", out.name, err)
+		}
+	}
+
+	for _, w := range warnings {
+		fmt.Fprintln(os.Stderr, "warning:", w)
 	}
 
 	var withSym, withState int
@@ -145,8 +235,8 @@ func run(srcDir, baseURL, outDir string) error {
 			withState++
 		}
 	}
-	fmt.Printf("Generated 4 files in %s: %d entries, %d with symbols, %d with SQLSTATE\n",
-		outDir, len(entries), withSym, withState)
+	fmt.Printf("Generated 4 files in %s from Firebird commit %s: %d entries, %d with symbols, %d with SQLSTATE, %d warnings\n",
+		outDir, rev, len(entries), withSym, withState, len(warnings))
 	return nil
 }
 
@@ -157,7 +247,7 @@ func readContent(srcDir, baseURL, relPath string) (string, error) {
 		return string(b), err
 	}
 	url := baseURL + "/" + relPath
-	resp, err := http.Get(url) //nolint:noctx
+	resp, err := httpClient.Get(url) //nolint:noctx
 	if err != nil {
 		return "", err
 	}
@@ -195,9 +285,13 @@ func parseIncludes(src string) []string {
 
 var reMacroStart = regexp.MustCompile(`\bFB_IMPL_MSG(_NO_SYMBOL|_SYMBOL)?\s*\(`)
 
-func parseEntries(src, facilityName string, facilityID int) ([]msgEntry, error) {
+// parseEntries returns the messages in one facility header, plus a warning for
+// each macro line it could not turn into a message. Messages upstream left empty
+// are skipped silently.
+func parseEntries(src, fileName, facilityName string, facilityID int) ([]msgEntry, []string) {
 	var entries []msgEntry
-	for _, line := range strings.Split(src, "\n") {
+	var warnings []string
+	for i, line := range strings.Split(src, "\n") {
 		if idx := strings.Index(line, "//"); idx >= 0 {
 			line = line[:idx]
 		}
@@ -206,6 +300,7 @@ func parseEntries(src, facilityName string, facilityID int) ([]msgEntry, error) 
 		}
 		loc := reMacroStart.FindStringIndex(line)
 		if loc == nil {
+			warnings = append(warnings, fmt.Sprintf("%s:%d: unrecognized macro: %s", fileName, i+1, strings.TrimSpace(line)))
 			continue
 		}
 		match := line[loc[0]:loc[1]]
@@ -217,21 +312,24 @@ func parseEntries(src, facilityName string, facilityID int) ([]msgEntry, error) 
 			variant = "symbol"
 		}
 		args := splitArgs(line, loc[1]) // loc[1] points past the opening '('
-		e, ok := buildEntry(variant, args, facilityName, facilityID)
-		if ok {
+		e, err := buildEntry(variant, args, facilityName, facilityID)
+		switch {
+		case err == nil:
 			entries = append(entries, e)
+		case !errors.Is(err, errEmptyText):
+			warnings = append(warnings, fmt.Sprintf("%s:%d: %v: %s", fileName, i+1, err, strings.TrimSpace(line)))
 		}
 	}
-	return entries, nil
+	return entries, warnings
 }
 
-func buildEntry(variant string, args []string, facilityName string, facilityID int) (msgEntry, bool) {
+func buildEntry(variant string, args []string, facilityName string, facilityID int) (msgEntry, error) {
 	if len(args) < 3 {
-		return msgEntry{}, false
+		return msgEntry{}, fmt.Errorf("want at least 3 macro arguments, got %d", len(args))
 	}
 	number, err := strconv.Atoi(strings.TrimSpace(args[1]))
 	if err != nil {
-		return msgEntry{}, false
+		return msgEntry{}, fmt.Errorf("bad message number: %w", err)
 	}
 	e := msgEntry{facilityName: facilityName, facilityID: facilityID, number: number}
 	switch variant {
@@ -239,18 +337,18 @@ func buildEntry(variant string, args []string, facilityName string, facilityID i
 		e.text = unquote(args[2])
 	case "symbol":
 		if len(args) < 4 {
-			return msgEntry{}, false
+			return msgEntry{}, fmt.Errorf("want 4 macro arguments, got %d", len(args))
 		}
 		e.symbol = strings.TrimSpace(args[2])
 		e.text = unquote(args[3])
 	default: // full FB_IMPL_MSG(fac, num, sym, sqlCode, class, sub, text)
 		if len(args) < 7 {
-			return msgEntry{}, false
+			return msgEntry{}, fmt.Errorf("want 7 macro arguments, got %d", len(args))
 		}
 		e.symbol = strings.TrimSpace(args[2])
 		sc, err := strconv.ParseInt(strings.TrimSpace(args[3]), 10, 32)
 		if err != nil {
-			return msgEntry{}, false
+			return msgEntry{}, fmt.Errorf("bad SQLCODE: %w", err)
 		}
 		e.sqlCode = int32(sc)
 		e.sqlClass = unquote(args[4])
@@ -258,9 +356,9 @@ func buildEntry(variant string, args []string, facilityName string, facilityID i
 		e.text = unquote(args[6])
 	}
 	if e.text == "" {
-		return msgEntry{}, false
+		return msgEntry{}, errEmptyText
 	}
-	return e, true
+	return e, nil
 }
 
 // splitArgs splits comma-separated macro arguments starting just after the opening '(' at pos.
@@ -351,50 +449,34 @@ func facilityKeys(m map[string]int) []string {
 	return keys
 }
 
-func writeFileHeader(w *bufio.Writer, sourceRef string, withGenerate bool) {
+func writeFileHeader(w io.Writer, sourceRef, rev string, withGenerate bool) {
 	fmt.Fprint(w, idplHeader)
 	fmt.Fprintf(w, "\n// Code generated by _attic/errormsgs; DO NOT EDIT.\n")
 	fmt.Fprintf(w, "// Source: %s\n", sourceRef)
+	fmt.Fprintf(w, "// Firebird commit: %s\n", rev)
 	if withGenerate {
 		fmt.Fprintf(w, "\n//go:generate go run ./_attic/errormsgs\n")
 	}
 	fmt.Fprintf(w, "\npackage firebirdsql\n\n")
 }
 
-func createOut(outDir, name string) (*os.File, error) {
-	return os.Create(filepath.Join(outDir, name))
-}
-
-func emitErrmsgs(outDir string, entries []msgEntry, sourceRef string) (retErr error) {
-	f, err := createOut(outDir, "errmsgs.go")
-	if err != nil {
-		return err
-	}
-	defer func() { retErr = errors.Join(retErr, f.Close()) }()
-	w := bufio.NewWriter(f)
-	writeFileHeader(w, sourceRef, true)
+func emitErrmsgs(w io.Writer, entries []msgEntry, sourceRef, rev string) {
+	writeFileHeader(w, sourceRef, rev, true)
 	fmt.Fprintln(w, "// errmsgs returns the Firebird message template for a GDS error code,")
 	fmt.Fprintln(w, "// or an empty string when the code is unknown.")
 	fmt.Fprintln(w, "func errmsgs(code int) string {")
 	fmt.Fprintln(w, "\tswitch code {")
 	for _, e := range entries {
-		fmt.Fprintf(w, "\tcase %d:\n\t\treturn \"%s\\n\"\n", e.iscCode(), e.text)
+		fmt.Fprintf(w, "\tcase %d:\n\t\treturn \"%s\"\n", e.iscCode(), e.text)
 	}
 	fmt.Fprintln(w, "\tdefault:")
 	fmt.Fprintln(w, "\t\treturn \"\"")
 	fmt.Fprintln(w, "\t}")
 	fmt.Fprintln(w, "}")
-	return w.Flush()
 }
 
-func emitFbErrcode(outDir string, entries []msgEntry, sourceRef string) (retErr error) {
-	f, err := createOut(outDir, "fberrcode.go")
-	if err != nil {
-		return err
-	}
-	defer func() { retErr = errors.Join(retErr, f.Close()) }()
-	w := bufio.NewWriter(f)
-	writeFileHeader(w, sourceRef, false)
+func emitFbErrcode(w io.Writer, entries []msgEntry, sourceRef, rev string) {
+	writeFileHeader(w, sourceRef, rev, false)
 	fmt.Fprintln(w, "// ISC* constants map Firebird symbol names to their numeric GDS error codes.")
 	fmt.Fprintln(w, "// Use with errors.As to classify *FbError values:")
 	fmt.Fprintln(w, "//")
@@ -416,17 +498,10 @@ func emitFbErrcode(outDir string, entries []msgEntry, sourceRef string) (retErr 
 		fmt.Fprintf(w, "\t%s = %d\n", e.goConst(), e.iscCode())
 	}
 	fmt.Fprintln(w, ")")
-	return w.Flush()
 }
 
-func emitSQLStateMap(outDir string, entries []msgEntry, sourceRef string) (retErr error) {
-	f, err := createOut(outDir, "sqlstate_map.go")
-	if err != nil {
-		return err
-	}
-	defer func() { retErr = errors.Join(retErr, f.Close()) }()
-	w := bufio.NewWriter(f)
-	writeFileHeader(w, sourceRef, false)
+func emitSQLStateMap(w io.Writer, entries []msgEntry, sourceRef, rev string) {
+	writeFileHeader(w, sourceRef, rev, false)
 	fmt.Fprintln(w, "// gdsToSQLState returns the SQL:2003 SQLSTATE string for a GDS error code,")
 	fmt.Fprintln(w, "// or an empty string when the code has no SQLSTATE mapping.")
 	fmt.Fprintln(w, "// Used as a fallback when the server does not send isc_arg_sql_state.")
@@ -442,17 +517,10 @@ func emitSQLStateMap(outDir string, entries []msgEntry, sourceRef string) (retEr
 	fmt.Fprintln(w, "\t\treturn \"\"")
 	fmt.Fprintln(w, "\t}")
 	fmt.Fprintln(w, "}")
-	return w.Flush()
 }
 
-func emitSQLCodeMap(outDir string, entries []msgEntry, sourceRef string) (retErr error) {
-	f, err := createOut(outDir, "sqlcode_map.go")
-	if err != nil {
-		return err
-	}
-	defer func() { retErr = errors.Join(retErr, f.Close()) }()
-	w := bufio.NewWriter(f)
-	writeFileHeader(w, sourceRef, false)
+func emitSQLCodeMap(w io.Writer, entries []msgEntry, sourceRef, rev string) {
+	writeFileHeader(w, sourceRef, rev, false)
 	fmt.Fprintln(w, "// gdsToSQLCode returns the Firebird SQL error code for a GDS error code, or 0.")
 	fmt.Fprintln(w, "// Used as a fallback when the server does not send isc_arg_sqlerr.")
 	fmt.Fprintln(w, "func gdsToSQLCode(code int) int32 {")
@@ -467,5 +535,4 @@ func emitSQLCodeMap(outDir string, entries []msgEntry, sourceRef string) (retErr
 	fmt.Fprintln(w, "\t\treturn 0")
 	fmt.Fprintln(w, "\t}")
 	fmt.Fprintln(w, "}")
-	return w.Flush()
 }

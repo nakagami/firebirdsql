@@ -350,6 +350,15 @@ type statusVector struct {
 	message  string
 }
 
+// appendMessage adds one message to the combined text. Messages are separated by
+// newlines, and the text does not end with one.
+func (sv *statusVector) appendMessage(s string) {
+	if sv.message != "" {
+		sv.message += "\n"
+	}
+	sv.message += s
+}
+
 func (p *wireProtocol) _parse_status_vector() (statusVector, error) {
 	var sv statusVector
 	gds_code := 0
@@ -376,9 +385,9 @@ func (p *wireProtocol) _parse_status_vector() (statusVector, error) {
 				sv.params = append(sv.params, nil)
 				currentIdx = len(sv.gdsCodes) - 1
 				if msg := errmsgs(gds_code); msg != "" {
-					sv.message += msg
+					sv.appendMessage(msg)
 				} else {
-					sv.message += fmt.Sprintf("unknown gds_code: %d", gds_code)
+					sv.appendMessage(fmt.Sprintf("unknown gds_code: %d", gds_code))
 				}
 				num_arg = 0
 			}
@@ -449,7 +458,7 @@ func (p *wireProtocol) _parse_status_vector() (statusVector, error) {
 				return sv, err
 			}
 			if !inWarning {
-				sv.message += bytes_to_str(b)
+				sv.appendMessage(bytes_to_str(b))
 			}
 		case n == isc_arg_sql_state:
 			b, err = p.recvPackets(4)
@@ -733,7 +742,7 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 					}
 
 					if op != op_cont_auth {
-						err = errors.New("Your user name and password are not defined. Ask your database administrator to set up a Firebird login.\n")
+						err = errors.New("Your user name and password are not defined. Ask your database administrator to set up a Firebird login.")
 						return
 					}
 
@@ -751,7 +760,7 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 					}
 				}
 				if len(data) == 0 {
-					err = errors.New("Your user name and password are not defined. Ask your database administrator to set up a Firebird login.\n")
+					err = errors.New("Your user name and password are not defined. Ask your database administrator to set up a Firebird login.")
 					return
 				}
 
@@ -783,7 +792,7 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 				}
 				authData = legacyPasswordHash(password)
 			} else {
-				err = errors.New("Your user name and password are not defined. Ask your database administrator to set up a Firebird login.\n")
+				err = errors.New("Your user name and password are not defined. Ask your database administrator to set up a Firebird login.")
 				return
 			}
 		}
@@ -2099,7 +2108,7 @@ func (p *wireProtocol) opResponse() (int32, []byte, []byte, error) {
 
 	if bytes_to_bint32(b) != op_response {
 		if bytes_to_bint32(b) == op_cont_auth {
-			return 0, nil, nil, errors.New("Your user name and password are not defined. Ask your database administrator to set up a Firebird login.\n")
+			return 0, nil, nil, errors.New("Your user name and password are not defined. Ask your database administrator to set up a Firebird login.")
 		}
 		return 0, nil, nil, NewErrOpResonse(bytes_to_bint32(b))
 	}
