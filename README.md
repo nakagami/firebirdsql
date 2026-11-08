@@ -151,17 +151,35 @@ param1, param2... are
 | Name | Description | Default | Note |
 | --- | --- | --- | --- |
 | auth_plugin_name | Preferred authentication plugin. Must be a member of `auth_plugin_list`. | Srp256 | Srp256/Srp/Legacy_Auth are available. |
-| auth_plugin_list | Ordered, comma-separated allow-list of acceptable authentication plugins (a subset of the supported `Srp256,Srp,Legacy_Auth`). The plugin the server selects must be a member, otherwise the connection is refused before any credentials are sent. Omit a plugin to refuse it (e.g. `Srp256,Srp` to refuse a server-forced downgrade to `Legacy_Auth`, which would otherwise put a brute-forceable DES `crypt(password)` hash on the wire). | Srp256,Srp,Legacy_Auth | `Legacy_Auth` is kept in the default for backward compatibility but is weak; set `Srp256,Srp` to harden. |
+| auth_plugin_list | Ordered, comma-separated allow-list of acceptable authentication plugins (a subset of the supported `Srp256,Srp,Legacy_Auth`). The plugin the server selects must be a member, otherwise the connection is refused before the attach request is sent. Below wire protocol 13 there are no plugins and the only login is the `Legacy_Auth` hash, so the connection counts as `Legacy_Auth`. Omit a plugin to refuse it (e.g. `Srp256,Srp` to refuse a server-forced downgrade to `Legacy_Auth`, which would otherwise put a brute-forceable DES `crypt(password)` hash on the wire). | Srp256,Srp,Legacy_Auth | `Legacy_Auth` is kept in the default for backward compatibility but is weak; set `Srp256,Srp` to harden. Firebird 2.5 can't connect with a list that omits it. |
 | column_name_to_lower | Force column name to lower | false | For "github.com/jmoiron/sqlx" |
 | page_size | Page size in bytes for a database created with the `firebirdsql_createdb` driver: 4096, 8192, 16384 or 32768. When unset or empty, no page size is sent and the server uses its default (4096 on Firebird 2.5, 8192 on 3.0 and later); set `page_size=4096` for the size older driver versions always used. Any other value is rejected before dialing. Only used by `firebirdsql_createdb`; validated on every DSN. | server default | Firebird 2.5/3.0 accept 4096-16384, 4.0/5.0 4096-32768 and 6.0 8192-32768; the server adjusts a size outside its range (4096 becomes 8192 on 6.0). |
 | role | Role name | | |
 | timezone | IANA time zone name (e.g. `UTC`, `Europe/Berlin`), or a fixed UTC offset (e.g. `%2B05:30`) | | Controls client-side decoding of naive DATE/TIME/TIMESTAMP and server session time zone (FB 4+). Write a fixed offset percent-encoded: a raw `+` in a URL query becomes a space. See "Time and timestamp handling" below. |
-| wire_crypt | Wire-encryption policy, mirroring the server's `WireCrypt` setting. Tri-state `disabled`/`enabled`/`required`, with boolean aliases `false`=`disabled` and `true`=`enabled`. `enabled` encrypts when the server offers a cipher but tolerates plaintext; `required` fails the connection closed on every non-encrypting handshake outcome (including a legacy plain `op_accept` for protocol versions ≤ 12 and an `op_accept_data` with no negotiated cipher), refusing before any credentials are sent. Note: `enabled` tolerates an active-MITM downgrade to plaintext; on untrusted networks use `required`. | true (=`enabled`) | For Firebird 3.0+. Against pre-3.0 / non-encrypting servers, `required` is refused (use `enabled` to allow plaintext). |
+| wire_crypt | Wire-encryption policy, mirroring the server's `WireCrypt` setting. Tri-state `disabled`/`enabled`/`required`, with boolean aliases `false`=`disabled` and `true`=`enabled`. `enabled` encrypts when the server offers a cipher but tolerates plaintext; `required` fails the connection closed on every non-encrypting handshake outcome (including a legacy plain `op_accept` for protocol versions ≤ 12 and an `op_accept_data` with no negotiated cipher), refusing before the attach request is sent. It can't protect what the first packet already carried: with `auth_plugin_name=Legacy_Auth`, that includes the DES password hash. Note: `enabled` tolerates an active-MITM downgrade to plaintext; on untrusted networks use `required`. | true (=`enabled`) | For Firebird 3.0+. Against pre-3.0 / non-encrypting servers, `required` is refused (use `enabled` to allow plaintext). |
 | wire_crypt_plugin | Ordered, comma-separated allow-list of acceptable wire ciphers, mirroring the server's `WireCryptPlugin`. Order is client preference; omit a cipher to refuse it (e.g. `ChaCha64,ChaCha` to refuse the deprecated RC4/`Arc4`). | ChaCha64,ChaCha,Arc4 | For Firebird 3.0+. `Arc4` (RC4) is kept for FB 3.0 compatibility but is cryptographically weak. |
 | wire_compress | Enable wire protocol compression. | false | For Firebird 3.0+ (protocol version 13+) |
 | charset | Firebird Charecter Set | | |
 | max_inline_blob_size | Max size of BLOBs the server may send inline with fetch/execute2 responses (protocol 19 / Firebird 5.0.3+). `0` disables. Alias: `inline_blob_size`. | 65536 | Negotiated only when the server picks protocol ≥ 19 |
 | max_blob_cache_size | Client cache budget for inline BLOBs (bytes). Alias: `blob_cache_size`. | 10485760 | Also sent as DPB on attach when protocol ≥ 19 |
+
+## Credentials on the wire
+
+What the driver sends to log in depends on the wire protocol and the plugin the server picks:
+
+| Protocol | Plugin | Sent |
+| --- | --- | --- |
+| 13+ (Firebird 3.0+) | `Srp256`, `Srp` | An SRP proof, never the password |
+| 13+ | `Legacy_Auth` | The DES `crypt(password)` hash, never the password |
+| Below 13 (Firebird 2.5) | none | The same DES hash, as `password_enc`, never the password |
+
+The hash protects the password but not the login. Only the first 8 bytes of the password count, it can be brute-forced, and anyone who captures it can log in with it, with no cracking needed, on a server that accepts `Legacy_Auth` (always on Firebird 2.5; on 3.0+ only when `AuthServer` includes it). These protocols and `Legacy_Auth` have no wire encryption, so the hash is readable to anyone watching.
+
+The server picks the protocol and plugin, so with default settings a fake server or an active attacker can ask for the hash. `wire_crypt=required` refuses such a connection, and so does an `auth_plugin_list` that omits `Legacy_Auth`. The service manager can't do so: it has no `required` mode and always allows `Legacy_Auth`, so an untrusted network isn't safe for it.
+
+With `auth_plugin_name=Legacy_Auth`, the hash is in the first packet, at every protocol, before the server has picked anything. `wire_crypt=required` can't stop that.
+
+Passwords that change a user through `UserManager`, and any password in SQL text, are ordinary request data: only wire encryption protects them.
 
 ## Wire protocols 16–19
 

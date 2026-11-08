@@ -363,7 +363,8 @@ func TestCreateDPBPageSize(t *testing.T) {
 }
 
 // TestCreateDPBUnchangedWithPageSize pins the op_create DPB for an explicit
-// page size to the bytes sent before the page size became optional.
+// page size to the bytes sent before the page size became optional, except for
+// the password, which goes as its hash below protocol 13.
 func TestCreateDPBUnchangedWithPageSize(t *testing.T) {
 	p := &wireProtocol{charset: "UTF8", pageSize: 4096}
 	want := bytes.Join([][]byte{
@@ -371,7 +372,7 @@ func TestCreateDPBUnchangedWithPageSize(t *testing.T) {
 		{isc_dpb_set_db_charset, 4}, []byte("UTF8"),
 		{isc_dpb_lc_ctype, 4}, []byte("UTF8"),
 		{isc_dpb_user_name, 6}, []byte("SYSDBA"),
-		{isc_dpb_password, 9}, []byte("masterkey"),
+		{isc_dpb_password_enc, 11}, []byte("QP3LMZ/MJh."),
 		{isc_dpb_sql_role_name, 0},
 		{isc_dpb_sql_dialect, 4}, int32_to_bytes(3),
 		{isc_dpb_force_write, 4}, bint32_to_bytes(1),
