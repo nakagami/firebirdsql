@@ -130,7 +130,12 @@ type wireProtocol struct {
 	pluginName string
 	user       string
 	password   string
-	authData   []byte
+	// authData is the plugin data for the attach block, in the form it has on
+	// the wire: hex for SRP, the raw hash for Legacy_Auth. An empty non-nil
+	// value still emits the item (see srpAfterAttach).
+	authData []byte
+	// srpAfterAttach is the SRP login opAttachResponse still has to finish, or nil.
+	srpAfterAttach *srpAfterAttach
 
 	charset        string
 	charsetByteLen int
@@ -623,6 +628,120 @@ func (p *wireProtocol) recvHandshakeBlob(what string) ([]byte, error) {
 	return p.recvPacketsAlignment(ln)
 }
 
+// srpAfterAttach is an SRP login the server can only run after the attach. A
+// server that doesn't have the plugin the client named answers op_connect with
+// op_accept_data, the plugin it selected and no data. It keeps no plugin instance
+// for that reply, so an op_cont_auth at this point ends in isc_unavailable, and
+// the proof needs a salt and B the server hasn't sent yet. The attach block
+// therefore goes first, with an empty specific-data item. That makes the server
+// discard whatever op_connect stored and open the exchange in the attach reply.
+type srpAfterAttach struct {
+	clientPublic *big.Int
+	clientSecret *big.Int
+	pluginList   string
+	sentPublic   bool
+	sentProof    bool
+}
+
+// recvContAuth reads the body of an op_cont_auth and returns its data and plugin
+// name. The plugin list and the keys aren't used.
+func (p *wireProtocol) recvContAuth() (data []byte, pluginName string, err error) {
+	if data, err = p.recvHandshakeBlob("cont-auth data"); err != nil {
+		return nil, "", err
+	}
+	name, err := p.recvHandshakeBlob("cont-auth plugin name")
+	if err != nil {
+		return nil, "", err
+	}
+	if _, err = p.recvHandshakeBlob("cont-auth plugin list"); err != nil {
+		return nil, "", err
+	}
+	if _, err = p.recvHandshakeBlob("cont-auth keys"); err != nil {
+		return nil, "", err
+	}
+	return data, bytes_to_str(name), nil
+}
+
+// srpProof validates the server's salt and B and returns the proof in wire form
+// (hex) and the session key.
+func (p *wireProtocol) srpProof(data []byte, clientPublic, clientSecret *big.Int) (proof, sessionKey []byte, err error) {
+	// Validate the salt length and the two slice offsets below against the
+	// bytes actually received before slicing.
+	if len(data) < 2 {
+		return nil, nil, fmt.Errorf("firebirdsql: SRP server auth data too short (%d bytes)", len(data))
+	}
+	// USHORT on the wire: read unsigned so it can never present as negative.
+	ln := int(bytes_to_uint16(data[:2]))
+	if 4+ln > len(data) {
+		return nil, nil, fmt.Errorf("firebirdsql: SRP salt length %d inconsistent with server auth data (%d bytes)", ln, len(data))
+	}
+	serverSalt := data[2 : ln+2]
+	serverPublic := bigIntFromHexString(bytes_to_str(data[4+ln:]))
+	// TODO: normalize user
+	rawProof, sessionKey := getClientProof(strings.ToUpper(p.user), p.password, serverSalt, clientPublic, serverPublic, clientSecret, p.pluginName)
+	if DEBUG_SRP {
+		fmt.Printf("pluginName=%s\nserverSalt=%s\nserverPublic(bin)=%s\nserverPublic=%s\nauthData=%v,sessionKey=%v\n",
+			p.pluginName, serverSalt, data[4+ln:], serverPublic, rawProof, sessionKey)
+	}
+	return []byte(hex.EncodeToString(rawProof)), sessionKey, nil
+}
+
+// answerSrpAfterAttach handles one op_cont_auth of an SRP login left to the attach
+// (see srpAfterAttach). An op_cont_auth without data asks for the public key; one
+// with data carries the salt and B and gets the proof. Each goes out at most once,
+// so a server can't keep the exchange going. A continuation naming another plugin
+// is refused, not followed: a server with AuthServer=Srp, Legacy_Auth answers a
+// wrong password with one, and following it would put the DES hash on the wire in
+// plaintext. No name at all means no switch.
+func (p *wireProtocol) answerSrpAfterAttach(x *srpAfterAttach) error {
+	data, pluginName, err := p.recvContAuth()
+	if err != nil {
+		return err
+	}
+	if pluginName != "" && pluginName != p.pluginName {
+		return errLoginRefused
+	}
+	var reply []byte
+	switch {
+	case x.sentProof:
+		return errLoginRefused
+	case len(data) > 0:
+		x.sentProof = true
+		if reply, _, err = p.srpProof(data, x.clientPublic, x.clientSecret); err != nil {
+			return err
+		}
+	case x.sentPublic:
+		return errLoginRefused
+	default:
+		x.sentPublic = true
+		reply = []byte(hex.EncodeToString(bigIntToBytes(x.clientPublic)))
+	}
+	return p.opContAuth(reply, p.pluginName, x.pluginList, "")
+}
+
+// opAttachResponse reads the reply to an attach block, finishing first any SRP
+// login left to the attach. opResponse refuses an op_cont_auth and leaves its
+// body unread, so this answers it and reads again.
+func (p *wireProtocol) opAttachResponse() (int32, error) {
+	x := p.srpAfterAttach
+	p.srpAfterAttach = nil
+	for {
+		handle, _, _, err := p.opResponse()
+		if x == nil || !errors.Is(err, errLoginRefused) {
+			return handle, err
+		}
+		if err = p.answerSrpAfterAttach(x); err != nil {
+			return 0, err
+		}
+	}
+}
+
+// errLoginRefused is the login failure the client reports on its own, with the
+// server's isc_login text. The client returns it when it won't answer an
+// op_cont_auth, when the server's SRP reply leaves it nothing to send, and when
+// it can't use the plugin the server selected.
+var errLoginRefused = errors.New(errmsgs(ISCLogin))
+
 func (p *wireProtocol) _parse_connect_response(user string, password string, options map[string]string, clientPublic *big.Int, clientSecret *big.Int) (err error) {
 	p.debugPrint("_parse_connect_response")
 
@@ -687,6 +806,7 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 	var sessionKey []byte
 	var enc_plugin string
 	var nonce []byte
+	var afterAttach *srpAfterAttach
 
 	if opcode == op_cond_accept || opcode == op_accept_data {
 		var data []byte
@@ -721,12 +841,15 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 				err = fmt.Errorf("firebirdsql: server selected auth plugin %q which is not in the client allow-list auth_plugin_list=%q; refusing to avoid an auth-plugin downgrade", p.pluginName, options["auth_plugin_list"])
 				return
 			}
-			if p.pluginName == "Srp" || p.pluginName == "Srp256" {
-
-				// TODO: normalize user
-
+			if (p.pluginName == "Srp" || p.pluginName == "Srp256") && opcode == op_accept_data && len(data) == 0 {
+				// No cipher can come out of this, so wire_crypt=required is
+				// refused below, before anything is sent. See srpAfterAttach.
+				afterAttach = &srpAfterAttach{clientPublic: clientPublic, clientSecret: clientSecret, pluginList: options["auth_plugin_list"]}
+				// Empty but not nil: the block builders emit {tag, 0} for it.
+				authData = []byte{}
+			} else if p.pluginName == "Srp" || p.pluginName == "Srp256" {
 				if len(data) == 0 {
-					p.opContAuth(bigIntToBytes(clientPublic), p.pluginName, options["auth_plugin_list"], "")
+					p.opContAuth([]byte(hex.EncodeToString(bigIntToBytes(clientPublic))), p.pluginName, options["auth_plugin_list"], "")
 					if b, err = p.recvPackets(4); err != nil {
 						return
 					}
@@ -742,46 +865,20 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 					}
 
 					if op != op_cont_auth {
-						err = errors.New("Your user name and password are not defined. Ask your database administrator to set up a Firebird login.")
+						err = errLoginRefused
 						return
 					}
 
-					if data, err = p.recvHandshakeBlob("cont-auth data"); err != nil {
-						return
-					}
-					if _, err = p.recvHandshakeBlob("cont-auth plugin name"); err != nil {
-						return
-					}
-					if _, err = p.recvHandshakeBlob("cont-auth plugin list"); err != nil {
-						return
-					}
-					if _, err = p.recvHandshakeBlob("cont-auth keys"); err != nil {
+					if data, _, err = p.recvContAuth(); err != nil {
 						return
 					}
 				}
 				if len(data) == 0 {
-					err = errors.New("Your user name and password are not defined. Ask your database administrator to set up a Firebird login.")
+					err = errLoginRefused
 					return
 				}
-
-				// Validate the salt length and the two slice offsets below against the
-				// bytes actually received before slicing.
-				if len(data) < 2 {
-					err = fmt.Errorf("firebirdsql: SRP server auth data too short (%d bytes)", len(data))
+				if authData, sessionKey, err = p.srpProof(data, clientPublic, clientSecret); err != nil {
 					return
-				}
-				// USHORT on the wire: read unsigned so it can never present as negative.
-				ln := int(bytes_to_uint16(data[:2]))
-				if 4+ln > len(data) {
-					err = fmt.Errorf("firebirdsql: SRP salt length %d inconsistent with server auth data (%d bytes)", ln, len(data))
-					return
-				}
-				serverSalt := data[2 : ln+2]
-				serverPublic := bigIntFromHexString(bytes_to_str(data[4+ln:]))
-				authData, sessionKey = getClientProof(strings.ToUpper(user), password, serverSalt, clientPublic, serverPublic, clientSecret, p.pluginName)
-				if DEBUG_SRP {
-					fmt.Printf("pluginName=%s\nserverSalt=%s\nserverPublic(bin)=%s\nserverPublic=%s\nauthData=%v,sessionKey=%v\n",
-						p.pluginName, serverSalt, data[4+ln:], serverPublic, authData, sessionKey)
 				}
 			} else if p.pluginName == "Legacy_Auth" {
 				// Legacy_Auth has no session key, so required can't be met. Refuse
@@ -792,7 +889,7 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 				}
 				authData = legacyPasswordHash(password)
 			} else {
-				err = errors.New("Your user name and password are not defined. Ask your database administrator to set up a Firebird login.")
+				err = errLoginRefused
 				return
 			}
 		}
@@ -839,6 +936,7 @@ func (p *wireProtocol) _parse_connect_response(user string, password string, opt
 		}
 	} else {
 		p.authData = authData // use later by opAttach and opCreate
+		p.srpAfterAttach = afterAttach
 	}
 
 	return
@@ -1244,10 +1342,9 @@ func (p *wireProtocol) passwordItem(encTag byte, password string) []byte {
 // appendAuthAndTimezone appends auth data and session timezone to a DPB byte slice.
 func (p *wireProtocol) appendAuthAndTimezone(dpb []byte) []byte {
 	if p.authData != nil {
-		specificAuthData := []byte(hex.EncodeToString(p.authData))
 		dpb = bytes.Join([][]byte{
 			dpb,
-			{isc_dpb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)
+			{isc_dpb_specific_auth_data, byte(len(p.authData))}, p.authData}, nil)
 	}
 	if p.timezone != "" {
 		tznameBytes := []byte(p.timezone)
@@ -1427,10 +1524,11 @@ func (p *wireProtocol) opAttach(dbName string, user string, password string, rol
 	return err
 }
 
+// opContAuth sends authData as it is: the caller has it in wire form.
 func (p *wireProtocol) opContAuth(authData []byte, authPluginName string, authPluginList string, keys string) error {
 	p.debugPrint("opContAuth")
 	p.packInt(op_cont_auth)
-	p.packString(hex.EncodeToString(authData))
+	p.packBytes(authData)
 	p.packString(authPluginName)
 	p.packString(authPluginList)
 	p.packString(keys)
@@ -2108,7 +2206,8 @@ func (p *wireProtocol) opResponse() (int32, []byte, []byte, error) {
 
 	if bytes_to_bint32(b) != op_response {
 		if bytes_to_bint32(b) == op_cont_auth {
-			return 0, nil, nil, errors.New("Your user name and password are not defined. Ask your database administrator to set up a Firebird login.")
+			// Its body is left unread: see opAttachResponse.
+			return 0, nil, nil, errLoginRefused
 		}
 		return 0, nil, nil, NewErrOpResonse(bytes_to_bint32(b))
 	}
@@ -2445,10 +2544,9 @@ func (p *wireProtocol) opServiceAttach() error {
 		{isc_spb_utf8_filename, 1, 1},
 	}, nil)
 	if p.authData != nil {
-		specificAuthData := []byte(hex.EncodeToString(p.authData))
 		spb = bytes.Join([][]byte{
 			spb,
-			{isc_spb_specific_auth_data, byte(len(specificAuthData))}, specificAuthData}, nil)
+			{isc_spb_specific_auth_data, byte(len(p.authData))}, p.authData}, nil)
 	}
 	p.packBytes(spb)
 	_, err := p.sendPackets()

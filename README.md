@@ -177,6 +177,8 @@ The hash protects the password but not the login. Only the first 8 bytes of the 
 
 The server picks the protocol and plugin, so with default settings a fake server or an active attacker can ask for the hash. `wire_crypt=required` refuses such a connection, and so does an `auth_plugin_list` that omits `Legacy_Auth`. The service manager can't do so: it has no `required` mode and always allows `Legacy_Auth`, so an untrusted network isn't safe for it.
 
+If a server moves on to `Legacy_Auth` partway through an SRP login, the driver refuses and sends no hash, unlike `isql`. This can happen on a server with `AuthServer = Srp, Legacy_Auth`, whatever `wire_crypt` says. There, a user who only has a `Legacy_Auth` entry can't log in that way, and a wrong password or an unknown user gets a login error that isn't always an `FbError`. A `Legacy_Auth`-only user can set `auth_plugin_name=Legacy_Auth` instead, with the effect described next.
+
 With `auth_plugin_name=Legacy_Auth`, the hash is in the first packet, at every protocol, before the server has picked anything. `wire_crypt=required` can't stop that.
 
 Passwords that change a user through `UserManager`, and any password in SQL text, are ordinary request data: only wire encryption protects them.

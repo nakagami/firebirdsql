@@ -554,7 +554,7 @@ func TestLifecycleActualDialGate(t *testing.T) {
 }
 
 func TestLifecycleAuthenticationPartial(t *testing.T) {
-	for _, payload := range [][]byte{words(op_accept_data, 13, 1, 2), append(append(words(op_accept_data, 13, 1, 2, 0, 3), []byte{'S', 'r', 'p', 0}...), words(0, 0)...)} {
+	for _, payload := range [][]byte{words(op_accept_data, 13, 1, 2), append(append(words(op_cond_accept, 13, 1, 2, 0, 3), []byte{'S', 'r', 'p', 0}...), words(0, 0)...)} {
 		e := lifecycleOwner(t)
 		main, aux := socket("main"), socket("aux")
 		main.connectReply = payload

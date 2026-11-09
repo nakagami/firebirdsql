@@ -868,9 +868,10 @@ func TestNumericInt128Scaled(t *testing.T) {
 //     Legacy auth (plaintext — FB 2.5 has no wire encryption).
 //   - FB 3+: Legacy_Auth cannot authenticate SYSDBA under the default UserManager=Srp,
 //     and because the client advertises the full auth_plugin_list the server substitutes
-//     Srp — so those cases actually exercise Srp + wire crypt, not Legacy.
+//     Srp — so those cases actually exercise Srp + wire crypt, not Legacy. With
+//     wire_crypt=false they're plaintext, and the server may log in through either plugin.
 //
-// The two never overlap. The Legacy_Auth&wire_crypt=false case is disabled on FB3.
+// The two never overlap.
 func TestLegacyAuthWireCrypt(t *testing.T) {
 	test_dsn := GetTestDSN("test_legacy_auth_")
 	var n int
@@ -902,10 +903,11 @@ func TestLegacyAuthWireCrypt(t *testing.T) {
 	}
 	err = conn.QueryRow("SELECT Count(*) FROM rdb$relations").Scan(&n)
 	if err != nil {
-		// Servers configured with WireCrypt=Required (some HQbird installs)
-		// reject plaintext connections outright.
 		conn.Close()
-		t.Skipf("server rejects plaintext (wire_crypt=false) connections: %v", err)
+		// Servers configured with WireCrypt=Required (some HQbird installs)
+		// reject plaintext connections outright. Anything else is a failure.
+		plaintextRefused(t, err)
+		t.Fatalf("Error SELECT: %v", err)
 	}
 	conn.Close()
 
@@ -919,17 +921,15 @@ func TestLegacyAuthWireCrypt(t *testing.T) {
 	}
 	conn.Close()
 
-	// TODO: check it later. this was never checked because of typos in param names.
-	//
-	// conn, err = sql.Open("firebirdsql", test_dsn+"?auth_plugin_name=Legacy_Auth&wire_crypt=false")
-	// if err != nil {
-	// 	t.Fatalf("Error connecting: %v", err)
-	// }
-	// err = conn.QueryRow("SELECT Count(*) FROM rdb$relations").Scan(&n)
-	// if err != nil {
-	// 	t.Fatalf("Error SELECT: %v", err)
-	// }
-	// conn.Close()
+	conn, err = sql.Open("firebirdsql", test_dsn+"?auth_plugin_name=Legacy_Auth&wire_crypt=false")
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	err = conn.QueryRow("SELECT Count(*) FROM rdb$relations").Scan(&n)
+	if err != nil {
+		t.Fatalf("Error SELECT: %v", err)
+	}
+	conn.Close()
 }
 
 // TestAuthPluginListHardened exercises the #22 fix end-to-end: a client allow-list

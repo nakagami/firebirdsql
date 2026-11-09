@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"os"
 	"runtime"
@@ -51,22 +52,37 @@ func (f *acceptFrame) authAccept(opcode, version int32, data []byte, plugin stri
 	f.blob(nil)
 }
 
-// connectResponse runs _parse_connect_response over the canned reply and returns
-// the protocol and everything the client sent while handling it.
-func connectResponse(t *testing.T, reply []byte, wireCrypt string) (*wireProtocol, []byte, error) {
+// connectRun is the outcome of one _parse_connect_response run over a canned
+// reply: the protocol, everything the client sent while handling the reply, the
+// key pair it used and the error.
+type connectRun struct {
+	p                          *wireProtocol
+	out                        *bytes.Buffer
+	clientPublic, clientSecret *big.Int
+	err                        error
+}
+
+// connectResponseWith runs _parse_connect_response as user, with options.
+func connectResponseWith(t *testing.T, user string, reply []byte, options map[string]string) connectRun {
 	t.Helper()
 	clientPublic, clientSecret, err := getClientSeed()
 	if err != nil {
 		t.Fatalf("getClientSeed: %v", err)
 	}
+	r := connectRun{p: testProtocol(reply), out: new(bytes.Buffer), clientPublic: clientPublic, clientSecret: clientSecret}
+	r.p.conn.writer = bufio.NewWriter(r.out)
+	r.err = r.p._parse_connect_response(user, wireTestPassword, options, clientPublic, clientSecret)
+	return r
+}
+
+// connectResponse runs _parse_connect_response over the canned reply and returns
+// the protocol and everything the client sent while handling it.
+func connectResponse(t *testing.T, reply []byte, wireCrypt string) (*wireProtocol, []byte, error) {
+	t.Helper()
 	options := testConnectOptions()
 	options["wire_crypt"] = wireCrypt
-
-	var out bytes.Buffer
-	p := testProtocol(reply)
-	p.conn.writer = bufio.NewWriter(&out)
-	err = p._parse_connect_response("SYSDBA", wireTestPassword, options, clientPublic, clientSecret)
-	return p, out.Bytes(), err
+	r := connectResponseWith(t, "SYSDBA", reply, options)
+	return r.p, r.out.Bytes(), r.err
 }
 
 func TestParseConnectResponse_SuccessWithoutAccept(t *testing.T) {
@@ -82,26 +98,24 @@ func TestParseConnectResponse_SuccessWithoutAccept(t *testing.T) {
 }
 
 func TestParseConnectResponse_SuccessDuringContAuth(t *testing.T) {
-	for _, opcode := range []int32{op_cond_accept, op_accept_data} {
-		var f acceptFrame
-		f.authAccept(opcode, PROTOCOL_VERSION13, nil, "Srp256")
-		f.opResponseFrame(0, nil) // reply to the op_cont_auth carrying the public key
+	var f acceptFrame
+	f.authAccept(op_cond_accept, PROTOCOL_VERSION13, nil, "Srp256")
+	f.opResponseFrame(0, nil) // reply to the op_cont_auth carrying the public key
 
-		t.Run(fmt.Sprintf("op %d required", opcode), func(t *testing.T) {
-			if _, _, err := connectResponse(t, f.bytes(), "required"); !errors.Is(err, errWireCryptRequired) {
-				t.Fatalf("err = %v, want errWireCryptRequired: no cipher can exist without a proof", err)
-			}
-		})
-		t.Run(fmt.Sprintf("op %d enabled", opcode), func(t *testing.T) {
-			p, _, err := connectResponse(t, f.bytes(), "true")
-			if err != nil {
-				t.Fatalf("err = %v, want the reply treated as authenticated", err)
-			}
-			if len(p.authData) != 0 {
-				t.Fatalf("authData = %x, want none", p.authData)
-			}
-		})
-	}
+	t.Run("required", func(t *testing.T) {
+		if _, _, err := connectResponse(t, f.bytes(), "required"); !errors.Is(err, errWireCryptRequired) {
+			t.Fatalf("err = %v, want errWireCryptRequired: no cipher can exist without a proof", err)
+		}
+	})
+	t.Run("enabled", func(t *testing.T) {
+		p, _, err := connectResponse(t, f.bytes(), "true")
+		if err != nil {
+			t.Fatalf("err = %v, want the reply treated as authenticated", err)
+		}
+		if len(p.authData) != 0 {
+			t.Fatalf("authData = %x, want none", p.authData)
+		}
+	})
 }
 
 func TestParseConnectResponse_RefusalKeepsServerError(t *testing.T) {
@@ -109,7 +123,7 @@ func TestParseConnectResponse_RefusalKeepsServerError(t *testing.T) {
 	connect.opResponseFrame(0, nil, isc_arg_gds, ISCLogin)
 
 	var contAuth acceptFrame
-	contAuth.authAccept(op_accept_data, PROTOCOL_VERSION13, nil, "Srp256")
+	contAuth.authAccept(op_cond_accept, PROTOCOL_VERSION13, nil, "Srp256")
 	contAuth.opResponseFrame(0, nil, isc_arg_gds, ISCLogin)
 
 	for name, reply := range map[string][]byte{"op_connect": connect.bytes(), "op_cont_auth": contAuth.bytes()} {
@@ -220,8 +234,8 @@ func TestLegacyPluginSendsHashNotPassword(t *testing.T) {
 				t.Fatalf("err = %v", err)
 			}
 			assertHashOnly(t, sent, p.authData)
-			if !bytes.Contains(sent, []byte(hex.EncodeToString([]byte(wireTestHash)))) {
-				t.Errorf("op_cont_auth doesn't carry the hash: %x", sent)
+			if !bytes.Contains(sent, []byte(wireTestHash)) {
+				t.Errorf("op_cont_auth doesn't carry the raw hash: %x", sent)
 			}
 		})
 		t.Run("op_accept_data "+wireCrypt, func(t *testing.T) {
@@ -264,6 +278,40 @@ func readWireBlob(r io.Reader) ([]byte, error) {
 		return nil, err
 	}
 	return b[:n], nil
+}
+
+// readConnectRequest reads the rest of an op_connect after its opcode:
+// operation, version, architecture, then the database name, the protocol count,
+// the user identification and the protocols.
+func readConnectRequest(r io.Reader) error {
+	for i := 0; i < 3; i++ {
+		if _, err := readWireInt32(r); err != nil {
+			return err
+		}
+	}
+	if _, err := readWireBlob(r); err != nil {
+		return err
+	}
+	count, err := readWireInt32(r)
+	if err != nil {
+		return err
+	}
+	if _, err := readWireBlob(r); err != nil {
+		return err
+	}
+	_, err = io.CopyN(io.Discard, r, int64(count)*20)
+	return err
+}
+
+// readContAuthRequest reads the rest of a client op_cont_auth after its opcode:
+// data, plugin name, plugin list and keys.
+func readContAuthRequest(r io.Reader) error {
+	for i := 0; i < 4; i++ {
+		if _, err := readWireBlob(r); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // readAttachRequest parses the rest of an attach request after its opcode.
@@ -330,32 +378,13 @@ func (s *fakeServer) serve(c net.Conn, script fakeServerScript) {
 		var reply []byte
 		switch op {
 		case op_connect:
-			// operation, version, architecture, then the database name, the
-			// protocol count, the user identification and the protocols.
-			for i := 0; i < 3; i++ {
-				if _, err := readWireInt32(r); err != nil {
-					return
-				}
-			}
-			if _, err := readWireBlob(r); err != nil {
-				return
-			}
-			count, err := readWireInt32(r)
-			if err != nil {
-				return
-			}
-			if _, err := readWireBlob(r); err != nil {
-				return
-			}
-			if _, err := io.CopyN(io.Discard, r, int64(count)*20); err != nil {
+			if readConnectRequest(r) != nil {
 				return
 			}
 			reply = script.connect
 		case op_cont_auth:
-			for i := 0; i < 4; i++ {
-				if _, err := readWireBlob(r); err != nil {
-					return
-				}
+			if readContAuthRequest(r) != nil {
+				return
 			}
 			reply = script.contAuth
 		case op_attach, op_create, op_service_attach:
@@ -989,6 +1018,13 @@ func plaintextRefused(t *testing.T, err error) {
 func isUnavailable(err error) bool {
 	var fbErr *FbError
 	return errors.As(err, &fbErr) && slices.Contains(fbErr.GDSCodes, ISCUnavailable)
+}
+
+// isLoginFailure reports whether err is a login failure: the server's isc_login,
+// or the client's own refusal to go on with the exchange.
+func isLoginFailure(err error) bool {
+	var fbErr *FbError
+	return errors.Is(err, errLoginRefused) || errors.As(err, &fbErr) && slices.Contains(fbErr.GDSCodes, ISCLogin)
 }
 
 // assertPasswordCapture checks a capture of a completed plaintext login. A login
