@@ -12,6 +12,7 @@ import (
 	"io"
 	"math/big"
 	"net"
+	"os"
 	"runtime"
 	"strings"
 	"testing"
@@ -706,7 +707,8 @@ func TestSrpAfterAttachEventOwnerCloseEndsStall(t *testing.T) {
 }
 
 // TestSrpAfterAttachLive connects through a real plugin switch, if the test server
-// makes one. On any other server its subtests skip.
+// makes one. On any other server its subtests skip, or fail with
+// FIREBIRDSQL_REQUIRE_PLUGIN_SWITCH=1, which the CI job built for the switch sets.
 func TestSrpAfterAttachLive(t *testing.T) {
 	requireLiveSwitch := func(t *testing.T, options string) {
 		t.Helper()
@@ -716,6 +718,9 @@ func TestSrpAfterAttachLive(t *testing.T) {
 			t.Fatalf("handshake: %v", err)
 		}
 		if !switched {
+			if os.Getenv("FIREBIRDSQL_REQUIRE_PLUGIN_SWITCH") == "1" {
+				t.Fatalf("server didn't switch plugin with %q", options)
+			}
 			t.Skipf("server didn't switch plugin with %q", options)
 		}
 	}
