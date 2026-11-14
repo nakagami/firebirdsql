@@ -302,7 +302,7 @@ func handshakeFirebirdsqlConn(wp *wireProtocol, dsn *firebirdDsn, dbOp func(*wir
 	if err = dbOp(wp); err != nil {
 		return nil, err
 	}
-	wp.dbHandle, _, _, err = wp.opResponse()
+	wp.dbHandle, err = wp.opAttachResponse()
 	if err != nil {
 		return nil, err
 	}

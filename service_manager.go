@@ -266,7 +266,7 @@ func NewServiceManagerContext(ctx context.Context, addr string, user string, pas
 		if e = wp.opServiceAttach(); e != nil {
 			return e
 		}
-		wp.dbHandle, _, _, e = wp.opResponse()
+		wp.dbHandle, e = wp.opAttachResponse()
 		return e
 	})
 	if err != nil {

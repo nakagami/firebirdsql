@@ -122,13 +122,32 @@ Legend: ✅ pass · ⏭️ skip (version/capability gate or server configuration
 | `TestServiceAttachDeferredAuthData` | After a canned connect reply, the op_service_attach packet carries a deferred SRP proof under the SPB tag (111) and no password, and no proof after plain `op_accept` | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestAuthPluginListHardened` | `auth_plugin_list=Srp256,Srp` authenticates through SRP at protocol 13+ and is refused below it, naming the list | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestParseConnectResponse_SuccessWithoutAccept` | A success `op_response` to `op_connect` is an error, whatever `wire_crypt` says | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
-| `TestParseConnectResponse_SuccessDuringContAuth` | A success `op_response` to `op_cont_auth` is refused under `wire_crypt=required`, and counts as authenticated otherwise | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestParseConnectResponse_SuccessDuringContAuth` | A success `op_response` to `op_cont_auth` after `op_cond_accept` is refused under `wire_crypt=required`, and counts as authenticated otherwise | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestParseConnectResponse_RefusalKeepsServerError` | The server's own error still comes back from both of those places | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestSrpAfterAttachBlockCarriesEmptyItem` | After a plugin switch, attach, create and service blocks carry one empty specific-data item | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestSrpAfterAttachFullSequence` | Exact bytes of the exchange after the attach, for `Srp` and `Srp256`, and for an `op_cont_auth` that names no plugin; the keys don't outlive the attach reply | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestSrpAfterAttachServerSkipsPublicKeyRequest` | A server that sends the salt and B straight away gets the proof and no public key | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestSrpAfterAttachRequiredSendsNothing` | `wire_crypt=required` refuses a plugin switch and sends nothing | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestSrpAfterAttachServerErrorStaysFbError` | The server's `isc_login` after any step comes back as `FbError`, and the exchange state is gone | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestSrpAfterAttachUsesUserAndPluginList` | The exchange hashes the upper-cased user name and sends the client's own plugin list | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestSrpAfterAttachRespectsAllowList` | A server selecting a plugin outside `auth_plugin_list` is refused and gets nothing | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestCondAcceptEmptyDataSendsPublicKeyInHex` | On `op_cond_accept` with no data, the public key goes out hex-encoded | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestSrpAfterAttachRogueServer` | Endless continuations, bad lengths and a continuation naming another plugin end in an error, with at most one public key and one proof sent, and no hash or password. A server public key B that isn't valid hex isn't refused; that case ends only because the script does | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestSrpAfterAttachLaterContAuthGetsNoProof` | An `op_cont_auth` after the attach reply gets an error and no reply | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestSrpAfterAttachNotSetOnOtherPaths` | At protocol 13, `op_accept_data` with data, `op_cond_accept`, `Legacy_Auth` and `op_accept` leave no exchange behind | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestLegacyHashIsRawAtEverySink` | The `Legacy_Auth` hash is raw in `op_cont_auth` and in the attach, create and service blocks | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestSrpAfterAttachStallRespectsDeadline` | A server going quiet at any step can't outlive the context, on any entry point | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestSrpAfterAttachCancelInterrupts` | A cancel with no deadline ends the stall at any step | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestSrpAfterAttachSocketClose` | The peer closing the socket at any step is a plain failed connect | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestSrpAfterAttachCompletesOverSocket` | The whole exchange through every entry point against a fake server | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestSrpAfterAttachEventOwnerCloseEndsStall` | Closing the event owner ends the exchange at any step | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestSrpAfterAttachLive` | Create, attach, query and service attach through a real plugin switch. Its subtests skip unless the server switches, and the parent then reports pass. CI's default `AuthServer` doesn't switch; the `3-srp` CI job (FB 3, `AuthServer = Srp`) does, and sets `FIREBIRDSQL_REQUIRE_PLUGIN_SWITCH=1` so a missing switch fails instead of skipping. Any other handshake error fails it | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestUnknownUserWithoutCipherLive` | Without wire encryption, an unknown user gets a login failure and not `isc_unavailable`, on attach and service. On CI's default `AuthServer` (`Srp256, Srp, Legacy_Auth`) that failure is the client's refusal to move on to `Legacy_Auth`; with `AuthServer = Srp` it is `isc_login` | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestParseConnectResponse_LegitimateAuthFlows` | The replies real servers send still complete the handshake | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestWireCryptRequiredLegacyPluginSendsNoHash` | Under `wire_crypt=required`, a server selecting `Legacy_Auth` is refused before the hash goes out | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestConnectSuccessResponseSendsNoAttach` | Through all three entry points against a fake server, a success reply to `op_connect` draws no attach request | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestLegacyPluginHashInConnectPacket` | Documented limit: `auth_plugin_name=Legacy_Auth` puts the hash in `op_connect`, even under `wire_crypt=required` | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
-| `TestLegacyPluginSendsHashNotPassword` | A server selecting `Legacy_Auth` without `wire_crypt=required` gets the hash, never the password | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
+| `TestLegacyPluginSendsHashNotPassword` | A server selecting `Legacy_Auth` without `wire_crypt=required` gets the raw hash, never the password | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestAttachBuildersOmitPassword` | At protocols 13, 16 and 19, no attach block builder sends a password item, for a 300-byte password too | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestLegacyPasswordHash` | The hash matches fixed vectors, and only the first 8 bytes and the low 7 bits of each count | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestAttachBuildersBelow13` | Below protocol 13, each builder sends exactly one `password_enc` item and no cleartext | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
@@ -143,7 +162,7 @@ Legend: ✅ pass · ⏭️ skip (version/capability gate or server configuration
 | `TestTimezoneMapInvalidEntries` | Unknown zone names/ids yield zero values, never a wrong zone | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `TestAdvertisedProtocolRange` | Connect packet offers protocols 10–19, weights ascending, pflag only with compression | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 | `FuzzParseDSN` | DSN parser never panics on hostile input (seed corpus) | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
-| `TestLegacyAuthWireCrypt` | Legacy auth + wire-crypt policy combinations (skips plaintext case when the server requires encryption) | ✅ pass | ⏭️ skip | ✅ pass | ✅ pass |
+| `TestLegacyAuthWireCrypt` | Legacy auth + wire-crypt policy combinations, including `auth_plugin_name=Legacy_Auth` with `wire_crypt=false` (skips the plaintext steps when the server requires encryption) | ✅ pass | ✅ pass | ✅ pass | ✅ pass |
 
 
 ## Pre-existing suite

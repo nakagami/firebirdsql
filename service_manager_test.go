@@ -142,7 +142,12 @@ func TestServiceManagerWireCryptFalse(t *testing.T) {
 	if major < 3 {
 		require.Empty(t, sm.wp.authData, "FB <3.0 has no deferred auth data")
 	} else {
-		require.NotEmpty(t, sm.wp.authData, "FB 3.0+ must defer the SRP proof to the attach")
+		// A server that switched plugin got an empty item: the proof went
+		// through op_cont_auth after the attach.
+		require.NotNil(t, sm.wp.authData, "FB 3.0+ must send an auth data item in the attach")
+		if len(sm.wp.authData) == 0 {
+			require.NotEqual(t, GetDefaultServiceManagerOptions().AuthPlugin, sm.wp.pluginName, "an empty item means the server switched plugin")
+		}
 	}
 
 	version, err := sm.GetServerVersion()

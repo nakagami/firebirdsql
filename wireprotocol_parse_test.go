@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"database/sql/driver"
 	"encoding/binary"
-	"encoding/hex"
 	"errors"
 	"io"
 	"strings"
@@ -525,9 +524,8 @@ func TestServiceAttachDeferredAuthData(t *testing.T) {
 			spb = append(spb, "SYSDBA"...)
 			spb = append(spb, isc_spb_utf8_filename, 1, 1)
 			if tc.deferred {
-				proof := hex.EncodeToString(p.authData)
-				spb = append(spb, specificAuthDataTag, byte(len(proof)))
-				spb = append(spb, proof...)
+				spb = append(spb, specificAuthDataTag, byte(len(p.authData)))
+				spb = append(spb, p.authData...)
 			}
 
 			var want acceptFrame

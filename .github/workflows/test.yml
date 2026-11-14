@@ -8,6 +8,8 @@ on:
 
 jobs:
   build:
+    # The default name, without the values the include entry below adds
+    name: build (${{ matrix.go }}, ${{ matrix.firebird-version }})
 
     runs-on: ubuntu-latest
     strategy:
@@ -26,6 +28,16 @@ jobs:
             firebird-image: 'firebirdsql/firebird:4'
           - firebird-version: '5'
             firebird-image: 'firebirdsql/firebird:5'
+          # Firebird 3 with AuthServer = Srp, its own default. A login without wire
+          # encryption asks for Srp256, the server switches to Srp, and SRP finishes
+          # after the attach. The default AuthServer below has every plugin the
+          # driver asks for, and it never switches. One Go version is enough: keep it
+          # the newest one above.
+          - go: '1.27'
+            firebird-version: '3-srp'
+            firebird-image: 'firebirdsql/firebird:3'
+            auth-server: 'Srp'
+            require-plugin-switch: '1'
 
     services:
       firebird:
@@ -35,8 +47,8 @@ jobs:
         env:
           ISC_PASSWORD: masterkey
           FIREBIRD_ROOT_PASSWORD: masterkey
-          # Same settings as _attic/firebird.conf
-          FIREBIRD_CONF_AuthServer: Srp256, Srp, Legacy_Auth
+          # Same settings as _attic/firebird.conf, except AuthServer in 3-srp
+          FIREBIRD_CONF_AuthServer: ${{ matrix.auth-server || 'Srp256, Srp, Legacy_Auth' }}
           FIREBIRD_CONF_WireCrypt: Enabled
           FIREBIRD_CONF_DefaultTimeZone: GMT
         ports:
@@ -62,5 +74,7 @@ jobs:
         ISC_USER: SYSDBA
         ISC_PASSWORD: masterkey
         FIREBIRDSQL_TRACE_TEST: "1"
+        # Makes the plugin-switch tests fail instead of skip when there is no switch
+        FIREBIRDSQL_REQUIRE_PLUGIN_SWITCH: ${{ matrix.require-plugin-switch }}
       run: |
         go test -race -count=1 -v ./...
