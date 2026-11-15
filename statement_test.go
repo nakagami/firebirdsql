@@ -415,3 +415,39 @@ func TestAutoCommitSemantics(t *testing.T) {
 	require.NoError(t, c2.QueryRowContext(ctx2, "SELECT COUNT(*) FROM AC_T").Scan(&n))
 	require.Equal(t, 2, n)
 }
+
+// TestAutoCommitPreparedReturning: a prepared INSERT ... RETURNING run through
+// Query in autocommit mode has no cursor to close, yet its work must be
+// committed when the rows are closed — visible to other connections at once,
+// not only after the next autocommit statement or the close of the statement.
+func TestAutoCommitPreparedReturning(t *testing.T) {
+	db, dsn, _ := createTestDatabaseWithDDL(t, "stmt_autocommit_ret_",
+		`CREATE TABLE AC_RET (ID INTEGER PRIMARY KEY)`)
+
+	conn1, err := db.Conn(stmtCtx)
+	require.NoError(t, err)
+	defer conn1.Close()
+	c2 := openTestDatabase(t, dsn)
+
+	stmt, err := conn1.PrepareContext(stmtCtx, "INSERT INTO AC_RET VALUES (?) RETURNING ID")
+	require.NoError(t, err)
+	defer stmt.Close()
+
+	var id, n int
+	for i := 1; i <= 2; i++ {
+		require.NoError(t, stmt.QueryRowContext(stmtCtx, i).Scan(&id))
+		require.Equal(t, i, id)
+		require.NoError(t, c2.QueryRowContext(stmtCtx, "SELECT COUNT(*) FROM AC_RET").Scan(&n))
+		require.Equal(t, i, n, "prepared autocommit insert returning must be visible immediately")
+	}
+
+	// Inside an explicit transaction the same statement must not commit.
+	tx, err := conn1.BeginTx(stmtCtx, nil)
+	require.NoError(t, err)
+	require.NoError(t, tx.StmtContext(stmtCtx, stmt).QueryRowContext(stmtCtx, 3).Scan(&id))
+	require.NoError(t, c2.QueryRowContext(stmtCtx, "SELECT COUNT(*) FROM AC_RET").Scan(&n))
+	require.Equal(t, 2, n, "explicit-transaction insert returning must stay invisible")
+	require.NoError(t, tx.Rollback())
+	require.NoError(t, c2.QueryRowContext(stmtCtx, "SELECT COUNT(*) FROM AC_RET").Scan(&n))
+	require.Equal(t, 2, n)
+}

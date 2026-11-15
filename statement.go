@@ -84,9 +84,17 @@ func (stmt *firebirdsqlStmt) Close() error {
 }
 
 func (stmt *firebirdsqlStmt) closeCursor() error {
-	if stmt.stmtHandle == -1 ||
-		(stmt.stmtType != isc_info_sql_stmt_select &&
-			stmt.stmtType != isc_info_sql_stmt_select_for_upd) {
+	if stmt.stmtHandle == -1 {
+		return nil
+	}
+	if stmt.stmtType != isc_info_sql_stmt_select &&
+		stmt.stmtType != isc_info_sql_stmt_select_for_upd {
+		// No cursor to close, but the statement has run (INSERT ... RETURNING,
+		// EXECUTE PROCEDURE): in autocommit mode its work still has to be
+		// committed here, as freeStatement does for the other paths.
+		if stmt.fc.tx.isAutocommit {
+			return stmt.fc.tx.commitRetaining(nil) // teardown: fixed bound
+		}
 		return nil
 	}
 	return stmt.freeStatement(DSQL_close)
