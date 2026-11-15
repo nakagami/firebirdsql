@@ -415,3 +415,93 @@ func TestAutoCommitSemantics(t *testing.T) {
 	require.NoError(t, c2.QueryRowContext(ctx2, "SELECT COUNT(*) FROM AC_T").Scan(&n))
 	require.Equal(t, 2, n)
 }
+
+// attachmentTransactions counts the transactions the connection's own
+// attachment has active on the server, the one running the count included.
+func attachmentTransactions(t *testing.T, conn *sql.Conn) int {
+	t.Helper()
+	var n int
+	require.NoError(t, conn.QueryRowContext(stmtCtx,
+		"SELECT COUNT(*) FROM MON$TRANSACTIONS WHERE MON$ATTACHMENT_ID = CURRENT_CONNECTION").Scan(&n))
+	return n
+}
+
+// TestExplicitTxDoesNotLeakIntoAutocommit: once an explicit transaction has
+// ended, the connection goes back to its READ COMMITTED read-write autocommit
+// transaction. Neither the access mode nor the snapshot of the explicit
+// transaction may stick to the pooled connection, and no transaction is left
+// open behind it.
+func TestExplicitTxDoesNotLeakIntoAutocommit(t *testing.T) {
+	db, dsn, _ := createTestDatabaseWithDDL(t, "stmt_tx_leak_",
+		`CREATE TABLE LEAK_T (ID INTEGER PRIMARY KEY)`)
+	conn1, err := db.Conn(stmtCtx)
+	require.NoError(t, err)
+	defer conn1.Close()
+	c2 := openTestDatabase(t, dsn)
+
+	// Read-only, ended by Commit and by Rollback: autocommit writes still work.
+	tx, err := conn1.BeginTx(stmtCtx, &sql.TxOptions{ReadOnly: true})
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit())
+	mustExec(t, stmtCtx, conn1, "INSERT INTO LEAK_T VALUES (1)")
+	tx, err = conn1.BeginTx(stmtCtx, &sql.TxOptions{ReadOnly: true})
+	require.NoError(t, err)
+	require.NoError(t, tx.Rollback())
+	mustExec(t, stmtCtx, conn1, "INSERT INTO LEAK_T VALUES (2)")
+
+	// REPEATABLE READ: later autocommit statements see concurrent commits.
+	tx, err = conn1.BeginTx(stmtCtx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit())
+	var n int
+	require.NoError(t, conn1.QueryRowContext(stmtCtx, "SELECT COUNT(*) FROM LEAK_T").Scan(&n))
+	require.Equal(t, 2, n)
+	mustExec(t, stmtCtx, c2, "INSERT INTO LEAK_T VALUES (3)")
+	require.NoError(t, conn1.QueryRowContext(stmtCtx, "SELECT COUNT(*) FROM LEAK_T").Scan(&n))
+	require.Equal(t, 3, n, "autocommit must not keep the snapshot of the ended transaction")
+
+	// Explicit transactions do not pile up, in the driver or on the server.
+	for i := 0; i < 20; i++ {
+		tx, err = conn1.BeginTx(stmtCtx, nil)
+		require.NoError(t, err)
+		mustExec(t, stmtCtx, tx, "INSERT INTO LEAK_T VALUES (?)", 100+i)
+		if i%2 == 0 {
+			require.NoError(t, tx.Commit())
+		} else {
+			require.NoError(t, tx.Rollback())
+		}
+		mustExec(t, stmtCtx, conn1, "INSERT INTO LEAK_T VALUES (?)", 200+i)
+	}
+	require.Equal(t, 1, attachmentTransactions(t, conn1), "only the autocommit transaction stays active")
+	require.NoError(t, conn1.Raw(func(dc any) error {
+		require.Len(t, dc.(*firebirdsqlConn).transactionSet, 1)
+		return nil
+	}))
+}
+
+// TestFailedCommitIsRolledBack: a commit the server refuses leaves the
+// transaction active there, and database/sql does not call Rollback after a
+// failed Commit, so the driver has to end it. Creating a unique index over
+// duplicate values fails at commit time.
+func TestFailedCommitIsRolledBack(t *testing.T) {
+	db, _, _ := createTestDatabaseWithDDL(t, "stmt_commit_fail_",
+		`CREATE TABLE CF_T (ID INTEGER)`)
+	conn, err := db.Conn(stmtCtx)
+	require.NoError(t, err)
+	defer conn.Close()
+	mustExec(t, stmtCtx, conn, "INSERT INTO CF_T VALUES (1)")
+	mustExec(t, stmtCtx, conn, "INSERT INTO CF_T VALUES (1)")
+
+	tx, err := conn.BeginTx(stmtCtx, nil)
+	require.NoError(t, err)
+	mustExec(t, stmtCtx, tx, "INSERT INTO CF_T VALUES (2)")
+	mustExec(t, stmtCtx, tx, "CREATE UNIQUE INDEX CF_IDX ON CF_T (ID)")
+	var fbErr *FbError
+	require.ErrorAs(t, tx.Commit(), &fbErr)
+
+	require.Equal(t, 1, attachmentTransactions(t, conn), "the refused transaction must not stay active")
+	var n int
+	require.NoError(t, conn.QueryRowContext(stmtCtx, "SELECT COUNT(*) FROM CF_T").Scan(&n))
+	require.Equal(t, 2, n, "the work of the refused transaction is rolled back")
+	mustExec(t, stmtCtx, conn, "INSERT INTO CF_T VALUES (3)")
+}

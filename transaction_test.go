@@ -695,3 +695,73 @@ func TestIssue136(t *testing.T) {
 		}
 	}
 }
+
+// A BeginTx the server refuses leaves the connection on its current
+// transaction and usable. When the reply never arrives the wire is in an
+// unknown state: the connection is marked, so it is not pooled.
+func TestFailedBeginKeepsCurrentTransaction(t *testing.T) {
+	var frames acceptFrame
+	frames.opResponseFrame(0, nil, isc_arg_gds, 335544344) // isc_io_error
+	fc, _ := batchTestConn(frames.bytes())
+	base := fc.tx
+
+	if _, err := fc.begin(ISOLATION_LEVEL_READ_COMMITED); err == nil {
+		t.Fatal("begin: expected the server error")
+	}
+	if fc.tx != base {
+		t.Fatalf("fc.tx = %p, want the transaction current before begin (%p)", fc.tx, base)
+	}
+	if !fc.IsValid() {
+		t.Fatal("a server error must not invalidate the connection")
+	}
+
+	fc, _ = batchTestConn(nil) // the server is gone: no reply
+	base = fc.tx
+	if _, err := fc.begin(ISOLATION_LEVEL_READ_COMMITED); err == nil {
+		t.Fatal("begin: expected an error")
+	}
+	if fc.tx != base || fc.IsValid() {
+		t.Fatalf("fc.tx kept = %v, IsValid = %v; want true, false", fc.tx == base, fc.IsValid())
+	}
+}
+
+// The connection goes back to its autocommit transaction when an explicit one
+// ends, and a commit the server refuses is followed by a rollback.
+func TestExplicitTxEndRestoresAutocommit(t *testing.T) {
+	var frames acceptFrame
+	frames.opResponseFrame(5, nil)                         // op_transaction
+	frames.opResponseFrame(0, nil)                         // op_commit
+	frames.opResponseFrame(6, nil)                         // op_transaction
+	frames.opResponseFrame(0, nil, isc_arg_gds, 335544351) // op_commit: isc_no_meta_update
+	frames.opResponseFrame(0, nil)                         // op_rollback
+	fc, log := batchTestConn(frames.bytes())
+	base := fc.tx
+
+	tx, err := fc.begin(ISOLATION_LEVEL_READ_COMMITED_RO)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if fc.tx != base || !fc.tx.isAutocommit {
+		t.Fatalf("after Commit the connection is not back on its autocommit transaction: %+v", fc.tx)
+	}
+	if log.sent(op_rollback) {
+		t.Fatal("rollback sent after a successful commit")
+	}
+
+	tx, err = fc.begin(ISOLATION_LEVEL_REPEATABLE_READ)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Commit(); err == nil {
+		t.Fatal("Commit: expected the server error")
+	}
+	if !log.sent(op_rollback) {
+		t.Fatal("no rollback after the refused commit")
+	}
+	if fc.tx != base || len(fc.transactionSet) != 1 {
+		t.Fatalf("after the refused Commit: fc.tx restored = %v, transactionSet = %d", fc.tx == base, len(fc.transactionSet))
+	}
+}

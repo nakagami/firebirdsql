@@ -26,6 +26,7 @@ package firebirdsql
 import (
 	"context"
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"math/big"
 	"reflect"
@@ -142,8 +143,18 @@ func (fc *firebirdsqlConn) checkWire() error {
 
 func (fc *firebirdsqlConn) begin(isolationLevel int) (driver.Tx, error) {
 	tx, err := newFirebirdsqlTx(fc, isolationLevel, false, true)
+	if err != nil {
+		// fc.tx stays as it is. After a server error the connection is still
+		// usable; anything else left the wire in an unknown state.
+		var fbErr *FbError
+		if !errors.As(err, &fbErr) {
+			fc.wp.desynced = true
+		}
+		return nil, err
+	}
+	tx.prev = fc.tx
 	fc.tx = tx
-	return driver.Tx(tx), err
+	return driver.Tx(tx), nil
 }
 
 // Begin starts and returns a new transaction.
