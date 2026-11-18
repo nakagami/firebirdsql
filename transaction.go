@@ -23,7 +23,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 package firebirdsql
 
-import "context"
+import (
+	"context"
+	"errors"
+)
 
 type firebirdsqlTx struct {
 	fc             *firebirdsqlConn
@@ -36,6 +39,10 @@ type firebirdsqlTx struct {
 	// of its own, so Commit is bounded by it. Nil for the connection's
 	// autocommit transaction.
 	ctx context.Context
+	// prev is the transaction an explicit transaction replaced as fc.tx (see
+	// firebirdsqlConn.begin); the connection goes back to it when this one ends.
+	// Nil for the connection's autocommit transaction.
+	prev *firebirdsqlTx
 }
 
 func tpbForIsolationLevel(isolationLevel int) ([]byte, error) {
@@ -167,9 +174,16 @@ func (tx *firebirdsqlTx) Commit() (err error) {
 		_, _, _, err := tx.fc.wp.opResponse()
 		return err
 	})
+	var fbErr *FbError
+	if errors.As(err, &fbErr) && !tx.fc.wp.desynced {
+		// The server refused the commit, so the transaction is still active
+		// there and database/sql will not roll it back after a failed Commit.
+		if tx.fc.wp.opRollback(tx.transHandle) == nil {
+			tx.fc.wp.opResponseTimeout(abandonReadTimeout)
+		}
+	}
 	tx.fc.wp.clearInlineBlobCache(tx.transHandle)
-	tx.isAutocommit = tx.fc.isAutocommit
-	tx.needBegin = true
+	tx.end()
 	return
 }
 
@@ -185,9 +199,27 @@ func (tx *firebirdsqlTx) Rollback() (err error) {
 	// wire before it ever reaches opDetach.
 	_, _, _, err = tx.fc.wp.opResponseTimeout(abandonReadTimeout)
 	tx.fc.wp.clearInlineBlobCache(tx.transHandle)
+	tx.end()
+	return
+}
+
+// end is called once the transaction is finished on the server. The handle is
+// forgotten, and an explicit transaction gives the connection back to the
+// transaction it replaced, so that its isolation level does not leak into the
+// autocommit statements that follow.
+func (tx *firebirdsqlTx) end() {
+	delete(tx.fc.transactionSet, tx)
 	tx.isAutocommit = tx.fc.isAutocommit
 	tx.needBegin = true
-	return
+	if tx.prev == nil || tx.fc.tx != tx {
+		return
+	}
+	prev := tx.prev
+	for prev.prev != nil && prev.needBegin {
+		// an explicit transaction that has already ended
+		prev = prev.prev
+	}
+	tx.fc.tx = prev
 }
 
 func newFirebirdsqlTx(fc *firebirdsqlConn, isolationLevel int, isAutocommit bool, withBegin bool) (tx *firebirdsqlTx, err error) {
