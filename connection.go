@@ -45,17 +45,28 @@ type firebirdsqlConn struct {
 	resolvingArrayMeta bool // guards the internal array-metadata queries against recursion
 }
 
-// CheckNamedValue implements driver.NamedValueChecker. It lets array values
-// through untouched (they are encoded during parameter packing, where the
-// column metadata is available), converts plain slices into array values, and
-// resolves driver.Valuer arguments before falling back to the standard
-// converter for everything else.
+var valuerType = reflect.TypeOf((*driver.Valuer)(nil)).Elem()
+
+// CheckNamedValue implements driver.NamedValueChecker. It lets ArrayValue
+// through untouched (it is encoded during parameter packing, where the column
+// metadata is available), resolves driver.Valuer arguments, and converts Go
+// slices and arrays into array values. Byte sequences are the exception:
+// []byte, named byte slices (json.RawMessage, net.IP) and fixed-size byte
+// arrays (a sha256 sum) are binary arguments. Everything else goes to the
+// standard converter.
 func (fc *firebirdsqlConn) CheckNamedValue(nv *driver.NamedValue) error {
 	if av, ok := nv.Value.(ArrayValue); ok {
 		nv.Value = av
 		return nil
 	}
 	if v, ok := nv.Value.(driver.Valuer); ok {
+		// Like the standard converter: a nil pointer whose Value method has a
+		// value receiver is NULL; calling it would panic.
+		if rv := reflect.ValueOf(v); rv.Kind() == reflect.Pointer && rv.IsNil() &&
+			rv.Type().Elem().Implements(valuerType) {
+			nv.Value = nil
+			return nil
+		}
 		resolved, err := v.Value()
 		if err != nil {
 			return err
@@ -71,11 +82,22 @@ func (fc *firebirdsqlConn) CheckNamedValue(nv *driver.NamedValue) error {
 		nv.Value = cv
 		return nil
 	}
-	switch reflect.ValueOf(nv.Value).Kind() {
+	rv := reflect.ValueOf(nv.Value)
+	switch rv.Kind() {
 	case reflect.Slice, reflect.Array:
-		// []byte is a blob/bytes argument, not an array — let the standard
-		// converter handle it (and everything that is not an array shape).
-		if _, isBytes := nv.Value.([]byte); isBytes {
+		// A byte sequence is a binary argument, not an array: []byte and
+		// named byte slices (json.RawMessage, net.IP, sql.RawBytes) go to the
+		// standard converter, fixed-size byte arrays (a sha256 sum) are
+		// copied into a []byte.
+		if rv.Type().Elem().Kind() == reflect.Uint8 {
+			if rv.Kind() == reflect.Array {
+				b := make([]byte, rv.Len())
+				for i := range b {
+					b[i] = byte(rv.Index(i).Uint())
+				}
+				nv.Value = b
+				return nil
+			}
 			break
 		}
 		getter, err := getArrayEncodeType(nv.Value)
