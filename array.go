@@ -252,7 +252,8 @@ type anySliceArrayGetter struct{ slice reflect.Value }
 func (a anySliceArrayGetter) Index(i int) any { return a.slice.Index(i).Interface() }
 
 func (a anySliceArrayGetter) Dimensions(lowers []int) ([]ArrayDimension, error) {
-	if a.slice.IsNil() {
+	// a Go array ([N]T) is never nil; IsNil panics on it
+	if a.slice.Kind() == reflect.Slice && a.slice.IsNil() {
 		return nil, nil
 	}
 	lower := 1
@@ -381,6 +382,13 @@ func getArrayEncodeType(value any) (arrayGetter, error) {
 	}
 
 	switch v.Kind() {
+	case reflect.Slice, reflect.Array:
+		if err := checkArrayArgShape(v.Type()); err != nil {
+			return nil, err
+		}
+	}
+
+	switch v.Kind() {
 	case reflect.Slice:
 		if v.Type().Elem().Kind() == reflect.Slice {
 			if isRagged(v) {
@@ -393,6 +401,33 @@ func getArrayEncodeType(value any) (arrayGetter, error) {
 		return anySliceArrayGetter{slice: v}, nil
 	}
 	return nil, fmt.Errorf("firebirdsql: unsupported array argument type %T", value)
+}
+
+// maxArrayDimensions is the Firebird limit on the number of array axes.
+const maxArrayDimensions = 16
+
+var stringerType = reflect.TypeOf((*fmt.Stringer)(nil)).Elem()
+
+// checkArrayArgShape rejects slice/array argument types the encoder cannot
+// handle: a Go array nested in a slice or holding slices ([2][3]T, [][3]T,
+// [3][]T) would reach the element encoder as a composite value and be
+// stringified into text array elements, and a self-referencing slice type
+// (type R []R) would never reach a scalar element type. An element with a
+// String method (uuid.UUID) is a scalar for text array columns.
+func checkArrayArgShape(t reflect.Type) error {
+	e := t.Elem()
+	if t.Kind() == reflect.Slice {
+		for depth := 1; e.Kind() == reflect.Slice; depth++ {
+			if depth == maxArrayDimensions {
+				return fmt.Errorf("firebirdsql: array argument %v exceeds the maximum nesting depth of %d", t, maxArrayDimensions)
+			}
+			e = e.Elem()
+		}
+	}
+	if (e.Kind() == reflect.Array || e.Kind() == reflect.Slice) && !e.Implements(stringerType) {
+		return fmt.Errorf("firebirdsql: unsupported array argument type %v: use nested slices for a multi-dimensional array", t)
+	}
+	return nil
 }
 
 func isRagged(slice reflect.Value) bool {

@@ -1,7 +1,14 @@
 package firebirdsql
 
 import (
+	"crypto/sha256"
+	"database/sql"
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
 	"math/big"
+	"net"
+	"reflect"
 	"testing"
 	"time"
 
@@ -265,6 +272,124 @@ func TestGetArrayEncodeTypePlainSlices(t *testing.T) {
 	_, err = getArrayEncodeType([][]int64{{1}, {1, 2}})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "ragged")
+}
+
+// A Go array argument used to panic in anySliceArrayGetter.Dimensions
+// (reflect.Value.IsNil on an array). It is an array parameter like a slice.
+func TestCheckNamedValueGoArray(t *testing.T) {
+	fc := &firebirdsqlConn{}
+	nv := &driver.NamedValue{Ordinal: 1, Value: [3]int64{1, 2, 3}}
+	require.NoError(t, fc.CheckNamedValue(nv))
+	require.Equal(t, ArrayValue{Elements: []any{int64(1), int64(2), int64(3)}}, nv.Value)
+
+	nv = &driver.NamedValue{Ordinal: 1, Value: [0]int32{}}
+	require.NoError(t, fc.CheckNamedValue(nv))
+	require.Equal(t, ArrayValue{Elements: []any{}}, nv.Value)
+}
+
+// Byte sequences are binary arguments, not arrays: named []byte types reach
+// the parameter packing as []byte, fixed-size byte arrays as a copy.
+func TestCheckNamedValueByteTypes(t *testing.T) {
+	type myByte uint8
+	sum := sha256.Sum256([]byte("abc"))
+	cases := []struct {
+		in   any
+		want []byte
+	}{
+		{[]byte("abc"), []byte("abc")},
+		{json.RawMessage(`{"a":1}`), []byte(`{"a":1}`)},
+		{net.IP{127, 0, 0, 1}, []byte{127, 0, 0, 1}},
+		{sql.RawBytes("raw"), []byte("raw")},
+		{[]myByte{1, 2}, []byte{1, 2}},
+		{sum, sum[:]},
+		{[2]myByte{3, 4}, []byte{3, 4}},
+	}
+	fc := &firebirdsqlConn{}
+	for _, c := range cases {
+		nv := &driver.NamedValue{Ordinal: 1, Value: c.in}
+		require.NoError(t, fc.CheckNamedValue(nv), "%T", c.in)
+		require.IsType(t, []byte(nil), nv.Value, "%T", c.in)
+		require.Equal(t, c.want, nv.Value, "%T", c.in)
+	}
+
+	// a typed nil byte slice stays a nil []byte, as with plain []byte(nil)
+	nv := &driver.NamedValue{Ordinal: 1, Value: json.RawMessage(nil)}
+	require.NoError(t, fc.CheckNamedValue(nv))
+	require.Equal(t, []byte(nil), nv.Value)
+}
+
+// testUUID is a [16]byte with a value-receiver Valuer, like google/uuid.
+type testUUID [16]byte
+
+func (u testUUID) Value() (driver.Value, error) { return "uuid", nil }
+
+// A Valuer takes precedence over the byte-array rule, and a nil pointer to a
+// value-receiver Valuer is NULL (calling its Value method panicked).
+func TestCheckNamedValueValuer(t *testing.T) {
+	fc := &firebirdsqlConn{}
+	nv := &driver.NamedValue{Ordinal: 1, Value: testUUID{1}}
+	require.NoError(t, fc.CheckNamedValue(nv))
+	require.Equal(t, "uuid", nv.Value)
+
+	nv = &driver.NamedValue{Ordinal: 1, Value: (*testUUID)(nil)}
+	require.NoError(t, fc.CheckNamedValue(nv))
+	require.Nil(t, nv.Value)
+
+	// a pointer-receiver Valuer is still called on a nil pointer
+	nv = &driver.NamedValue{Ordinal: 1, Value: (*testPtrValuer)(nil)}
+	require.NoError(t, fc.CheckNamedValue(nv))
+	require.Equal(t, "nil-ptr", nv.Value)
+}
+
+type testPtrValuer struct{}
+
+func (*testPtrValuer) Value() (driver.Value, error) { return "nil-ptr", nil }
+
+// Go arrays nested in or holding slices used to reach the element encoder as
+// composite values and were stringified ("[1 2 3]") into text arrays.
+func TestCheckNamedValueRejectsNestedGoArrays(t *testing.T) {
+	type recursive []recursive
+	fc := &firebirdsqlConn{}
+	for _, v := range []any{
+		make(recursive, 1), recursive{},
+		[2][3]int64{}, [][3]int64{{1, 2, 3}}, [3][]int64{}, [][][3]int64{}, [][16]byte{},
+	} {
+		nv := &driver.NamedValue{Ordinal: 1, Value: v}
+		require.Error(t, fc.CheckNamedValue(nv), "%T", v)
+	}
+
+	nv := &driver.NamedValue{Ordinal: 1, Value: [][]int64{{1, 2}, {3, 4}}}
+	require.NoError(t, fc.CheckNamedValue(nv))
+	require.Equal(t, ArrayValue{Elements: []any{int64(1), int64(2), int64(3), int64(4)}}, nv.Value)
+
+	// a fixed-size array with a String method is a text element, not an axis
+	nv = &driver.NamedValue{Ordinal: 1, Value: []testStringerID{{1}, {2}}}
+	require.NoError(t, fc.CheckNamedValue(nv))
+	require.Equal(t, ArrayValue{Elements: []any{testStringerID{1}, testStringerID{2}}}, nv.Value)
+}
+
+type testStringerID [4]byte
+
+func (id testStringerID) String() string { return fmt.Sprintf("id-%d", id[0]) }
+
+// Firebird allows up to 16 array dimensions.
+func TestCheckNamedValueArrayDepthLimit(t *testing.T) {
+	nested := func(depth int) any {
+		v := reflect.ValueOf(int64(7))
+		for i := 0; i < depth; i++ {
+			s := reflect.MakeSlice(reflect.SliceOf(v.Type()), 1, 1)
+			s.Index(0).Set(v)
+			v = s
+		}
+		return v.Interface()
+	}
+	fc := &firebirdsqlConn{}
+	nv := &driver.NamedValue{Ordinal: 1, Value: nested(16)}
+	require.NoError(t, fc.CheckNamedValue(nv))
+	require.Equal(t, ArrayValue{Elements: []any{int64(7)}}, nv.Value)
+
+	nv = &driver.NamedValue{Ordinal: 1, Value: nested(17)}
+	require.ErrorContains(t, fc.CheckNamedValue(nv), "maximum nesting depth of 16")
 }
 
 func TestEncodeRejectsNULLElements(t *testing.T) {

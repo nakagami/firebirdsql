@@ -2,7 +2,11 @@ package firebirdsql
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/json"
+	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -69,6 +73,62 @@ func TestArrayRoundTripPlainSliceParam(t *testing.T) {
 	var ints FlatArray[int64]
 	require.NoError(t, db.QueryRowContext(ctx, "SELECT INTS FROM ARR_T WHERE ID = 1").Scan(&ints))
 	require.Equal(t, FlatArray[int64]{5, 6, 7, 8, 0}, ints)
+}
+
+func TestArrayRoundTripGoArrayParam(t *testing.T) {
+	db := openArrayTestDB(t)
+	ctx := context.Background()
+
+	// A Go array ([N]T) is an array parameter like a slice (it used to panic).
+	_, err := db.ExecContext(ctx, "INSERT INTO ARR_T (ID, INTS) VALUES (?, ?)", 1, [3]int64{5, 6, 7})
+	require.NoError(t, err)
+
+	var ints FlatArray[int64]
+	require.NoError(t, db.QueryRowContext(ctx, "SELECT INTS FROM ARR_T WHERE ID = 1").Scan(&ints))
+	require.Equal(t, FlatArray[int64]{5, 6, 7, 0, 0}, ints)
+
+	// fixed-size array elements with a String method (like uuid.UUID) go to
+	// a text array as strings
+	_, err = db.ExecContext(ctx, "INSERT INTO ARR_T (ID, STRS) VALUES (?, ?)", 2, []testStringerID{{1}, {2}})
+	require.NoError(t, err)
+	var strs FlatArray[string]
+	require.NoError(t, db.QueryRowContext(ctx, "SELECT STRS FROM ARR_T WHERE ID = 2").Scan(&strs))
+	require.Equal(t, FlatArray[string]{"id-1", "id-2", "", ""}, strs)
+}
+
+// Named []byte types and byte arrays are bound as bytes, not as Firebird
+// arrays. json.RawMessage & co. regressed when plain slices became arrays.
+func TestByteTypesNotArrays(t *testing.T) {
+	db, _, _ := createTestDatabaseWithDDL(t, "bytes_",
+		"CREATE TABLE BYTES_T (ID INTEGER NOT NULL PRIMARY KEY, B BLOB SUB_TYPE 0, V VARCHAR(64) CHARACTER SET OCTETS)")
+	ctx := context.Background()
+
+	sum := sha256.Sum256([]byte("abc"))
+	args := []any{
+		json.RawMessage(`{"a":1}`),
+		net.IPv4(10, 0, 0, 1).To4(),
+		sql.RawBytes("raw"),
+		sum,
+	}
+	want := [][]byte{[]byte(`{"a":1}`), {10, 0, 0, 1}, []byte("raw"), sum[:]}
+	for i, a := range args {
+		_, err := db.ExecContext(ctx, "INSERT INTO BYTES_T (ID, B, V) VALUES (?, ?, ?)", i, a, a)
+		require.NoError(t, err, "%T", a)
+	}
+	for i, w := range want {
+		var b, v []byte
+		require.NoError(t, db.QueryRowContext(ctx, "SELECT B, V FROM BYTES_T WHERE ID = ?", i).Scan(&b, &v))
+		require.Equal(t, w, b, "%T", args[i])
+		require.Equal(t, w, v, "%T", args[i])
+	}
+
+	// past MAX_CHAR_LENGTH a byte argument is uploaded as a BLOB by the client
+	big := json.RawMessage(`"` + strings.Repeat("x", MAX_CHAR_LENGTH+10) + `"`)
+	_, err := db.ExecContext(ctx, "INSERT INTO BYTES_T (ID, B) VALUES (?, ?)", 100, big)
+	require.NoError(t, err)
+	var b []byte
+	require.NoError(t, db.QueryRowContext(ctx, "SELECT B FROM BYTES_T WHERE ID = 100").Scan(&b))
+	require.Equal(t, []byte(big), b)
 }
 
 func TestArrayDimensionedRoundTrip(t *testing.T) {
