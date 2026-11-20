@@ -136,6 +136,19 @@ Two driver names are registered with `database/sql`:
 
   See `_examples/service_manager.go` for a usage example.
 
+### A custom dialer
+
+`NewConnector` makes a connector for `sql.OpenDB`. `WithDialer` reaches the server through a dial function of your own, such as an SSH tunnel or a proxy, in place of a `net.Dialer`; it is given the DSN's host and port.
+
+```go
+connector, err := firebirdsql.NewConnector("user:password@dbhost/foo/bar.fdb",
+    firebirdsql.WithDialer(sshClient.DialContext))
+if err != nil {
+    return err
+}
+db := sql.OpenDB(connector)
+```
+
 ### General
 
 - user: login user

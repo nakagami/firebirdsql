@@ -176,11 +176,19 @@ func newWireProtocol(addr string, timezone string, charset string) (*wireProtoco
 }
 
 func newWireProtocolContext(ctx context.Context, addr string, timezone string, charset string) (*wireProtocol, error) {
+	return newWireProtocolDial(ctx, nil, addr, timezone, charset)
+}
+
+// newWireProtocolDial opens the wire through dial, or a net.Dialer when it is nil.
+func newWireProtocolDial(ctx context.Context, dial DialFunc, addr string, timezone string, charset string) (*wireProtocol, error) {
 	p := new(wireProtocol)
 	p.buf = make([]byte, 0, BUFFER_LEN)
 
 	p.addr = addr
-	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", p.addr)
+	if dial == nil {
+		dial = (&net.Dialer{}).DialContext
+	}
+	conn, err := dial(ctx, "tcp", p.addr)
 	if err != nil {
 		return nil, err
 	}

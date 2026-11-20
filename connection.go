@@ -284,7 +284,7 @@ func (fc *firebirdsqlConn) Query(query string, args []driver.Value) (rows driver
 // bounded by ctx (see withContextDeadline). On failure the socket is closed
 // instead of being left to the garbage collector.
 func openFirebirdsqlConn(ctx context.Context, dsn *firebirdDsn, dbOp func(*wireProtocol) error) (*firebirdsqlConn, error) {
-	wp, err := newWireProtocolContext(ctx, dsn.addr, dsn.options["timezone"], dsn.options["charset"])
+	wp, err := newWireProtocolDial(ctx, dsn.dial, dsn.addr, dsn.options["timezone"], dsn.options["charset"])
 	if err != nil {
 		return nil, err
 	}

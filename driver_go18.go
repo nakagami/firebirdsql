@@ -29,6 +29,7 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"net"
 	"sort"
 )
 
@@ -136,6 +137,37 @@ func (fc *firebirdsqlConn) QueryContext(ctx context.Context, query string, named
 }
 
 // ================== Implementation of the Connector interface ====================
+
+// DialFunc opens a network connection to addr, as net.Dialer.DialContext does.
+type DialFunc func(ctx context.Context, network, addr string) (net.Conn, error)
+
+// ConnectorOption configures a connector made by NewConnector.
+type ConnectorOption func(*firebirdConnector)
+
+// WithDialer makes the connector reach the server through dial, as through a
+// tunnel or a proxy, in place of a net.Dialer. The address it is given is the
+// DSN's host and port.
+func WithDialer(dial DialFunc) ConnectorOption {
+	return func(c *firebirdConnector) {
+		if c.dsn != nil {
+			c.dsn.dial = dial
+		}
+	}
+}
+
+// NewConnector returns a connector for dsn, for sql.OpenDB. A malformed DSN is
+// reported here, not by the first connection.
+func NewConnector(dsn string, opts ...ConnectorOption) (driver.Connector, error) {
+	parsed, err := parseDSN(dsn)
+	if err != nil {
+		return nil, err
+	}
+	c := &firebirdConnector{dsn: parsed}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c, nil
+}
 
 type firebirdConnector struct {
 	dsn    *firebirdDsn
