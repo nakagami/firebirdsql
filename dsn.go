@@ -39,6 +39,8 @@ type firebirdDsn struct {
 	user    string
 	passwd  string
 	options map[string]string
+	// dial opens the connection to addr; nil is a net.Dialer.
+	dial DialFunc
 }
 
 var ErrDsnUserUnknown = errors.New("User unknown")
